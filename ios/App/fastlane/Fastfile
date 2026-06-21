@@ -69,6 +69,25 @@ platform :ios do
     )
   end
 
+  desc "Archive + export an ad-hoc .ipa (profile includes all registered devices)"
+  lane :build_adhoc do
+    asc_api_key # so -allowProvisioningUpdates can create the ad-hoc profile
+    build_app(
+      project: PROJECT,
+      scheme: "App",
+      configuration: "Release",
+      output_directory: IPA_OUT,
+      output_name: "go2048-adhoc.ipa",
+      export_method: "ad-hoc",
+      xcargs: "-allowProvisioningUpdates DEVELOPMENT_TEAM=#{TEAM_ID}",
+      export_options: {
+        method: "ad-hoc",
+        teamID: TEAM_ID,
+        signingStyle: "automatic",
+      },
+    )
+  end
+
   desc "Upload the built .ipa to TestFlight"
   lane :testflight_upload do
     pilot(
