@@ -95,25 +95,31 @@ with the original release key, current production = versionCode 4). To upload an
 app requires providing the **original app signing key** so existing installs stay
 upgradeable. That original `com.tozstudio.go2048` key is currently **not in hand**.
 
-**Path depends on whether the original keystore can be found:**
+**Chosen path — enroll in Play App Signing with our key (PEPK):**
 
-1. **Best — locate the original `com.tozstudio.go2048` keystore** (from the tozstudio
-   hand-over, old build machine, or CI secrets). Then in Play Console →
-   **Test and release → App integrity → Play App Signing → opt in**, upload that key
-   as the *app signing key*, and register our new key
-   `signing/go2048-upload-certificate.pem` as the *upload key*. Then `fastlane internal`
-   uploads the AAB. (Upload-key SHA-256
-   `95:CD:74:F2:…:75:20`, SHA-1 `56:2D:25:0D:…:E8:CE`.)
-2. **If the original key is truly lost** — you cannot enroll an existing legacy app in
-   Play Signing without it. Options:
-   - Open a **Google Play support** case (lost upload/signing key) and ask whether they
-     can enable a key reset for this app, **or**
-   - **Publish as a new app** under a new package id (e.g. `vn.fighttech.go2048` to
-     match iOS). Clean and unblocked immediately, but it's a new listing (loses the
-     existing installs/reviews of `com.tozstudio.go2048`).
+The original key is lost, so we enroll using **`signing/go2048-upload.jks`** as the new
+app signing key. Play Console provides an `encryption_public_key.pem` + `pepk.jar`; we
+encrypt the key for Google with:
 
-> The build + signing + fastlane pipeline are all correct and proven — the only thing
-> standing between us and a Play upload is this account-side key/enrollment decision.
+```bash
+java -jar pepk.jar \
+  --keystore=signing/go2048-upload.jks --alias=go2048 \
+  --output=signing/go2048-app-signing-key-encrypted.zip \
+  --rsa-aes-encryption --encryption-key-path=encryption_public_key.pem \
+  --keystore-pass=<store-pass> --key-pass=<key-pass> --include-cert
+```
+
+Output `go2048-app-signing-key-encrypted.zip` (contains `encryptedPrivateKey` +
+`certificate.pem`) is uploaded in **Play Console → Test and release → App integrity →
+Play App Signing → "Export and upload a key from Java keystore"**. After that, the app
+signing key = upload key = `go2048-upload.jks` (cert SHA-256 `95:CD:74:F2:…:75:20`),
+and `fastlane internal` uploads the AAB.
+
+> ⚠️ **Existing-install caveat:** the published v4 was signed with the original (lost)
+> key. Setting a *different* app signing key means existing installs **cannot update
+> over-the-top** (signature mismatch) — they would need to reinstall. Acceptable only if
+> the current install base is negligible. There is no way around this without the
+> original key.
 
 Once unblocked, upload is one command:
 
