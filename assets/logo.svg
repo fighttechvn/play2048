@@ -1,0 +1,11 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- go2048 mark: a 2x2 tile-merge grid, font-independent so it rasterizes
+       cleanly without relying on system fonts. Transparent background; the
+       Capacitor assets tool composites it over the brand color. -->
+  <g>
+    <rect x="222" y="222" width="270" height="270" rx="54" fill="#eee4da"/>
+    <rect x="532" y="222" width="270" height="270" rx="54" fill="#f2b179"/>
+    <rect x="222" y="532" width="270" height="270" rx="54" fill="#f59563"/>
+    <rect x="532" y="532" width="270" height="270" rx="54" fill="#edc22e"/>
+  </g>
+</svg>

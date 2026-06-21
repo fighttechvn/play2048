@@ -1,0 +1,94 @@
+# Fastlane — iOS / App Store Connect (go2048, Capacitor)
+# Adapted from the shipflutter `store-release` skill for a Capacitor project
+# (xcodeproj at ios/App, bundle id vn.fighttech.go2048).
+#
+#   cd ios/App
+#   bundle exec fastlane register_app   # create App ID + ASC app record (one-time)
+#   bundle exec fastlane build_ipa      # archive + export signed .ipa
+#   bundle exec fastlane testflight_upload
+#   bundle exec fastlane release_listing # metadata + screenshots (no binary)
+#
+# Env (load ../../.env.prod first): BUNDLE_ID, APP_NAME, TEAM_ID, APP_VERSION,
+# APP_SKU, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8.
+
+default_platform(:ios)
+
+APP_IDENTIFIER = ENV.fetch("BUNDLE_ID", "vn.fighttech.go2048")
+APP_NAME       = ENV.fetch("APP_NAME", "go2048")
+TEAM_ID        = ENV.fetch("TEAM_ID", "86PC33ZDHF")
+APP_VERSION    = ENV.fetch("APP_VERSION", "1.1.0")
+APP_SKU        = ENV.fetch("APP_SKU", "go2048")
+PROJECT        = File.expand_path("../App.xcodeproj", __dir__)
+IPA_OUT        = File.expand_path("../../build-output", __dir__)
+
+def asc_api_key
+  app_store_connect_api_key(
+    key_id: ENV.fetch("ASC_KEY_ID"),
+    issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+    key_filepath: ENV.fetch("ASC_KEY_P8"),
+    in_house: false,
+  )
+end
+
+platform :ios do
+  desc "Create the App ID + App Store Connect app record (one-time)"
+  lane :register_app do
+    # produce reads the API key from the Spaceship token set by
+    # app_store_connect_api_key (it has no api_key: param). It registers the App
+    # ID in the Developer portal AND creates the ASC app record. If ASC record
+    # creation returns 403 (key role can't POST apps), create it once in the ASC
+    # web UI (My Apps -> New App) — the App ID will still have been registered.
+    asc_api_key
+    produce(
+      app_identifier: APP_IDENTIFIER,
+      app_name: APP_NAME,
+      language: "English (U.S.)",
+      app_version: APP_VERSION,
+      sku: APP_SKU,
+      team_id: TEAM_ID,
+      platform: "ios",
+    )
+  end
+
+  desc "Archive + export a signed App Store .ipa (automatic signing)"
+  lane :build_ipa do
+    asc_api_key # sets the ASC token so xcodebuild -allowProvisioningUpdates can sign
+    build_app(
+      project: PROJECT,
+      scheme: "App",
+      configuration: "Release",
+      output_directory: IPA_OUT,
+      output_name: "go2048.ipa",
+      export_method: "app-store",
+      xcargs: "-allowProvisioningUpdates DEVELOPMENT_TEAM=#{TEAM_ID}",
+      export_options: {
+        method: "app-store",
+        teamID: TEAM_ID,
+        signingStyle: "automatic",
+      },
+    )
+  end
+
+  desc "Upload the built .ipa to TestFlight"
+  lane :testflight_upload do
+    pilot(
+      api_key: asc_api_key,
+      ipa: File.join(IPA_OUT, "go2048.ipa"),
+      skip_waiting_for_build_processing: true,
+      skip_submission: true,
+    )
+  end
+
+  desc "Upload App Store listing (metadata + screenshots), no binary"
+  lane :release_listing do
+    deliver(
+      api_key: asc_api_key,
+      metadata_path: "./fastlane/metadata",
+      screenshots_path: "./fastlane/screenshots",
+      skip_binary_upload: true,
+      overwrite_screenshots: true,
+      force: true,
+      run_precheck_before_submit: false,
+    )
+  end
+end

@@ -1,0 +1,26 @@
+node_modules/
+dist/
+.DS_Store
+ios/App/Pods/
+ios/App/App/public/
+android/app/src/main/assets/public/
+android/.gradle/
+android/app/build/
+*.log
+.env
+# keep reference clones out of the app repo
+_reference/
+
+# signing secrets (keystore + passwords)
+signing/
+
+build-output/
+
+.env.prod
+
+# fastlane
+*/fastlane/report.xml
+*/fastlane/README.md
+fastlane/report.xml
+
+.claude/settings.local.json
