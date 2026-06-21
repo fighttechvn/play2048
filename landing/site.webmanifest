@@ -1,0 +1,13 @@
+{
+  "name": "go2048",
+  "short_name": "go2048",
+  "description": "The classic 2048 number puzzle — free, offline, no ads.",
+  "start_url": "./play/",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f1115",
+  "theme_color": "#0f1115",
+  "icons": [
+    { "src": "assets/app-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

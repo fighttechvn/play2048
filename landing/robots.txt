@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://fighttechvn.github.io/play2048/sitemap.xml

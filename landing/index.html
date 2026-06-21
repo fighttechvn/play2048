@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#faf8ef" />
+  <title>go2048 — The classic 2048 puzzle, free & private</title>
+  <meta name="description" content="go2048 is a fast, modern build of the classic 2048 number puzzle. Dark & light themes, 5 languages, works offline, no ads, no tracking. Play in your browser or install on iOS & Android." />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta name="keywords" content="2048, 2048 game, number puzzle, merge tiles, offline puzzle game, free 2048, go2048" />
+  <link rel="canonical" href="https://fighttechvn.github.io/play2048/" />
+
+  <link rel="icon" type="image/png" sizes="512x512" href="assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="assets/app-icon.png" />
+  <link rel="manifest" href="site.webmanifest" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="go2048" />
+  <meta property="og:title" content="go2048 — The classic 2048 puzzle, free & private" />
+  <meta property="og:description" content="Slide tiles, merge numbers, reach 2048. Dark & light themes, 5 languages, fully offline, no ads or tracking." />
+  <meta property="og:url" content="https://fighttechvn.github.io/play2048/" />
+  <meta property="og:image" content="https://fighttechvn.github.io/play2048/assets/app-icon.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="go2048 — The classic 2048 puzzle, free & private" />
+  <meta name="twitter:description" content="A modern, private build of 2048. Dark/light themes, 5 languages, offline, no tracking." />
+  <meta name="twitter:image" content="https://fighttechvn.github.io/play2048/assets/app-icon.png" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "VideoGame",
+    "name": "go2048",
+    "applicationCategory": "GameApplication",
+    "genre": "Puzzle",
+    "operatingSystem": "iOS, Android, Web",
+    "description": "A fast, modern build of the classic 2048 number puzzle. Dark & light themes, 5 languages, works offline, no ads, no tracking.",
+    "url": "https://fighttechvn.github.io/play2048/",
+    "image": "https://fighttechvn.github.io/play2048/assets/app-icon.png",
+    "inLanguage": ["en", "vi", "ko", "zh", "ar"],
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "publisher": { "@type": "Organization", "name": "FightTech" }
+  }
+  </script>
+
+  <script>
+    (function () {
+      try {
+        var p = localStorage.getItem("go2048.theme") || "system";
+        var dark = p === "dark" || (p !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- ============ Header ============ -->
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="#top" aria-label="go2048">
+        <img class="logo" src="assets/app-icon.png" alt="" width="30" height="30" />
+        <span>go2048</span>
+      </a>
+
+      <nav class="nav">
+        <div class="nav-links" id="navLinks">
+          <a href="#features">Features</a>
+          <a href="#how">How to play</a>
+          <a href="play/">Play online</a>
+          <a href="download/">Download</a>
+          <a href="support/">Support</a>
+
+          <div class="nav-stores">
+            <a class="store-btn" href="https://play.google.com/store/apps/details?id=com.tozstudio.go2048" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.6 2.2c-.3.3-.5.7-.5 1.3v17c0 .6.2 1 .5 1.3l.1.1L13 13.1v-.2L3.7 2.1l-.1.1zm10.7 11.4 3 3 .1-.1c.9-.5 1.4-.8 1.4-.8.6-.4.6-1 0-1.4 0 0-.5-.3-1.4-.8l-.1-.1-3 3.1zm-.7-.5L4.3 2.5l8.5 4.9 1.8 1.8-1 1zm-9.3 9.4 9.3-9.4 1 1-1.8 1.8L4.3 21.5z" /></svg>
+              <span><span class="sb-small">Get it on</span><span class="sb-big">Google Play</span></span>
+            </a>
+            <a class="store-btn" href="play/" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <span><span class="sb-small">No install</span><span class="sb-big">Play online</span></span>
+            </a>
+          </div>
+        </div>
+
+        <div class="controls">
+          <div class="select-wrap">
+            <select id="themeSelect" class="theme" aria-label="Theme">
+              <option value="system">◐ System</option>
+              <option value="light">☀ Light</option>
+              <option value="dark">☾ Dark</option>
+            </select>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+          <button id="menuToggle" class="icon-btn menu-toggle" aria-label="Menu" aria-expanded="false" aria-controls="navLinks">
+            <svg class="i-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <svg class="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+
+    <!-- ============ Hero ============ -->
+    <section class="hero">
+      <div class="container hero-inner">
+        <div class="hero-copy">
+          <span class="eyebrow">Free · Offline · No ads</span>
+          <h1>The classic <span class="grad">2048</span> — smooth, private, in your language</h1>
+          <p class="hero-sub">Slide the tiles, merge matching numbers, and chase 2048. go2048 is a modern H5 build with buttery animations, dark &amp; light themes, five languages, and absolutely no tracking.</p>
+
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="play/">▶ Play now</a>
+            <a class="btn btn-ghost" href="download/">Download the app</a>
+          </div>
+
+          <div class="hero-meta">
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg><span>Works fully offline</span></span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>No ads or tracking</span></span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg><span>EN · VI · KO · ZH · AR</span></span>
+          </div>
+        </div>
+
+        <div class="hero-visual" aria-hidden="true">
+          <figure class="phone phone-back">
+            <img class="shot" src="assets/shot-light.png" alt="go2048 in light theme" loading="eager" decoding="async" />
+          </figure>
+          <figure class="phone phone-front">
+            <img class="shot" src="assets/shot-dark.png" alt="go2048 in dark theme" loading="eager" decoding="async" />
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Features (pillars) ============ -->
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow">Why go2048</span>
+          <h2>Everything you love about 2048 — done right</h2>
+          <p>The familiar puzzle, rebuilt from scratch with a clean, modern, privacy-first experience.</p>
+        </div>
+
+        <div class="methods-grid">
+          <article class="method reveal">
+            <span class="num">01</span>
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></div>
+            <h3>Smooth, satisfying play</h3>
+            <p>60 fps tile slides and merge pops powered by a modern WebGL renderer.</p>
+            <ul>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg><span>Swipe on touch, arrow keys or WASD on desktop</span></li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg><span>Haptic feedback on every merge</span></li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg><span>Auto-saves your game and best score</span></li>
+            </ul>
+          </article>
+
+          <article class="method reveal">
+            <span class="num">02</span>
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a4 4 0 0 0-4 4v0a4 4 0 0 0 8 0v0a4 4 0 0 0-4-4Z"/><circle cx="12" cy="12" r="9"/></svg></div>
+            <h3>Private by design</h3>
+            <p>No account, no analytics, no ad networks. Nothing leaves your device.</p>
+            <ul>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg><span>Zero data collection — your score stays local</span></li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg><span>Works completely offline</span></li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg><span>No sign-up, no permissions required</span></li>
+            </ul>
+          </article>
+
+          <article class="method reveal">
+            <span class="num">03</span>
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></div>
+            <h3>Dark &amp; light themes</h3>
+            <p>A polished dark mode and a classic light board — follows your system, or pick your own.</p>
+            <ul>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg><span>System / Light / Dark, remembered between sessions</span></li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg><span>Warm, high-contrast 2048 tile colors</span></li>
+            </ul>
+          </article>
+
+          <article class="method reveal">
+            <span class="num">04</span>
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg></div>
+            <h3>Five languages</h3>
+            <p>Play in your language — including full right-to-left layout for Arabic.</p>
+            <ul>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg><span>English · Tiếng Việt · 한국어 · 中文 · العربية</span></li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg><span>Auto-detects your device language</span></li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Quick feature grid ============ -->
+    <section class="section" style="padding-top:0">
+      <div class="container">
+        <div class="features-grid">
+          <article class="feature reveal"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3v18M19 3v18M5 8h14M5 14h14"/></svg></div><h3>One-thumb friendly</h3><p>A clean portrait layout that fits any phone, tablet, or desktop window.</p></article>
+          <article class="feature reveal"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.2-8.5"/><path d="M22 4 12 14.01l-3-3"/></svg></div><h3>Resume anytime</h3><p>Close it and come back — your board and best score are always saved.</p></article>
+          <article class="feature reveal"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></div><h3>No ads, ever</h3><p>No banners, no pop-ups, no interruptions. Just the puzzle.</p></article>
+          <article class="feature reveal"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div><h3>Plays everywhere</h3><p>The same game on the web, iOS, and Android from one codebase.</p></article>
+          <article class="feature reveal"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/></svg></div><h3>Keep going past 2048</h3><p>Hit the goal and keep merging for a new personal best.</p></article>
+          <article class="feature reveal"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></div><h3>Tiny &amp; instant</h3><p>Loads in a snap and runs smoothly even on older devices.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Stats ============ -->
+    <section class="stats">
+      <div class="container">
+        <div class="stats-grid">
+          <div class="stat reveal"><div class="big">2048</div><div class="lbl">The goal (and beyond)</div></div>
+          <div class="stat reveal"><div class="big">5</div><div class="lbl">Languages</div></div>
+          <div class="stat reveal"><div class="big">2</div><div class="lbl">Themes</div></div>
+          <div class="stat reveal"><div class="big">0</div><div class="lbl">Trackers &amp; ads</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ How to play ============ -->
+    <section class="section" id="how">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow">60 seconds to learn</span>
+          <h2>How to play</h2>
+          <p>Simple to start, hard to put down.</p>
+        </div>
+        <div class="steps">
+          <article class="step reveal"><div class="badge">1</div><h3>Slide the tiles</h3><p>Swipe (or use arrow keys / WASD). All tiles slide in that direction.</p></article>
+          <article class="step reveal"><div class="badge">2</div><h3>Merge the numbers</h3><p>Two tiles with the same number merge into one worth double. Each move spawns a new tile.</p></article>
+          <article class="step reveal"><div class="badge">3</div><h3>Reach 2048</h3><p>Combine your way up to the 2048 tile — then keep going to beat your best score.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CTA ============ -->
+    <section class="cta-band" id="cta">
+      <div class="container">
+        <div class="cta-card reveal">
+          <h2>Ready to merge?</h2>
+          <p>Play instantly in your browser, or install go2048 on your phone.</p>
+          <div class="hero-cta" style="justify-content:center">
+            <a class="btn btn-primary" href="play/">▶ Play now</a>
+            <a class="btn btn-ghost" href="download/">Download the app</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ Footer ============ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-top">
+        <div>
+          <div class="brand"><img class="logo" src="assets/app-icon.png" alt="" width="30" height="30" /><span>go2048</span></div>
+          <p class="footer-about">A fast, modern, privacy-first build of the classic 2048 number puzzle. By FightTech.</p>
+        </div>
+        <div class="footer-cols">
+          <div class="footer-col">
+            <h4>Play</h4>
+            <a href="play/">Play online</a>
+            <a href="download/">Download</a>
+            <a href="#how">How to play</a>
+          </div>
+          <div class="footer-col">
+            <h4>Game</h4>
+            <a href="#features">Features</a>
+            <a href="https://github.com/fighttechvn/play2048" rel="noopener">Source on GitHub</a>
+          </div>
+          <div class="footer-col">
+            <h4>Legal</h4>
+            <a href="privacy/">Privacy Policy</a>
+            <a href="terms/">Terms of Use</a>
+            <a href="support/">Support</a>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© <span id="year">2026</span> FightTech. All rights reserved.</span>
+        <span>2048 is an open puzzle concept; go2048 is an independent build.</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
