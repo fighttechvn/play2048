@@ -6,7 +6,11 @@
 </p>
 
 <p align="center">
-  <a href="https://fighttechvn.github.io/play2048/"><b>▶ Play in your browser</b></a>
+  <a href="https://fighttechvn.github.io/play2048/play/"><b>▶ Play in your browser</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://fighttechvn.github.io/play2048/"><b>Website</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://fighttechvn.github.io/play2048/download/"><b>Download</b></a>
 </p>
 
 <p align="center">
