@@ -2,8 +2,17 @@ import { Capacitor } from "@capacitor/core";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { Application, Container, Graphics, Text } from "pixi.js";
 import { Board, type Direction, type Cell } from "./board";
-import { saveState, loadState } from "./storage";
-import { COLORS, GRID_SIZE } from "./theme";
+import { saveState, loadState, saveSettings, loadSettings } from "./storage";
+import { COLORS, GRID_SIZE, resolveIsDark, setThemeMode, type ThemeMode } from "./theme";
+import {
+  detectLocale,
+  isRTL,
+  localeLabel,
+  nextLocale,
+  setLocale,
+  t,
+  type Locale,
+} from "./i18n";
 import { TileView } from "./tileView";
 import { Ease, Tweener } from "./tween";
 
@@ -11,11 +20,18 @@ const N = GRID_SIZE;
 const SLIDE_MS = 110;
 const POP_MS = 130;
 const MAX_BOARD = 520;
+const THEME_CYCLE: ThemeMode[] = ["system", "light", "dark"];
+
+type OverlayKind = "win" | "over" | null;
 
 export class GameScene {
   private board = new Board();
   private tiles = new Map<number, TileView>();
   private animating = false;
+
+  private themeMode: ThemeMode = "system";
+  private locale: Locale = "en";
+  private rtl = false;
 
   private root = new Container();
   private header = new Container();
@@ -23,9 +39,6 @@ export class GameScene {
   private boardBg = new Graphics();
   private tileLayer = new Container();
   private overlay = new Container();
-
-  private scoreValue!: Text;
-  private bestValue!: Text;
 
   private boardSize = 0;
   private cell = 0;
@@ -42,13 +55,22 @@ export class GameScene {
     this.boardLayer.addChild(this.boardBg, this.tileLayer);
     this.overlay.visible = false;
 
+    // Settings: saved value, else OS/browser defaults.
+    const settings = await loadSettings();
+    this.themeMode = settings.theme ?? "system";
+    this.locale = settings.locale ?? detectLocale();
+    setThemeMode(this.themeMode);
+    setLocale(this.locale);
+    this.rtl = isRTL(this.locale);
+
     this.buildHeader();
+    this.applyDocumentChrome();
+    this.app.renderer.background.color = COLORS.background;
 
     const saved = await loadState();
     if (saved && saved.grid?.length) {
       this.board.load(saved);
       if (!this.board.hasMoves() && saved.grid.flat().every((t) => t)) {
-        // Loaded into a dead board — start fresh instead of stranding the user.
         this.board.newGame();
       }
     } else {
@@ -64,6 +86,8 @@ export class GameScene {
       this.syncPositions();
     });
   }
+
+  // ---- input -----------------------------------------------------------
 
   handleMove(dir: Direction): void {
     if (this.animating) return;
@@ -88,7 +112,6 @@ export class GameScene {
       );
     }
 
-    // Post-slide step: resolve merges, spawn, HUD, end states.
     this.tweener.add(() => {}, {
       duration: SLIDE_MS,
       onComplete: () => this.finishMove(result),
@@ -124,10 +147,7 @@ export class GameScene {
     if (result.spawn) {
       const view = this.addTile(result.spawn.id, result.spawn.value, result.spawn.at);
       view.scale.set(0);
-      this.tweener.add((k) => view.scale.set(k), {
-        duration: POP_MS,
-        ease: Ease.outBack,
-      });
+      this.tweener.add((k) => view.scale.set(k), { duration: POP_MS, ease: Ease.outBack });
     }
 
     this.refreshHud();
@@ -135,13 +155,9 @@ export class GameScene {
     void this.persist();
 
     if (this.board.won && !this.board.keptPlaying) {
-      this.showOverlay("You win! 🎉", "Keep going", () => {
-        this.board.keptPlaying = true;
-        this.hideOverlay();
-        void this.persist();
-      });
+      this.showOverlay("win");
     } else if (result.over) {
-      this.showOverlay("Game over", "Try again", () => this.newGame());
+      this.showOverlay("over");
     }
   }
 
@@ -150,9 +166,7 @@ export class GameScene {
   private rebuildTiles(): void {
     for (const view of this.tiles.values()) view.destroy();
     this.tiles.clear();
-    this.board.forEachTile((tile, cell) => {
-      this.addTile(tile.id, tile.value, cell);
-    });
+    this.board.forEachTile((tile, cell) => this.addTile(tile.id, tile.value, cell));
   }
 
   private addTile(id: number, value: number, cell: Cell): TileView {
@@ -191,19 +205,17 @@ export class GameScene {
     const W = this.app.screen.width;
     const H = this.app.screen.height;
 
-    this.boardSize = Math.min(W - 32, MAX_BOARD, H * 0.6);
+    this.boardSize = Math.min(W - 32, MAX_BOARD, H * 0.58);
     this.gap = this.boardSize * 0.028;
     this.cell = (this.boardSize - this.gap * (N + 1)) / N;
 
-    const headerH = this.boardSize * 0.36;
+    const headerH = this.boardSize * 0.42;
     const totalH = headerH + this.boardSize;
 
     const originX = (W - this.boardSize) / 2;
     const originY = Math.max(16, (H - totalH) / 2);
-
     this.root.position.set(originX, originY);
 
-    // Board background + empty cells.
     this.boardLayer.position.set(0, headerH);
     this.boardBg.clear();
     this.boardBg
@@ -228,6 +240,11 @@ export class GameScene {
     return { x, y };
   }
 
+  /** Mirror an x-position (of a `w`-wide element) when the locale is RTL. */
+  private mx(x: number, w: number): number {
+    return this.rtl ? this.boardSize - x - w : x;
+  }
+
   // ---- header / HUD ----------------------------------------------------
 
   private titleText!: Text;
@@ -235,85 +252,101 @@ export class GameScene {
   private bestBox!: Graphics;
   private scoreLabel!: Text;
   private bestLabel!: Text;
+  private scoreValue!: Text;
+  private bestValue!: Text;
   private newBtn!: Container;
+  private themeBtn!: Container;
+  private langBtn!: Container;
 
   private buildHeader(): void {
-    this.titleText = new Text({
-      text: "go2048",
-      style: { fontFamily: "-apple-system, Helvetica, Arial, sans-serif", fontWeight: "800", fill: COLORS.text },
-    });
+    this.titleText = text({ weight: "800", fill: COLORS.text });
+    this.titleText.text = "go2048";
 
     this.scoreBox = new Graphics();
     this.bestBox = new Graphics();
-    this.scoreLabel = miniLabel("SCORE");
-    this.bestLabel = miniLabel("BEST");
-    this.scoreValue = boxValue("0");
-    this.bestValue = boxValue("0");
+    this.scoreLabel = centeredText({ weight: "700", fill: COLORS.textMuted, letterSpacing: 1 });
+    this.bestLabel = centeredText({ weight: "700", fill: COLORS.textMuted, letterSpacing: 1 });
+    this.scoreValue = centeredText({ weight: "800", fill: COLORS.text });
+    this.bestValue = centeredText({ weight: "800", fill: COLORS.text });
 
-    this.newBtn = new Container();
-    this.newBtn.eventMode = "static";
-    this.newBtn.cursor = "pointer";
-    const btnBg = new Graphics();
-    const btnText = new Text({
-      text: "New Game",
-      style: { fontFamily: "-apple-system, Helvetica, Arial, sans-serif", fontWeight: "700", fill: COLORS.buttonText },
-    });
-    btnText.anchor.set(0.5);
-    this.newBtn.addChild(btnBg, btnText);
-    (this.newBtn as Container & { _bg: Graphics; _text: Text })._bg = btnBg;
-    (this.newBtn as Container & { _bg: Graphics; _text: Text })._text = btnText;
+    this.newBtn = makeButton();
     this.newBtn.on("pointertap", () => this.newGame());
 
+    this.langBtn = makeButton();
+    this.langBtn.on("pointertap", () => this.cycleLocale());
+
+    this.themeBtn = makeIconButton();
+    this.themeBtn.on("pointertap", () => this.cycleTheme());
+
     this.header.addChild(
-      this.titleText,
       this.scoreBox,
       this.bestBox,
+      this.titleText,
       this.scoreLabel,
       this.bestLabel,
       this.scoreValue,
       this.bestValue,
       this.newBtn,
+      this.langBtn,
+      this.themeBtn,
     );
   }
 
   private layoutHeader(headerH: number): void {
-    const boxW = Math.min(this.boardSize * 0.26, 130);
-    const boxH = headerH * 0.5;
     const pad = this.gap;
+    const rowAH = headerH * 0.4;
+    const cs = Math.min(rowAH * 0.92, 48); // control button size
+    const boxW = Math.min(this.boardSize * 0.26, 124);
+    const boxH = headerH * 0.46;
+    const rowBY = rowAH + pad * 0.6;
 
-    const bestX = this.boardSize - boxW;
-    const scoreX = bestX - boxW - pad;
-    const boxY = 0;
+    // --- Row A: title (start side) + controls (end side) ---
+    this.titleText.style.fontSize = Math.round(rowAH * 0.74);
+    this.titleText.style.fill = COLORS.text;
 
-    // Title sits to the left of the score boxes; clamp its size so it never
-    // overlaps them (matters on wide viewports where the board is capped).
-    this.titleText.style.fontSize = Math.round(headerH * 0.4);
-    const titleAvail = scoreX - pad;
+    // controls at the "end" (right in LTR, left in RTL)
+    const themeX = this.boardSize - cs;
+    const langX = themeX - cs - pad * 0.6;
+    placeSquareButton(this.themeBtn, this.mx(themeX, cs), 0, cs);
+    placeSquareButton(this.langBtn, this.mx(langX, cs), 0, cs);
+    drawThemeIcon(this.themeBtn, cs, resolveIsDark(this.themeMode));
+    setControlText(this.langBtn, localeLabel(this.locale), Math.round(cs * 0.42), cs, COLORS.controlIcon);
+
+    // title clamped so it never collides with the controls
+    const titleAvail = langX - pad;
     if (this.titleText.width > titleAvail) {
       this.titleText.style.fontSize = Math.floor(
         this.titleText.style.fontSize * (titleAvail / this.titleText.width),
       );
     }
-    this.titleText.position.set(0, (boxH - this.titleText.height) / 2);
+    this.titleText.position.set(
+      this.mx(0, this.titleText.width),
+      (cs - this.titleText.height) / 2,
+    );
 
-    drawBox(this.scoreBox, scoreX, boxY, boxW, boxH);
-    drawBox(this.bestBox, bestX, boxY, boxW, boxH);
+    // --- Row B: SCORE / BEST boxes (end side) + New Game (start side) ---
+    const bestX = this.boardSize - boxW;
+    const scoreX = bestX - boxW - pad;
 
-    placeLabel(this.scoreLabel, scoreX + boxW / 2, boxY + boxH * 0.26, boxH);
-    placeLabel(this.bestLabel, bestX + boxW / 2, boxY + boxH * 0.26, boxH);
-    placeValue(this.scoreValue, scoreX + boxW / 2, boxY + boxH * 0.66, boxH);
-    placeValue(this.bestValue, bestX + boxW / 2, boxY + boxH * 0.66, boxH);
+    drawBox(this.scoreBox, this.mx(scoreX, boxW), rowBY, boxW, boxH);
+    drawBox(this.bestBox, this.mx(bestX, boxW), rowBY, boxW, boxH);
 
-    const btnW = boxW * 2 + pad;
-    const btnH = headerH * 0.32;
-    const btnX = this.boardSize - btnW;
-    const btnY = boxH + this.gap * 0.8;
-    const btn = this.newBtn as Container & { _bg: Graphics; _text: Text };
-    btn._bg.clear();
-    btn._bg.roundRect(0, 0, btnW, btnH, btnH * 0.28).fill(COLORS.buttonBg);
-    btn._text.style.fontSize = Math.round(btnH * 0.42);
-    btn._text.position.set(btnW / 2, btnH / 2);
-    this.newBtn.position.set(btnX, btnY);
+    this.scoreLabel.text = t("score");
+    this.bestLabel.text = t("best");
+    // Latin labels get tracking; Arabic must keep letterSpacing 0 or the
+    // letters won't join (RTL ligature shaping breaks with tracking).
+    const tracking = this.rtl ? 0 : 1;
+    this.scoreLabel.style.letterSpacing = tracking;
+    this.bestLabel.style.letterSpacing = tracking;
+    placeText(this.scoreLabel, this.mx(scoreX, boxW) + boxW / 2, rowBY + boxH * 0.27, boxH * 0.2, COLORS.textMuted);
+    placeText(this.bestLabel, this.mx(bestX, boxW) + boxW / 2, rowBY + boxH * 0.27, boxH * 0.2, COLORS.textMuted);
+    placeText(this.scoreValue, this.mx(scoreX, boxW) + boxW / 2, rowBY + boxH * 0.66, boxH * 0.34, COLORS.text);
+    placeText(this.bestValue, this.mx(bestX, boxW) + boxW / 2, rowBY + boxH * 0.66, boxH * 0.34, COLORS.text);
+
+    const btnW = Math.min(scoreX - pad, boxW * 1.6);
+    const btnH = boxH;
+    const btnX = 0;
+    drawButton(this.newBtn, this.mx(btnX, btnW), rowBY, btnW, btnH, t("newGame"), Math.round(btnH * 0.36));
   }
 
   private refreshHud(): void {
@@ -321,44 +354,85 @@ export class GameScene {
     this.bestValue.text = String(this.board.best);
   }
 
+  // ---- theme / locale --------------------------------------------------
+
+  private cycleTheme(): void {
+    const i = THEME_CYCLE.indexOf(this.themeMode);
+    this.themeMode = THEME_CYCLE[(i + 1) % THEME_CYCLE.length];
+    setThemeMode(this.themeMode);
+    this.refreshChrome();
+    void this.persistSettings();
+  }
+
+  private cycleLocale(): void {
+    this.locale = nextLocale(this.locale);
+    setLocale(this.locale);
+    this.rtl = isRTL(this.locale);
+    this.refreshChrome();
+    void this.persistSettings();
+  }
+
+  /** Re-apply colors + strings after a theme or locale change. */
+  private refreshChrome(): void {
+    this.app.renderer.background.color = COLORS.background;
+    this.applyDocumentChrome();
+    this.layout();
+    this.syncPositions();
+    this.refreshHud();
+    if (this.overlayKind) this.showOverlay(this.overlayKind);
+  }
+
+  private applyDocumentChrome(): void {
+    if (typeof document === "undefined") return;
+    const hex = hexString(COLORS.background);
+    document.documentElement.style.setProperty("--bg", hex);
+    document.body.style.background = hex;
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", hex);
+  }
+
   // ---- overlay ---------------------------------------------------------
 
-  private overlayAction: (() => void) | null = null;
+  private overlayKind: OverlayKind = null;
 
-  private showOverlay(title: string, action: string, onAction: () => void): void {
+  private showOverlay(kind: Exclude<OverlayKind, null>): void {
     this.overlay.removeChildren();
-    this.overlayAction = onAction;
+    this.overlayKind = kind;
+
+    const titleKey = kind === "win" ? "win" : "gameOver";
+    const actionKey = kind === "win" ? "keepGoing" : "tryAgain";
+    const onAction =
+      kind === "win"
+        ? () => {
+            this.board.keptPlaying = true;
+            this.hideOverlay();
+            void this.persist();
+          }
+        : () => this.newGame();
 
     const bg = new Graphics();
-    const titleText = new Text({
-      text: title,
-      style: { fontFamily: "-apple-system, Helvetica, Arial, sans-serif", fontWeight: "800", fill: COLORS.text, fontSize: Math.round(this.boardSize * 0.1) },
-    });
-    titleText.anchor.set(0.5);
-
-    const btn = new Container();
-    btn.eventMode = "static";
-    btn.cursor = "pointer";
-    const btnBg = new Graphics();
-    const btnText = new Text({
-      text: action,
-      style: { fontFamily: "-apple-system, Helvetica, Arial, sans-serif", fontWeight: "700", fill: COLORS.buttonText, fontSize: Math.round(this.boardSize * 0.045) },
-    });
-    btnText.anchor.set(0.5);
-    btn.addChild(btnBg, btnText);
-    btn.on("pointertap", () => this.overlayAction?.());
-
-    const bw = this.boardSize * 0.46;
-    const bh = this.boardSize * 0.12;
-    btnBg.roundRect(-bw / 2, -bh / 2, bw, bh, bh * 0.3).fill(COLORS.buttonBg);
-
     this.overlay.addChild(bg);
     (this.overlay as Container & { _bg: Graphics })._bg = bg;
-    titleText.position.set(this.boardSize / 2, this.boardSize * 0.4);
-    btn.position.set(this.boardSize / 2, this.boardSize * 0.58);
-    this.overlay.addChild(titleText, btn);
 
-    // Overlay is a child of root; align it over the board area.
+    const titleText = centeredText({ weight: "800", fill: COLORS.text });
+    titleText.text = t(titleKey);
+    titleText.style.fontSize = Math.round(this.boardSize * 0.1);
+    titleText.position.set(this.boardSize / 2, this.boardSize * 0.4);
+
+    const btn = makeButton();
+    drawButton(
+      btn,
+      this.boardSize * 0.27,
+      this.boardSize * 0.52,
+      this.boardSize * 0.46,
+      this.boardSize * 0.12,
+      t(actionKey),
+      Math.round(this.boardSize * 0.045),
+    );
+    btn.on("pointertap", onAction);
+
+    this.overlay.addChild(titleText, btn);
     this.overlay.position.set(0, this.boardLayer.y);
     this.overlay.visible = true;
     this.drawOverlayBg();
@@ -373,20 +447,24 @@ export class GameScene {
     bg.clear();
     bg.roundRect(0, 0, this.boardSize, this.boardSize, this.boardSize * 0.03).fill({
       color: COLORS.overlay,
-      alpha: 0.86,
+      alpha: COLORS.overlayAlpha,
     });
   }
 
   private hideOverlay(): void {
     this.overlay.visible = false;
     this.overlay.removeChildren();
-    this.overlayAction = null;
+    this.overlayKind = null;
   }
 
   // ---- side effects ----------------------------------------------------
 
   private async persist(): Promise<void> {
     await saveState(this.board.serialize());
+  }
+
+  private async persistSettings(): Promise<void> {
+    await saveSettings(this.themeMode, this.locale);
   }
 
   private async haptic(): Promise<void> {
@@ -399,24 +477,29 @@ export class GameScene {
   }
 }
 
-// ---- small text helpers ------------------------------------------------
+// ---- small UI helpers --------------------------------------------------
 
-function miniLabel(text: string): Text {
-  const t = new Text({
-    text,
-    style: { fontFamily: "-apple-system, Helvetica, Arial, sans-serif", fontWeight: "700", fill: COLORS.textMuted, letterSpacing: 1 },
+const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+
+type Weight = "700" | "800";
+
+function text(o: { weight: Weight; fill: number; letterSpacing?: number }): Text {
+  return new Text({
+    text: "",
+    style: { fontFamily: FONT, fontWeight: o.weight, fill: o.fill, letterSpacing: o.letterSpacing ?? 0 },
   });
-  t.anchor.set(0.5);
-  return t;
 }
 
-function boxValue(text: string): Text {
-  const t = new Text({
-    text,
-    style: { fontFamily: "-apple-system, Helvetica, Arial, sans-serif", fontWeight: "800", fill: COLORS.text },
-  });
-  t.anchor.set(0.5);
-  return t;
+function centeredText(o: { weight: Weight; fill: number; letterSpacing?: number }): Text {
+  const el = text(o);
+  el.anchor.set(0.5);
+  return el;
+}
+
+function placeText(t: Text, cx: number, cy: number, fontSize: number, fill: number): void {
+  t.style.fontSize = Math.round(fontSize);
+  t.style.fill = fill;
+  t.position.set(cx, cy);
 }
 
 function drawBox(g: Graphics, x: number, y: number, w: number, h: number): void {
@@ -424,12 +507,87 @@ function drawBox(g: Graphics, x: number, y: number, w: number, h: number): void 
   g.roundRect(x, y, w, h, h * 0.22).fill(COLORS.cellEmpty);
 }
 
-function placeLabel(t: Text, cx: number, cy: number, boxH: number): void {
-  t.style.fontSize = Math.round(boxH * 0.18);
-  t.position.set(cx, cy);
+interface ButtonParts {
+  _bg: Graphics;
+  _text: Text;
 }
 
-function placeValue(t: Text, cx: number, cy: number, boxH: number): void {
-  t.style.fontSize = Math.round(boxH * 0.34);
-  t.position.set(cx, cy);
+function makeButton(): Container {
+  const c = new Container();
+  c.eventMode = "static";
+  c.cursor = "pointer";
+  const bg = new Graphics();
+  const label = centeredText({ weight: "700", fill: COLORS.buttonText });
+  c.addChild(bg, label);
+  (c as Container & ButtonParts)._bg = bg;
+  (c as Container & ButtonParts)._text = label;
+  return c;
+}
+
+function drawButton(c: Container, x: number, y: number, w: number, h: number, label: string, fontSize: number): void {
+  const p = c as Container & ButtonParts;
+  p._bg.clear();
+  p._bg.roundRect(0, 0, w, h, h * 0.28).fill(COLORS.buttonBg);
+  p._text.text = label;
+  p._text.style.fontSize = fontSize;
+  p._text.style.fill = COLORS.buttonText;
+  p._text.position.set(w / 2, h / 2);
+  c.position.set(x, y);
+}
+
+function makeIconButton(): Container {
+  const c = new Container();
+  c.eventMode = "static";
+  c.cursor = "pointer";
+  const bg = new Graphics();
+  const icon = new Graphics();
+  c.addChild(bg, icon);
+  (c as Container & { _bg: Graphics; _icon: Graphics })._bg = bg;
+  (c as Container & { _bg: Graphics; _icon: Graphics })._icon = icon;
+  return c;
+}
+
+function placeSquareButton(c: Container, x: number, y: number, size: number): void {
+  const bg = (c as Container & { _bg: Graphics })._bg;
+  bg.clear();
+  bg.roundRect(0, 0, size, size, size * 0.28).fill(COLORS.controlBg);
+  c.position.set(x, y);
+}
+
+function setControlText(c: Container, label: string, fontSize: number, size: number, fill: number): void {
+  // reuse the button's existing _text child (from makeButton) for the label
+  const txt = (c as Container & ButtonParts)._text;
+  txt.text = label;
+  txt.style.fontSize = fontSize;
+  txt.style.fill = fill;
+  txt.position.set(size / 2, size / 2);
+}
+
+function drawThemeIcon(c: Container, size: number, dark: boolean): void {
+  const icon = (c as Container & { _icon: Graphics })._icon;
+  icon.clear();
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size * 0.16;
+  if (dark) {
+    // crescent moon: a disc with an offset disc punched out in the button color
+    icon.circle(cx, cy, r * 1.25).fill(COLORS.controlIcon);
+    icon.circle(cx + r * 0.7, cy - r * 0.45, r * 1.15).fill(COLORS.controlBg);
+  } else {
+    // sun: disc + 8 rays
+    icon.circle(cx, cy, r * 0.78).fill(COLORS.controlIcon);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const x1 = cx + Math.cos(a) * r * 1.15;
+      const y1 = cy + Math.sin(a) * r * 1.15;
+      const x2 = cx + Math.cos(a) * r * 1.6;
+      const y2 = cy + Math.sin(a) * r * 1.6;
+      icon.moveTo(x1, y1).lineTo(x2, y2);
+    }
+    icon.stroke({ width: Math.max(1.5, size * 0.045), color: COLORS.controlIcon, cap: "round" });
+  }
+}
+
+function hexString(color: number): string {
+  return "#" + color.toString(16).padStart(6, "0");
 }

@@ -33,9 +33,10 @@ clean dark board.
 
 - 🧊 **PixiJS v8** rendering (WebGL with automatic Canvas fallback) — buttery 60 fps.
 - 📱 **Responsive** portrait layout that fills any phone, tablet, or desktop window.
-- 💾 **Auto-save** of the current game + best score (`@capacitor/preferences`).
+- 🌗 **Dark / Light / System** theme — follows the OS by default, toggle in-game, remembered.
+- 🌍 **5 languages** — English, Tiếng Việt, 한국어, 中文, العربية — with full **RTL** layout for Arabic.
+- 💾 **Auto-save** of the current game, best score, theme & language (`@capacitor/preferences`).
 - 📳 **Haptics** on merges (native).
-- 🌑 Polished **dark theme** with the familiar warm 2048 tile ramp.
 - 📦 One codebase → **Web, iOS, and Android** via Capacitor.
 
 ## 🛠️ Tech stack

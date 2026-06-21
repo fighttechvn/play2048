@@ -2,7 +2,7 @@ import { Application } from "pixi.js";
 import { Capacitor } from "@capacitor/core";
 import { GameScene } from "./game/gameScene";
 import { attachInput } from "./game/input";
-import { COLORS } from "./game/theme";
+import { COLORS, setThemeMode } from "./game/theme";
 import { Tweener } from "./game/tween";
 
 function showFatal(message: string): void {
@@ -16,6 +16,10 @@ function showFatal(message: string): void {
 
 async function main(): Promise<void> {
   const host = document.getElementById("app")!;
+
+  // Match the OS theme for the first paint; GameScene refines with the saved
+  // preference once Preferences resolves.
+  setThemeMode("system");
 
   const app = new Application();
   await app.init({
