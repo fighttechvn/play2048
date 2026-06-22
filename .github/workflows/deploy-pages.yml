@@ -1,10 +1,17 @@
 name: Deploy web to GitHub Pages
 
+# Publishes the marketing LANDING at the site root and the playable GAME under
+# /play/, matching scripts/deploy-web.sh:
+#   https://fighttechvn.github.io/play2048/        → landing (+ privacy/terms/support/sdk)
+#   https://fighttechvn.github.io/play2048/play/   → the game (Discover hub)
+
 on:
   push:
     branches: [main]
     paths:
       - "src/**"
+      - "games/**"
+      - "landing/**"
       - "index.html"
       - "vite.config.ts"
       - "package.json"
@@ -23,11 +30,16 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: npm run build
-      - run: touch dist/.nojekyll
+      - run: npm run build # prebuild also regenerates public/games (zip, patch)
+      - name: Assemble site (landing at root + game at /play/)
+        run: |
+          rm -rf _site && mkdir -p _site/play
+          cp -R landing/. _site/        # marketing landing + legal/sdk pages at root
+          cp -R dist/. _site/play/       # playable game under /play/
+          touch _site/.nojekyll
       - name: Publish to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
+          publish_dir: ./_site
           publish_branch: gh-pages
