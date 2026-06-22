@@ -34,7 +34,9 @@ export class Tweener {
   private tweens: Tween[] = [];
 
   constructor(ticker: Ticker) {
-    ticker.add((t) => this.update(t.deltaMS));
+    // PixiJS v7 ticker callbacks receive the scalar deltaTime; read elapsed ms
+    // off the ticker instance instead.
+    ticker.add(() => this.update(ticker.deltaMS));
   }
 
   /** Animate a numeric interpolation; `apply(k)` receives eased progress 0..1. */

@@ -8,7 +8,7 @@
 #   ./build.sh aab        Android AAB (for Play upload)
 #
 # Notes:
-#   • APK/AAB are signed with signing/go2048-upload.jks (see signing/key.properties).
+#   • APK/AAB are signed with .app_dist/go2048-upload.jks (see .app_dist/key.properties).
 #   • IPA export needs the App ID + distribution profile for vn.fighttech.go2048
 #     (see RELEASE.md). Without them the archive succeeds but export will fail —
 #     the .xcarchive is kept so you can finish signing in Xcode.
@@ -24,10 +24,16 @@ mkdir -p "$OUT"
 
 hr() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 
+# Build web + sync only the platform(s) we're about to build. Syncing a platform
+# we don't need (e.g. iOS pod install during an Android-only build) just wastes
+# time and can fail. LANG must be UTF-8 or CocoaPods' pod install crashes on
+# Ruby 3.4.
 build_web() {
-  hr "Building web (Vite) + cap sync"
+  export LANG="${LANG:-en_US.UTF-8}" LC_ALL="${LC_ALL:-en_US.UTF-8}"
+  hr "Building web (Vite) + cap sync ($1)"
   npm run build
-  npx --no-install cap sync
+  if [ "$1" = "all" ]; then npx --no-install cap sync
+  else npx --no-install cap sync "$1"; fi
 }
 
 build_android_apk() {
@@ -50,7 +56,7 @@ build_ios_ipa() {
   hr "Archiving iOS app"
   local arch="$OUT/App.xcarchive"
   rm -rf "$arch"
-  xcodebuild -project ios/App/App.xcodeproj -scheme App \
+  xcodebuild -workspace ios/App/App.xcworkspace -scheme App \
     -configuration Release -destination 'generic/platform=iOS' \
     -archivePath "$arch" \
     DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
@@ -71,12 +77,11 @@ build_ios_ipa() {
   fi
 }
 
-build_web
 case "$TARGET" in
-  android) build_android_apk ;;
-  aab)     build_android_aab ;;
-  ios)     build_ios_ipa ;;
-  all|"")  build_android_apk; build_ios_ipa || true ;;
+  android) build_web android; build_android_apk ;;
+  aab)     build_web android; build_android_aab ;;
+  ios)     build_web ios; build_ios_ipa ;;
+  all|"")  build_web all; build_android_apk; build_ios_ipa || true ;;
   *) echo "usage: ./build.sh [android|ios|aab|all]"; exit 1 ;;
 esac
 

@@ -1,2 +1,0 @@
-app_identifier(ENV.fetch("BUNDLE_ID", "vn.fighttech.go2048"))
-team_id(ENV.fetch("TEAM_ID", "86PC33ZDHF"))

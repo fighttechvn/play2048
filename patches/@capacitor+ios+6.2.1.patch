@@ -1,0 +1,135 @@
+diff --git a/node_modules/@capacitor/ios/Capacitor.podspec b/node_modules/@capacitor/ios/Capacitor.podspec
+index f55f30d..d75d261 100644
+--- a/node_modules/@capacitor/ios/Capacitor.podspec
++++ b/node_modules/@capacitor/ios/Capacitor.podspec
+@@ -13,7 +13,7 @@ Pod::Spec.new do |s|
+   s.social_media_url = 'https://twitter.com/capacitorjs'
+   s.license = 'MIT'
+   s.homepage = 'https://capacitorjs.com/'
+-  s.ios.deployment_target = '13.0'
++  s.ios.deployment_target = '12.0'
+   s.authors = { 'Ionic Team' => 'hi@ionicframework.com' }
+   s.source = { git: 'https://github.com/ionic-team/capacitor.git', tag: package['version'] }
+   s.source_files = "#{prefix}Capacitor/Capacitor/**/*.{swift,h,m}"
+diff --git a/node_modules/@capacitor/ios/Capacitor/Capacitor/CAPBridgeViewController.swift b/node_modules/@capacitor/ios/Capacitor/Capacitor/CAPBridgeViewController.swift
+index 37ef75c..b2515b8 100644
+--- a/node_modules/@capacitor/ios/Capacitor/Capacitor/CAPBridgeViewController.swift
++++ b/node_modules/@capacitor/ios/Capacitor/Capacitor/CAPBridgeViewController.swift
+@@ -122,13 +122,16 @@ import Cordova
+             }
+         }
+         if let preferredContentMode = instanceConfiguration.preferredContentMode {
+-            var mode = WKWebpagePreferences.ContentMode.recommended
+-            if preferredContentMode == "mobile" {
+-                mode = WKWebpagePreferences.ContentMode.mobile
+-            } else if preferredContentMode == "desktop" {
+-                mode = WKWebpagePreferences.ContentMode.desktop
++            // WKWebpagePreferences is iOS 13+; skip the content-mode override on iOS 12.
++            if #available(iOS 13.0, *) {
++                var mode = WKWebpagePreferences.ContentMode.recommended
++                if preferredContentMode == "mobile" {
++                    mode = WKWebpagePreferences.ContentMode.mobile
++                } else if preferredContentMode == "desktop" {
++                    mode = WKWebpagePreferences.ContentMode.desktop
++                }
++                webViewConfiguration.defaultWebpagePreferences.preferredContentMode = mode
+             }
+-            webViewConfiguration.defaultWebpagePreferences.preferredContentMode = mode
+         }
+         return webViewConfiguration
+     }
+@@ -177,7 +180,12 @@ import Cordova
+             }
+             if let statusBarStyle = plist["UIStatusBarStyle"] as? String {
+                 if statusBarStyle == "UIStatusBarStyleDarkContent" {
+-                    self.statusBarStyle = .darkContent
++                    // .darkContent is iOS 13+; fall back to .default on iOS 12.
++                    if #available(iOS 13.0, *) {
++                        self.statusBarStyle = .darkContent
++                    } else {
++                        self.statusBarStyle = .default
++                    }
+                 } else if statusBarStyle != "UIStatusBarStyleDefault" {
+                     self.statusBarStyle = .lightContent
+                 }
+@@ -297,8 +305,14 @@ extension CAPBridgeViewController {
+             aWebView.scrollView.backgroundColor = backgroundColor
+         } else {
+             // Use the system background colors if background is not set by user
+-            aWebView.backgroundColor = UIColor.systemBackground
+-            aWebView.scrollView.backgroundColor = UIColor.systemBackground
++            // (systemBackground is iOS 13+; fall back to white on iOS 12).
++            if #available(iOS 13.0, *) {
++                aWebView.backgroundColor = UIColor.systemBackground
++                aWebView.scrollView.backgroundColor = UIColor.systemBackground
++            } else {
++                aWebView.backgroundColor = .white
++                aWebView.scrollView.backgroundColor = .white
++            }
+         }
+         aWebView.capacitor.setKeyboardShouldRequireUserInteraction(false)
+         // set our ivar
+diff --git a/node_modules/@capacitor/ios/Capacitor/Capacitor/WebViewAssetHandler.swift b/node_modules/@capacitor/ios/Capacitor/Capacitor/WebViewAssetHandler.swift
+index afd1e96..f65ec07 100644
+--- a/node_modules/@capacitor/ios/Capacitor/Capacitor/WebViewAssetHandler.swift
++++ b/node_modules/@capacitor/ios/Capacitor/Capacitor/WebViewAssetHandler.swift
+@@ -68,14 +68,24 @@ open class WebViewAssetHandler: NSObject, WKURLSchemeHandler {
+                     toRange = Int(streamParts[1]) ?? toRange
+                 }
+                 let rangeLength = toRange - fromRange + 1
+-                try fileHandle.seek(toOffset: UInt64(fromRange))
++                // FileHandle.seek(toOffset:) is iOS 13+; use seek(toFileOffset:) on iOS 12.
++                if #available(iOS 13.0, *) {
++                    try fileHandle.seek(toOffset: UInt64(fromRange))
++                } else {
++                    fileHandle.seek(toFileOffset: UInt64(fromRange))
++                }
+                 data = fileHandle.readData(ofLength: rangeLength)
+                 headers["Accept-Ranges"] = "bytes"
+                 headers["Content-Range"] = "bytes \(fromRange)-\(toRange)/\(totalSize)"
+                 headers["Content-Length"] = String(data.count)
+                 let response = HTTPURLResponse(url: localUrl, statusCode: 206, httpVersion: nil, headerFields: headers)
+                 urlSchemeTask.didReceive(response!)
+-                try fileHandle.close()
++                // FileHandle.close() is iOS 13+; use closeFile() on iOS 12.
++                if #available(iOS 13.0, *) {
++                    try fileHandle.close()
++                } else {
++                    fileHandle.closeFile()
++                }
+             } else {
+                 if !stringToLoad.contains("cordova.js") {
+                     if isMediaExtension(pathExtension: url.pathExtension) {
+diff --git a/node_modules/@capacitor/ios/CapacitorCordova.podspec b/node_modules/@capacitor/ios/CapacitorCordova.podspec
+index 478142b..1951a50 100644
+--- a/node_modules/@capacitor/ios/CapacitorCordova.podspec
++++ b/node_modules/@capacitor/ios/CapacitorCordova.podspec
+@@ -15,7 +15,7 @@ Pod::Spec.new do |s|
+   s.license      = 'MIT'
+   s.authors      = { 'Ionic Team' => 'hi@ionicframework.com' }
+   s.source       = { git: 'https://github.com/ionic-team/capacitor', tag: s.version.to_s }
+-  s.platform     = :ios, 13.0
++  s.platform     = :ios, 12.0
+   s.source_files = "#{prefix}CapacitorCordova/CapacitorCordova/**/*.{h,m}"
+   s.public_header_files = "#{prefix}CapacitorCordova/CapacitorCordova/Classes/Public/*.h",
+                           "#{prefix}CapacitorCordova/CapacitorCordova/CapacitorCordova.h"
+diff --git a/node_modules/@capacitor/ios/scripts/pods_helpers.rb b/node_modules/@capacitor/ios/scripts/pods_helpers.rb
+index 7a9fa41..e031060 100644
+--- a/node_modules/@capacitor/ios/scripts/pods_helpers.rb
++++ b/node_modules/@capacitor/ios/scripts/pods_helpers.rb
+@@ -1,11 +1,12 @@
+ def assertDeploymentTarget(installer)
+   installer.pods_project.targets.each do |target|
+     target.build_configurations.each do |config|
+-      # ensure IPHONEOS_DEPLOYMENT_TARGET is at least 13.0
++      # ensure IPHONEOS_DEPLOYMENT_TARGET is at least 12.0 (lowered from 13.0 to
++      # support iOS 12 — Capacitor 6 code is iOS-12-safe with guarded fallbacks)
+       deployment_target = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f
+-      should_upgrade = deployment_target < 13.0 && deployment_target != 0.0
++      should_upgrade = deployment_target < 12.0 && deployment_target != 0.0
+       if should_upgrade
+-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
++        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
+       end
+     end
+   end

@@ -1,0 +1,29 @@
+diff --git a/node_modules/@capacitor/haptics/CapacitorHaptics.podspec b/node_modules/@capacitor/haptics/CapacitorHaptics.podspec
+index 6adcd65..24ad015 100644
+--- a/node_modules/@capacitor/haptics/CapacitorHaptics.podspec
++++ b/node_modules/@capacitor/haptics/CapacitorHaptics.podspec
+@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
+   s.author = package['author']
+   s.source = { :git => 'https://github.com/ionic-team/capacitor-plugins.git', :tag => package['name'] + '@' + package['version'] }
+   s.source_files = 'ios/Sources/**/*.{swift,h,m,c,cc,mm,cpp}', 'haptics/ios/Sources/**/*.{swift,h,m,c,cc,mm,cpp}'
+-  s.ios.deployment_target  = '13.0'
++  s.ios.deployment_target  = '12.0'
+   s.dependency 'Capacitor'
+   s.swift_version = '5.1'
+ end
+diff --git a/node_modules/@capacitor/haptics/ios/Sources/HapticsPlugin/Haptics.swift b/node_modules/@capacitor/haptics/ios/Sources/HapticsPlugin/Haptics.swift
+index 97ad97d..681d48d 100644
+--- a/node_modules/@capacitor/haptics/ios/Sources/HapticsPlugin/Haptics.swift
++++ b/node_modules/@capacitor/haptics/ios/Sources/HapticsPlugin/Haptics.swift
+@@ -37,6 +37,11 @@ import CoreHaptics
+     }
+ 
+     @objc public func vibrate(_ duration: Double) {
++        // CoreHaptics is iOS 13+; fall back to a simple vibration on iOS 12.
++        guard #available(iOS 13.0, *) else {
++            vibrate()
++            return
++        }
+         if CHHapticEngine.capabilitiesForHardware().supportsHaptics {
+             do {
+                 let engine = try CHHapticEngine()

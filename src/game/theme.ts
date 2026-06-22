@@ -80,6 +80,11 @@ export function getThemeMode(): ThemeMode {
   return currentMode;
 }
 
+/** A PixiJS color number → CSS hex string, e.g. 0x0f1115 → "#0f1115". */
+export function hexString(color: number): string {
+  return "#" + color.toString(16).padStart(6, "0");
+}
+
 // Tile color ramp — shared across themes (the classic warm 2048 ramp reads well
 // on both the dark and light boards). Text-on-tile is fixed per value.
 interface TileStyle {

@@ -1,0 +1,52 @@
+PODS:
+  - Capacitor (6.2.1):
+    - CapacitorCordova
+  - CapacitorApp (6.0.3):
+    - Capacitor
+  - CapacitorCordova (6.2.1)
+  - CapacitorHaptics (6.0.3):
+    - Capacitor
+  - CapacitorPreferences (6.0.4):
+    - Capacitor
+  - CapacitorSplashScreen (6.0.4):
+    - Capacitor
+  - CapacitorStatusBar (6.0.3):
+    - Capacitor
+
+DEPENDENCIES:
+  - "Capacitor (from `../../node_modules/@capacitor/ios`)"
+  - "CapacitorApp (from `../../node_modules/@capacitor/app`)"
+  - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
+  - "CapacitorHaptics (from `../../node_modules/@capacitor/haptics`)"
+  - "CapacitorPreferences (from `../../node_modules/@capacitor/preferences`)"
+  - "CapacitorSplashScreen (from `../../node_modules/@capacitor/splash-screen`)"
+  - "CapacitorStatusBar (from `../../node_modules/@capacitor/status-bar`)"
+
+EXTERNAL SOURCES:
+  Capacitor:
+    :path: "../../node_modules/@capacitor/ios"
+  CapacitorApp:
+    :path: "../../node_modules/@capacitor/app"
+  CapacitorCordova:
+    :path: "../../node_modules/@capacitor/ios"
+  CapacitorHaptics:
+    :path: "../../node_modules/@capacitor/haptics"
+  CapacitorPreferences:
+    :path: "../../node_modules/@capacitor/preferences"
+  CapacitorSplashScreen:
+    :path: "../../node_modules/@capacitor/splash-screen"
+  CapacitorStatusBar:
+    :path: "../../node_modules/@capacitor/status-bar"
+
+SPEC CHECKSUMS:
+  Capacitor: 7bbe6f3394af783e50852e1c0dc1b2a0802e68bd
+  CapacitorApp: b15cad232271bd3f64183a0e984e96e251932d86
+  CapacitorCordova: 4a51217278d3261428ff3583de22375aa339a34a
+  CapacitorHaptics: 956c3450b5ff8561b4891998bd20f74951825015
+  CapacitorPreferences: b8eef68d908d8de4d046ef51d309e24dd32f16ce
+  CapacitorSplashScreen: cadd8f4e099f4ad4e498ae442f7eb1d917a68325
+  CapacitorStatusBar: 2972853046ac9059e29ba6be7ea7c3ee4425c100
+
+PODFILE CHECKSUM: 9af37d89a8f83148c1c933e4ac300e318243d770
+
+COCOAPODS: 1.16.2

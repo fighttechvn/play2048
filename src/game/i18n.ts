@@ -7,7 +7,11 @@ export type Locale = "en" | "vi" | "ko" | "zh" | "ar";
 
 export const LOCALES: Locale[] = ["en", "vi", "ko", "zh", "ar"];
 
-type Key = "score" | "best" | "newGame" | "win" | "keepGoing" | "gameOver" | "tryAgain";
+type Key =
+  | "score" | "best" | "newGame" | "win" | "keepGoing" | "gameOver" | "tryAgain"
+  | "discover" | "playNow" | "details"
+  | "settings" | "appearance" | "language" | "system" | "light" | "dark"
+  | "privacy" | "terms" | "support" | "version";
 
 const STRINGS: Record<Locale, Record<Key, string>> = {
   en: {
@@ -18,6 +22,10 @@ const STRINGS: Record<Locale, Record<Key, string>> = {
     keepGoing: "Keep going",
     gameOver: "Game over",
     tryAgain: "Try again",
+    discover: "Discover",
+    playNow: "Play Now",
+    details: "Details",
+    settings:"Settings",appearance:"Appearance",language:"Language",system:"System",light:"Light",dark:"Dark",privacy:"Privacy Policy",terms:"Terms of Use",support:"Support",version:"Version",
   },
   vi: {
     score: "ĐIỂM",
@@ -27,6 +35,10 @@ const STRINGS: Record<Locale, Record<Key, string>> = {
     keepGoing: "Chơi tiếp",
     gameOver: "Thua rồi",
     tryAgain: "Chơi lại",
+    discover: "Khám phá",
+    playNow: "Chơi ngay",
+    details: "Chi tiết",
+    settings:"Cài đặt",appearance:"Giao diện",language:"Ngôn ngữ",system:"Hệ thống",light:"Sáng",dark:"Tối",privacy:"Chính sách bảo mật",terms:"Điều khoản",support:"Hỗ trợ",version:"Phiên bản",
   },
   ko: {
     score: "점수",
@@ -36,6 +48,10 @@ const STRINGS: Record<Locale, Record<Key, string>> = {
     keepGoing: "계속하기",
     gameOver: "게임 오버",
     tryAgain: "다시 하기",
+    discover: "둘러보기",
+    playNow: "지금 플레이",
+    details: "상세",
+    settings:"설정",appearance:"화면",language:"언어",system:"시스템",light:"밝게",dark:"어둡게",privacy:"개인정보처리방침",terms:"이용약관",support:"지원",version:"버전",
   },
   zh: {
     score: "分数",
@@ -45,6 +61,10 @@ const STRINGS: Record<Locale, Record<Key, string>> = {
     keepGoing: "继续",
     gameOver: "游戏结束",
     tryAgain: "再试一次",
+    discover: "发现",
+    playNow: "立即玩",
+    details: "详情",
+    settings:"设置",appearance:"外观",language:"语言",system:"系统",light:"浅色",dark:"深色",privacy:"隐私政策",terms:"使用条款",support:"支持",version:"版本",
   },
   ar: {
     score: "النقاط",
@@ -54,6 +74,10 @@ const STRINGS: Record<Locale, Record<Key, string>> = {
     keepGoing: "واصل",
     gameOver: "انتهت اللعبة",
     tryAgain: "حاول مجدداً",
+    discover: "اكتشف",
+    playNow: "العب الآن",
+    details: "تفاصيل",
+    settings:"الإعدادات",appearance:"المظهر",language:"اللغة",system:"النظام",light:"فاتح",dark:"داكن",privacy:"سياسة الخصوصية",terms:"الشروط",support:"الدعم",version:"الإصدار",
   },
 };
 

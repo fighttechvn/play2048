@@ -7,14 +7,14 @@
 #   ./scripts/firebase-distribute.sh ios     ["notes"]   # ad-hoc IPA (all devices)
 #   ./scripts/firebase-distribute.sh         ["notes"]   # both
 #
-# Config from .env.prod: FIREBASE_APP_ID (android), FIREBASE_IOS_APP_ID,
-# FIREBASE_GROUPS, and the CI token (FIREBASE_TOKEN or FIREBASE_TOKEN_FILE).
+# Config from .app_dist/.env.prod: FIREBASE_APP_ID (android),
+# FIREBASE_IOS_APP_ID, FIREBASE_GROUPS, FIREBASE_TOKEN.
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck source=scripts/env.sh
 source scripts/env.sh
-set -a; source .env.prod; set +a
+load_env
 
 PLATFORM="android"; NOTES=""
 case "${1:-}" in
@@ -24,11 +24,7 @@ case "${1:-}" in
 esac
 NOTES="${NOTES:-go2048 ${APP_VERSION:-} — Firebase App Distribution}"
 
-# Resolve the Firebase token.
-if [ -z "${FIREBASE_TOKEN:-}" ] && [ -n "${FIREBASE_TOKEN_FILE:-}" ] && [ -f "$FIREBASE_TOKEN_FILE" ]; then
-  FIREBASE_TOKEN=$(grep -E '^FIREBASE_TOKEN' "$FIREBASE_TOKEN_FILE" | cut -d= -f2- | tr -d '"')
-fi
-[ -n "${FIREBASE_TOKEN:-}" ] || { echo "❌ No FIREBASE_TOKEN available" >&2; exit 1; }
+[ -n "${FIREBASE_TOKEN:-}" ] || { echo "❌ No FIREBASE_TOKEN in .env.prod" >&2; exit 1; }
 
 dist_android() {
   echo "==> Building signed release APK"
@@ -42,10 +38,7 @@ dist_android() {
 dist_ios() {
   echo "==> Building ad-hoc IPA (all devices)"
   npm run build >/dev/null && npx --no-install cap sync ios >/dev/null
-  ( cd ios/App
-    export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
-    export PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/3.4.0/bin:$PATH"
-    fastlane build_adhoc )
+  ( cd ios/App && fastlane build_adhoc )   # ruby PATH + env from scripts/env.sh
   echo "==> Distributing IPA to Firebase ($FIREBASE_IOS_APP_ID)"
   firebase appdistribution:distribute ios/build-output/go2048-adhoc.ipa \
     --app "$FIREBASE_IOS_APP_ID" --token "$FIREBASE_TOKEN" \

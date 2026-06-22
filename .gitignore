@@ -24,3 +24,11 @@ build-output/
 fastlane/report.xml
 
 .claude/settings.local.json
+
+# private signing repo (separate: play2048.app_dist)
+.app_dist/
+ios/App/fastlane
+android/fastlane
+# fetched external game bundles (rebuild via scripts/fetch-bubbo.sh)
+public/games/
+landing/sdk/*.zip

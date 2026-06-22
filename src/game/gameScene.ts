@@ -1,6 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
-import { Application, Container, Graphics, Text } from "pixi.js";
+import { Application, Container, Graphics, LINE_CAP, Text } from "pixi.js";
 import { Board, type Direction, type Cell } from "./board";
 import { saveState, loadState, saveSettings, loadSettings } from "./storage";
 import { COLORS, GRID_SIZE, resolveIsDark, setThemeMode, type ThemeMode } from "./theme";
@@ -219,14 +219,16 @@ export class GameScene {
     this.boardLayer.position.set(0, headerH);
     this.boardBg.clear();
     this.boardBg
-      .roundRect(0, 0, this.boardSize, this.boardSize, this.boardSize * 0.03)
-      .fill(COLORS.boardBg);
+      .beginFill(COLORS.boardBg)
+      .drawRoundedRect(0, 0, this.boardSize, this.boardSize, this.boardSize * 0.03)
+      .endFill();
     for (let r = 0; r < N; r++) {
       for (let c = 0; c < N; c++) {
         const { x, y } = this.cellCenter({ r, c });
         this.boardBg
-          .roundRect(x - this.cell / 2, y - this.cell / 2, this.cell, this.cell, this.cell * 0.12)
-          .fill(COLORS.cellEmpty);
+          .beginFill(COLORS.cellEmpty)
+          .drawRoundedRect(x - this.cell / 2, y - this.cell / 2, this.cell, this.cell, this.cell * 0.12)
+          .endFill();
       }
     }
 
@@ -445,10 +447,9 @@ export class GameScene {
     const bg = (this.overlay as Container & { _bg?: Graphics })._bg;
     if (!bg) return;
     bg.clear();
-    bg.roundRect(0, 0, this.boardSize, this.boardSize, this.boardSize * 0.03).fill({
-      color: COLORS.overlay,
-      alpha: COLORS.overlayAlpha,
-    });
+    bg.beginFill(COLORS.overlay, COLORS.overlayAlpha)
+      .drawRoundedRect(0, 0, this.boardSize, this.boardSize, this.boardSize * 0.03)
+      .endFill();
   }
 
   private hideOverlay(): void {
@@ -484,9 +485,11 @@ const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, 
 type Weight = "700" | "800";
 
 function text(o: { weight: Weight; fill: number; letterSpacing?: number }): Text {
-  return new Text({
-    text: "",
-    style: { fontFamily: FONT, fontWeight: o.weight, fill: o.fill, letterSpacing: o.letterSpacing ?? 0 },
+  return new Text("", {
+    fontFamily: FONT,
+    fontWeight: o.weight,
+    fill: o.fill,
+    letterSpacing: o.letterSpacing ?? 0,
   });
 }
 
@@ -504,7 +507,7 @@ function placeText(t: Text, cx: number, cy: number, fontSize: number, fill: numb
 
 function drawBox(g: Graphics, x: number, y: number, w: number, h: number): void {
   g.clear();
-  g.roundRect(x, y, w, h, h * 0.22).fill(COLORS.cellEmpty);
+  g.beginFill(COLORS.cellEmpty).drawRoundedRect(x, y, w, h, h * 0.22).endFill();
 }
 
 interface ButtonParts {
@@ -527,7 +530,7 @@ function makeButton(): Container {
 function drawButton(c: Container, x: number, y: number, w: number, h: number, label: string, fontSize: number): void {
   const p = c as Container & ButtonParts;
   p._bg.clear();
-  p._bg.roundRect(0, 0, w, h, h * 0.28).fill(COLORS.buttonBg);
+  p._bg.beginFill(COLORS.buttonBg).drawRoundedRect(0, 0, w, h, h * 0.28).endFill();
   p._text.text = label;
   p._text.style.fontSize = fontSize;
   p._text.style.fill = COLORS.buttonText;
@@ -550,7 +553,7 @@ function makeIconButton(): Container {
 function placeSquareButton(c: Container, x: number, y: number, size: number): void {
   const bg = (c as Container & { _bg: Graphics })._bg;
   bg.clear();
-  bg.roundRect(0, 0, size, size, size * 0.28).fill(COLORS.controlBg);
+  bg.beginFill(COLORS.controlBg).drawRoundedRect(0, 0, size, size, size * 0.28).endFill();
   c.position.set(x, y);
 }
 
@@ -571,11 +574,12 @@ function drawThemeIcon(c: Container, size: number, dark: boolean): void {
   const r = size * 0.16;
   if (dark) {
     // crescent moon: a disc with an offset disc punched out in the button color
-    icon.circle(cx, cy, r * 1.25).fill(COLORS.controlIcon);
-    icon.circle(cx + r * 0.7, cy - r * 0.45, r * 1.15).fill(COLORS.controlBg);
+    icon.beginFill(COLORS.controlIcon).drawCircle(cx, cy, r * 1.25).endFill();
+    icon.beginFill(COLORS.controlBg).drawCircle(cx + r * 0.7, cy - r * 0.45, r * 1.15).endFill();
   } else {
     // sun: disc + 8 rays
-    icon.circle(cx, cy, r * 0.78).fill(COLORS.controlIcon);
+    icon.beginFill(COLORS.controlIcon).drawCircle(cx, cy, r * 0.78).endFill();
+    icon.lineStyle({ width: Math.max(1.5, size * 0.045), color: COLORS.controlIcon, cap: LINE_CAP.ROUND });
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
       const x1 = cx + Math.cos(a) * r * 1.15;
@@ -584,7 +588,6 @@ function drawThemeIcon(c: Container, size: number, dark: boolean): void {
       const y2 = cy + Math.sin(a) * r * 1.6;
       icon.moveTo(x1, y1).lineTo(x2, y2);
     }
-    icon.stroke({ width: Math.max(1.5, size * 0.045), color: COLORS.controlIcon, cap: "round" });
   }
 }
 

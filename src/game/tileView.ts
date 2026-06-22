@@ -18,15 +18,12 @@ export class TileView extends Container {
     this.size = size;
 
     this.addChild(this.bg);
-    this.numberText = new Text({
-      text: String(value),
-      style: {
-        fontFamily: "-apple-system, Helvetica, Arial, sans-serif",
-        fontSize: tileFontSize(value, size),
-        fontWeight: "800",
-        fill: tileStyle(value).text,
-        align: "center",
-      },
+    this.numberText = new Text(String(value), {
+      fontFamily: "-apple-system, Helvetica, Arial, sans-serif",
+      fontSize: tileFontSize(value, size),
+      fontWeight: "800",
+      fill: tileStyle(value).text,
+      align: "center",
     });
     this.numberText.anchor.set(0.5);
     this.addChild(this.numberText);
@@ -47,6 +44,6 @@ export class TileView extends Container {
     const s = this.size;
     const r = Math.round(s * 0.12);
     this.bg.clear();
-    this.bg.roundRect(-s / 2, -s / 2, s, s, r).fill(tileStyle(this.value).bg);
+    this.bg.beginFill(tileStyle(this.value).bg).drawRoundedRect(-s / 2, -s / 2, s, s, r).endFill();
   }
 }
