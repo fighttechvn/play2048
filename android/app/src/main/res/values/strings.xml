@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">go2048</string>
-    <string name="title_activity_main">go2048</string>
-    <string name="package_name">com.tozstudio.go2048</string>
-    <string name="custom_url_scheme">com.tozstudio.go2048</string>
-</resources>
