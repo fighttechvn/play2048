@@ -20,6 +20,12 @@ shift || true
 
 hr() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 
+# Install dependencies if needed
+if [ ! -d "node_modules" ]; then
+  hr "Installing npm dependencies"
+  npm install
+fi
+
 sync_web() {
   hr "Building web + cap sync ($1)"
   npm run build
