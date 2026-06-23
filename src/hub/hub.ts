@@ -12,6 +12,7 @@ const THEME_CYCLE: ThemeMode[] = ["system", "light", "dark"];
 
 const APP_NAME = "go2048";
 const APP_VERSION = "1.1.1";
+const APP_BUILD = "15";
 const BASE = "https://fighttechvn.github.io/play2048";
 const LINKS = { privacy: `${BASE}/privacy/`, terms: `${BASE}/terms/`, support: `${BASE}/support/` };
 const LANG_NAMES: Record<Locale, string> = {
@@ -230,10 +231,6 @@ export class Hub {
         <span>${t("settings")}</span><span style="width:40px"></span>
       </header>
       <div class="set-body">
-        <div class="set-app">
-          <img src="thumbs/go2048.png" alt="" />
-          <div><b>${APP_NAME}</b><small>${t("version")} ${APP_VERSION}</small></div>
-        </div>
         <div class="set-label">${t("appearance")}</div>
         <div class="set-segwrap">${seg}</div>
         <div class="set-label">${t("language")}</div>
@@ -243,6 +240,10 @@ export class Hub {
           <a class="set-row" href="${LINKS.privacy}" target="_blank" rel="noopener"><span>${t("privacy")}</span><span class="set-check">›</span></a>
           <a class="set-row" href="${LINKS.terms}" target="_blank" rel="noopener"><span>${t("terms")}</span><span class="set-check">›</span></a>
           <a class="set-row" href="${LINKS.support}" target="_blank" rel="noopener"><span>${t("support")}</span><span class="set-check">›</span></a>
+        </div>
+        <div class="set-app">
+          <img src="thumbs/go2048.png" alt="" />
+          <div><b>${APP_NAME}</b><small>${t("version")} ${APP_VERSION}(${APP_BUILD})</small></div>
         </div>
       </div>`;
     this.settings.querySelector(".set-back")!.addEventListener("click", () => this.hideSettings());
@@ -335,7 +336,7 @@ const HUB_CSS = `
  padding:calc(14px + env(safe-area-inset-top,0px)) 16px 14px;background:var(--hb);border-bottom:1px solid var(--hbd)}
 .set-back{width:40px;height:40px;border:0;background:none;color:var(--ht);font-size:30px;line-height:0;cursor:pointer}
 .set-body{max-width:560px;margin:0 auto;padding:16px 16px calc(40px + env(safe-area-inset-bottom,0px))}
-.set-app{display:flex;align-items:center;gap:14px;background:var(--hs);border:1px solid var(--hbd);border-radius:16px;padding:16px;margin-bottom:10px}
+.set-app{display:flex;align-items:center;gap:14px;background:var(--hs);border:1px solid var(--hbd);border-radius:16px;padding:16px;margin-top:24px}
 .set-app img{width:54px;height:54px;border-radius:13px}
 .set-app b{font-size:18px;display:block}.set-app small{color:var(--hm);font-size:13px}
 .set-label{color:var(--hm);font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:22px 6px 8px}
