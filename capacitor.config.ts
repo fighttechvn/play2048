@@ -13,7 +13,12 @@ const config: CapacitorConfig = {
   },
   ios: {
     backgroundColor: "#0f1115",
-    contentInset: "always",
+    // `never` lets the WKWebView fill the whole screen edge-to-edge (under the
+    // notch / Dynamic Island and home indicator). Safe areas are then handled
+    // purely in CSS via `viewport-fit=cover` + `env(safe-area-inset-*)`.
+    // `always` double-insets (native inset + CSS env → extra top gap) and lets
+    // the dark native backgroundColor show through the safe areas (black bars).
+    contentInset: "never",
   },
   android: {
     backgroundColor: "#0f1115",
