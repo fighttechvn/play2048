@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Zip</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--grid:#cdcdcd;--path:#3b5bdb;--pathbg:#c7d2fe;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(16px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* reserve the left zone for the host's floating back button so it never
+     overlaps the title; the level pill centers in the remaining space */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px;padding-left:52px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  .pill.err{color:#e03131;border-color:#e03131;background:#fff5f5}
+  #lvl{margin:0 auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--path);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* First-run guided tutorial.
+     The overlay is pass-through by default so an interactive step (the guided
+     trace, and any future touch/swipe step) lets the gesture reach the board.
+     Only non-interactive steps add .block to capture input; the card and its
+     buttons always stay clickable. */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;pointer-events:none}
+  #tut.on{display:block}
+  #tut.block{pointer-events:auto}
+  #tutBg{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.42);pointer-events:none}
+  #tutHole{position:fixed;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.42);transition:left .22s ease,top .22s ease,width .22s ease,height .22s ease;pointer-events:none}
+  /* Translucent "glass" tooltip — the board stays visible through it. */
+  #tutCard{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 40px);max-width:300px;pointer-events:auto;background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);border:1px solid rgba(255,255,255,.55);border-radius:16px;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  #tutCard::after{content:"";position:absolute;left:50%;width:16px;height:16px;background:rgba(255,255,255,.66);transform:translateX(-50%) rotate(45deg);display:none}
+  #tutCard.below::after{display:block;top:-8px}
+  #tutCard.above::after{display:block;bottom:-8px}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:13px;font-weight:600;cursor:pointer;padding:6px 2px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">Zip · Level 1</span><span class="pill" id="status">Connect 1 → …</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="btns">
+    <button class="btn" id="undo" disabled>Undo</button>
+    <button class="btn" id="hint">Hint</button>
+    <button class="btn" id="reset">Reset</button>
+  </div>
+  <div class="help"><b>How to play.</b> Draw one continuous path that fills <b>every</b> cell, passing the numbered dots <b>in order</b> (1 → 2 → 3 …). You can't cross a wall. Drag back to undo a step.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Draw one continuous path that fills <b>every</b> cell, passing the numbered dots <b>in order</b> (1 → 2 → 3 …). You can't cross a wall. Drag back to undo a step.",
+    vi:"<b>Cách chơi.</b> Vẽ một đường liên tục đi qua <b>mọi</b> ô, lần lượt nối các chấm số <b>theo thứ tự</b> (1 → 2 → 3 …). Không được băng qua tường. Kéo ngược lại để hoàn tác.",
+    ko:"<b>플레이 방법.</b> <b>모든</b> 칸을 채우는 하나의 연속된 경로를 그리고, 번호 점을 <b>순서대로</b> (1 → 2 → 3 …) 지나가세요. 벽은 통과할 수 없습니다. 뒤로 끌면 한 단계 취소됩니다.",
+    zh:"<b>玩法。</b> 画一条贯穿<b>每个</b>格子的连续路径，<b>按顺序</b>经过数字圆点（1 → 2 → 3 …）。不能穿墙。向回拖动可撤销一步。",
+    ja:"<b>遊び方。</b> <b>すべて</b>のマスを通る一本の連続した経路を描き、番号の点を<b>順番に</b>（1 → 2 → 3 …）通過します。壁は越えられません。戻ると一手取り消せます。",
+    ar:"<b>طريقة اللعب.</b> ارسم مسارًا متصلًا واحدًا يملأ <b>كل</b> خانة، مارًّا بالنقاط المرقّمة <b>بالترتيب</b> (1 → 2 → 3 …). لا يمكنك عبور الجدار. اسحب للخلف للتراجع عن خطوة."
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2>Solved! 🎉</h2><p id="winmsg"></p><button id="next">Next level</button></div></div>
+<div id="tut">
+  <div id="tutBg"></div>
+  <div id="tutHole"></div>
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script>
+const KEY="zip.level";
+const TUTKEY="zip.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // feature flag: hub passes ?tut=0 to disable
+// Locale for the tutorial — same source order as the "how to play" help above.
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Times each level and POSTs the completion to the leaderboard API using the
+// shared player token (set by the hub, same origin). No token → silently skips.
+// Paste this block into other bundles, changing only GAME, to roll the feature out.
+const GBLB=(function(){
+  var GAME='zip', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(level){ var ms=t0?(Date.now()-t0):0; emit('level_complete',{level:level,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:level,durationMs:ms})}).catch(function(){}); }catch(e){} }
+  };
+})();
+let DATA=null, lvl=0, L=null, path=[], drawing=false, cell=0, ox=0, oy=0;
+let tutActive=false, tutStep=0, tutRAF=0, tutT=0, tutPath=null; // first-run guided tutorial
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+
+fetch('./levels.json').then(r=>r.json()).then(d=>{DATA=d; lvl=Math.min(+(localStorage.getItem(KEY)||0), d.levels.length-1); load(lvl);});
+
+function load(i){ L=DATA.levels[i]; path=[]; layout(); draw(); $('lvl').textContent='Zip · Level '+(i+1); upd(); maybeStartTut(); GBLB.start(); }
+function key(r,c){return r*L.cols+c;}
+function numAt(r,c){const n=L.numbers.find(n=>n.r===r&&n.c===c);return n?n.n:0;}
+function wallBetween(a,b){const[r1,c1]=a,[r2,c2]=b;return L.walls.some(w=>(w.r===r1&&w.c===c1&&w.r2===r2&&w.c2===c2)||(w.r===r2&&w.c===c2&&w.r2===r1&&w.c2===c1));}
+
+function layout(){
+  const wrap=document.getElementById('wrap');
+  const W=Math.min(wrap.clientWidth-60, 520);
+  cell=Math.floor((W)/L.cols); ox=Math.floor((W-cell*L.cols)/2)+0; oy=ox;
+  const px=cell*L.cols+2*ox;
+  cv.width=px*devicePixelRatio; cv.height=px*devicePixelRatio; cv.style.width=px+'px'; cv.style.height=px+'px';
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+function cc(r,c){return [ox+c*cell+cell/2, oy+r*cell+cell/2];}
+
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  // grid
+  ctx.strokeStyle=getCss('--grid'); ctx.lineWidth=1;
+  for(let r=0;r<=L.rows;r++){ctx.beginPath();ctx.moveTo(ox,oy+r*cell);ctx.lineTo(ox+cell*L.cols,oy+r*cell);ctx.stroke();}
+  for(let c=0;c<=L.cols;c++){ctx.beginPath();ctx.moveTo(ox+c*cell,oy);ctx.lineTo(ox+c*cell,oy+cell*L.rows);ctx.stroke();}
+  // path fill — fill each cell (so even a 1-cell start shows) + connecting band
+  if(path.length){
+    ctx.fillStyle=getCss('--pathbg');
+    for(const [r,c] of path){const[x,y]=cc(r,c);ctx.beginPath();ctx.arc(x,y,cell*0.41,0,7);ctx.fill();}
+    ctx.strokeStyle=getCss('--pathbg'); ctx.lineWidth=cell*0.82; ctx.lineCap='round'; ctx.lineJoin='round';
+    line(path);
+    ctx.strokeStyle=getCss('--path'); ctx.lineWidth=cell*0.34; line(path);
+    // a dot at the current head for clear feedback
+    const[hx,hy]=cc(path[path.length-1][0],path[path.length-1][1]);
+    ctx.fillStyle=getCss('--path');ctx.beginPath();ctx.arc(hx,hy,cell*0.17,0,7);ctx.fill();
+  }
+  // walls
+  ctx.strokeStyle='#111'; ctx.lineWidth=Math.max(4,cell*0.10); ctx.lineCap='round';
+  for(const w of L.walls){
+    const a=[w.r,w.c], b=[w.r2,w.c2];
+    if(a[0]===b[0]){ // horizontal neighbors → vertical wall between
+      const x=ox+Math.max(a[1],b[1])*cell; ctx.beginPath();ctx.moveTo(x,oy+a[0]*cell+cell*0.12);ctx.lineTo(x,oy+a[0]*cell+cell*0.88);ctx.stroke();
+    } else {
+      const y=oy+Math.max(a[0],b[0])*cell; ctx.beginPath();ctx.moveTo(ox+a[1]*cell+cell*0.12,y);ctx.lineTo(ox+a[1]*cell+cell*0.88,y);ctx.stroke();
+    }
+  }
+  // numbers
+  for(const n of L.numbers){
+    const [x,y]=cc(n.r,n.c); const r=cell*0.30;
+    ctx.fillStyle='#111';ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();
+    ctx.fillStyle='#fff';ctx.font='bold '+Math.round(cell*0.40)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(n.n, x, y+1);
+  }
+  if(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='act') drawTutHint();
+}
+function line(p){ctx.beginPath();const[x0,y0]=cc(p[0][0],p[0][1]);ctx.moveTo(x0,y0);for(let i=1;i<p.length;i++){const[x,y]=cc(p[i][0],p[i][1]);ctx.lineTo(x,y);}ctx.stroke();}
+function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+function cellAt(ev){
+  const rect=cv.getBoundingClientRect();
+  const px=(ev.clientX-rect.left), py=(ev.clientY-rect.top);
+  const c=Math.floor((px-ox)/cell), r=Math.floor((py-oy)/cell);
+  if(r<0||c<0||r>=L.rows||c>=L.cols) return null; return [r,c];
+}
+function inPath(r,c){return path.findIndex(p=>p[0]===r&&p[1]===c);}
+function tryExtend(r,c){
+  if(!path.length){ if(numAt(r,c)===1){path.push([r,c]); return true;} return false; }
+  const idx=inPath(r,c);
+  const last=path[path.length-1];
+  if(idx!==-1 && idx===path.length-2){ path.pop(); return true; } // backtrack (idx>=0 guard:
+  // inPath returns -1 for a new cell, and path.length-2 is also -1 when only the
+  // start is placed — without this guard the very first swipe step popped the start)
+  if(idx!==-1) return false;
+  const dr=Math.abs(r-last[0]), dc=Math.abs(c-last[1]);
+  if(dr+dc!==1) return false;
+  if(wallBetween(last,[r,c])) return false;
+  // can't pass a number out of order
+  const nv=numAt(r,c);
+  if(nv){ const have=path.filter(p=>numAt(p[0],p[1])).length; if(nv!==have+1) return false; }
+  path.push([r,c]); return true;
+}
+function down(ev){ev.preventDefault();
+  // Capture the pointer so pointermove keeps firing during a touch swipe even if
+  // the finger drifts slightly off the canvas (the main reason swipe "did nothing").
+  try{cv.setPointerCapture(ev.pointerId);}catch(e){}
+  const cl=cellAt(ev);if(!cl)return;const i=inPath(cl[0],cl[1]);
+  if(path.length&&i===path.length-1){drawing=true;} // continue from end
+  else if(tryExtend(cl[0],cl[1])){drawing=true;draw();upd();checkWin();} // tap-to-extend can complete the level
+}
+function move(ev){if(!drawing)return;ev.preventDefault();const cl=cellAt(ev);if(!cl)return;if(tryExtend(cl[0],cl[1])){draw();upd();checkWin();if(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='act' && path.filter(p=>numAt(p[0],p[1])).length>=2) nextTut();}}
+// Re-check on lift too: the final cell may be placed by a tap (down) rather than a
+// drag (move), so checkWin must also run when the pointer goes up — otherwise a
+// fully-solved board (Filled N/N · dot K/K) silently fails to register the win.
+function up(ev){drawing=false;try{cv.releasePointerCapture(ev.pointerId);}catch(e){}checkWin();}
+cv.addEventListener('pointerdown',down);cv.addEventListener('pointermove',move);
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);window.addEventListener('pointerup',up);
+// iOS in-app webviews (Messenger/Facebook/Instagram) ignore touch-action:none and
+// pointer-event preventDefault for scroll suppression — a vertical drag on the
+// board still scrolls/bounces the page. A non-passive touchmove preventDefault is
+// the only reliable cross-webview way to keep the board drag from scrolling.
+cv.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+
+function upd(){$('undo').disabled=path.length===0;
+  const have=path.filter(p=>numAt(p[0],p[1])).length, tot=L.numbers.length;
+  const total=L.rows*L.cols, left=total-path.length, st=$('status');
+  // All dots are linked but the path doesn't cover every cell yet — that's NOT a
+  // solved level, so surface it as an error instead of silently doing nothing.
+  if(have===tot && left>0){
+    st.textContent=`Link every cell — ${left} left`; st.classList.add('err');
+  } else {
+    st.textContent=path.length? `Filled ${path.length}/${total} · dot ${have}/${tot}` : 'Connect 1 → …';
+    st.classList.remove('err');
+  }}
+function checkWin(){
+  if(path.length!==L.rows*L.cols) return;
+  const have=path.filter(p=>numAt(p[0],p[1])).length;
+  if(have!==L.numbers.length) return;
+  // numbers in order is guaranteed by tryExtend; we win
+  GBLB.report(lvl+1); // record completion time to the leaderboard
+  $('winmsg').textContent='Level '+(lvl+1)+' of '+DATA.count+' complete.';
+  $('wino').style.display='grid';
+}
+$('undo').onclick=()=>{path.pop();draw();upd();};
+$('reset').onclick=()=>{path=[];draw();upd();};
+$('hint').onclick=()=>{ // extend the path one correct step from the solution
+  const sol=L.solution;
+  let k=path.length; if(k===0){path.push(sol[0]);} else {
+    // find current end in solution; if it matches prefix, append next
+    let match=path.every((p,i)=>p[0]===sol[i][0]&&p[1]===sol[i][1]);
+    if(!match){path=[];} else if(k<sol.length){path.push(sol[k]);}
+  }
+  draw();upd();checkWin();
+};
+$('next').onclick=()=>{$('wino').style.display='none';lvl=Math.min(lvl+1,DATA.levels.length-1);localStorage.setItem(KEY,lvl);load(lvl);};
+
+/* ── First-run guided tutorial ─────────────────────────────────────────────
+   On the very first visit (only on Level 1) we walk the player through the
+   goal, then have them physically draw from dot 1 to dot 2 along a glowing
+   animated path. Shown once; the "seen" flag lives in localStorage. */
+const TUT_T={
+  en:{w_t:"Welcome to Zip",w_b:"Draw one path that fills every cell, through the numbers in order.",start:"Start",
+      s_t:"In order",s_b:"Start at 1 and pass 2, 3, 4 … in order, without crossing a wall.",next:"Next",
+      t_t:"Drag the path",t_b:"Press the 1 and drag along the glowing path to the 2.",
+      f_t:"You've got it! 🎉",f_b:"Keep going until the path fills every cell.",play:"Play",skip:"Skip"},
+  vi:{w_t:"Chào mừng đến với Zip",w_b:"Vẽ một đường đi qua mọi ô, nối các số theo thứ tự.",start:"Bắt đầu",
+      s_t:"Theo thứ tự",s_b:"Bắt đầu từ 1 rồi qua 2, 3, 4 … theo thứ tự, không băng qua tường.",next:"Tiếp",
+      t_t:"Kéo đường đi",t_b:"Nhấn vào số 1 và kéo theo đường sáng tới số 2.",
+      f_t:"Bạn làm được rồi! 🎉",f_b:"Tiếp tục cho đến khi đường đi lấp đầy mọi ô.",play:"Chơi",skip:"Bỏ qua"},
+  ko:{w_t:"Zip에 오신 것을 환영합니다",w_b:"모든 칸을 채우는 하나의 경로를 그리고, 숫자를 순서대로 지나가세요.",start:"시작",
+      s_t:"순서대로",s_b:"1에서 시작해 2, 3, 4 … 순서대로 지나가세요, 벽을 넘지 않고.",next:"다음",
+      t_t:"경로를 드래그하세요",t_b:"1을 누른 뒤 빛나는 경로를 따라 2까지 드래그하세요.",
+      f_t:"잘하셨어요! 🎉",f_b:"경로가 모든 칸을 채울 때까지 계속하세요.",play:"플레이",skip:"건너뛰기"},
+  zh:{w_t:"欢迎来到 Zip",w_b:"画一条贯穿每个格子的路径，按顺序经过数字。",start:"开始",
+      s_t:"按顺序",s_b:"从1开始，依次经过2、3、4……，不能穿墙。",next:"下一步",
+      t_t:"拖动路径",t_b:"按住1，沿着发光的路径拖动到2。",
+      f_t:"你学会了！🎉",f_b:"继续，直到路径填满每个格子。",play:"开始玩",skip:"跳过"},
+  ja:{w_t:"Zip へようこそ",w_b:"すべてのマスを埋める一本の経路を描き、数字を順番に通過します。",start:"スタート",
+      s_t:"順番に",s_b:"1から始めて2、3、4…と順番に、壁を越えずに進みます。",next:"次へ",
+      t_t:"経路をドラッグ",t_b:"1を押して、光っている経路に沿って2までドラッグします。",
+      f_t:"できました！🎉",f_b:"経路がすべてのマスを埋めるまで続けましょう。",play:"プレイ",skip:"スキップ"},
+  ar:{w_t:"مرحباً بك في Zip",w_b:"ارسم مسارًا واحدًا يملأ كل خانة، مارًّا بالأرقام بالترتيب.",start:"ابدأ",
+      s_t:"بالترتيب",s_b:"ابدأ من 1 ومرّ بـ2 و3 و4 … بالترتيب، دون عبور الجدار.",next:"التالي",
+      t_t:"اسحب المسار",t_b:"اضغط على 1 واسحب على طول المسار المضيء حتى 2.",
+      f_t:"أحسنت! 🎉",f_b:"واصل حتى يملأ المسار كل خانة.",play:"العب",skip:"تخطّي"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+const STEPS=[
+  {key:"welcome",target:null,                title:M.w_t,body:M.w_b,btn:M.start},
+  {key:"explain", target:()=>cv,       pad:6, title:M.s_t,body:M.s_b,btn:M.next},
+  {key:"act",     target:()=>cv,       pad:6, interactive:true, title:M.t_t,body:M.t_b},
+  {key:"finish",  target:null,                title:M.f_t,body:M.f_b,btn:M.play}
+];
+
+function maybeStartTut(){
+  if(!TUT_ON)return;                       // feature flag off
+  if(localStorage.getItem(TUTKEY))return;
+  if(lvl!==0||tutActive)return;
+  tutPath=[]; const sol=L.solution;
+  for(let i=0;i<sol.length;i++){ tutPath.push(sol[i]); if(numAt(sol[i][0],sol[i][1])===2)break; }
+  if(tutPath.length<2)return;
+  tutActive=true; tutStep=0; renderTut();
+}
+function setHole(rect,pad){
+  pad=pad||8; const h=$('tutHole');
+  $('tutBg').style.display='none'; h.style.display='block';
+  h.style.left=(rect.left-pad)+'px'; h.style.top=(rect.top-pad)+'px';
+  h.style.width=(rect.width+pad*2)+'px'; h.style.height=(rect.height+pad*2)+'px';
+}
+function placeCard(rect){
+  const card=$('tutCard'); card.classList.remove('above','below');
+  if(!rect){ card.style.top='50%'; card.style.transform='translate(-50%,-50%)'; return; }
+  card.style.transform='translateX(-50%)';
+  const ch=card.offsetHeight, below=rect.top<innerHeight*0.5;
+  let top=below?rect.bottom+16:rect.top-16-ch;
+  card.classList.add(below?'below':'above');
+  card.style.top=Math.max(12,Math.min(top,innerHeight-ch-12))+'px';
+}
+function renderTut(){
+  const s=STEPS[tutStep], tut=$('tut');
+  tut.classList.add('on'); tut.classList.toggle('block',!s.interactive);
+  if(LANG==='ar')$('tutCard').dir='rtl';
+  $('tutTitle').textContent=s.title; $('tutBody').textContent=s.body;
+  $('tutSkip').textContent=M.skip;
+  const next=$('tutNext');
+  if(s.interactive){ next.style.display='none'; }
+  else { next.style.display='inline-block'; next.textContent=s.btn; }
+  const tgt=s.target&&s.target();
+  if(tgt){ const r=tgt.getBoundingClientRect(); setHole(r,s.pad); placeCard(r); }
+  else { $('tutHole').style.display='none'; $('tutBg').style.display='block'; placeCard(null); }
+  if(s.interactive && !tutRAF) tutRAF=requestAnimationFrame(tutAnimate);
+}
+function nextTut(){ tutStep++; if(tutStep>=STEPS.length){ endTut(); return; } renderTut(); }
+function endTut(){
+  tutActive=false; if(tutRAF){cancelAnimationFrame(tutRAF);tutRAF=0;}
+  localStorage.setItem(TUTKEY,'1'); $('tut').classList.remove('on'); draw();
+}
+$('tutNext').onclick=nextTut;
+$('tutSkip').onclick=endTut;
+
+function tutAnimate(ts){
+  tutT=ts||0;
+  if(!(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='act')){ tutRAF=0; return; }
+  draw(); tutRAF=requestAnimationFrame(tutAnimate);
+}
+// Glowing pulse + a looping "fingertip" gesture along the path from dot 1 to dot 2.
+function drawTutHint(){
+  if(!tutPath||!tutPath.length)return;
+  const t=tutT/1000, col=getCss('--path');
+  const pts=tutPath.map(([r,c])=>cc(r,c));
+  const pulse=0.30+0.30*(0.5+0.5*Math.sin(t*3.2));
+  ctx.save(); ctx.globalAlpha=pulse; ctx.strokeStyle=col; ctx.lineWidth=cell*0.5; ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]); for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]); ctx.stroke(); ctx.restore();
+  // looping fingertip along the path
+  const seg=[]; let total=0;
+  for(let i=1;i<pts.length;i++){ const d=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]); seg.push(d); total+=d; }
+  const period=1.8, hold=0.6, ph=t%(period+hold);
+  let prog=ph<period?ph/period:1; prog=prog<1?(1-Math.cos(prog*Math.PI))/2:1;
+  let dist=prog*total, idx=0;
+  while(idx<seg.length && dist>seg[idx]){ dist-=seg[idx]; idx++; }
+  let cur;
+  if(idx>=seg.length) cur=pts[pts.length-1];
+  else { const f=seg[idx]?dist/seg[idx]:0; cur=[pts[idx][0]+(pts[idx+1][0]-pts[idx][0])*f, pts[idx][1]+(pts[idx+1][1]-pts[idx][1])*f]; }
+  ctx.save(); ctx.beginPath(); ctx.arc(cur[0],cur[1],cell*0.18,0,7); ctx.fillStyle=col; ctx.fill();
+  ctx.lineWidth=3; ctx.strokeStyle='#fff'; ctx.stroke(); ctx.restore();
+}
+
+addEventListener('resize',()=>{if(L){layout();draw();if(tutActive)renderTut();}});
+</script>
+</body>
+</html>

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Patch</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--grid:#d7d3cc;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(16px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* reserve the left zone for the host's floating back button so it never
+     overlaps the title; the level pill centers in the remaining space */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px;padding-left:52px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  #lvl{margin:0 auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14px;color:#555;line-height:1.5}
+  .leg{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:13px}
+  .leg span{display:inline-flex;align-items:center;gap:6px}
+  .gl{display:inline-block;background:#bbb;border-radius:3px}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:#7048e8;color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* First-run guided tutorial.
+     The overlay is pass-through by default so an interactive step (the guided
+     trace, and any future touch/swipe step) lets the gesture reach the board.
+     Only non-interactive steps add .block to capture input; the card and its
+     buttons always stay clickable. */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;pointer-events:none}
+  #tut.on{display:block}
+  #tut.block{pointer-events:auto}
+  #tutBg{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.42);pointer-events:none}
+  #tutHole{position:fixed;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.42);transition:left .22s ease,top .22s ease,width .22s ease,height .22s ease;pointer-events:none}
+  /* Translucent "glass" tooltip — the board stays visible through it. */
+  #tutCard{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 40px);max-width:300px;pointer-events:auto;background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);border:1px solid rgba(255,255,255,.55);border-radius:16px;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  #tutCard::after{content:"";position:absolute;left:50%;width:16px;height:16px;background:rgba(255,255,255,.66);transform:translateX(-50%) rotate(45deg);display:none}
+  #tutCard.below::after{display:block;top:-8px}
+  #tutCard.above::after{display:block;bottom:-8px}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:13px;font-weight:600;cursor:pointer;padding:6px 2px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">Patch · Level 1</span><span class="pill" id="status"></span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="btns">
+    <button class="btn" id="undo" disabled>Undo</button>
+    <button class="btn" id="hint">Hint</button>
+    <button class="btn" id="reset">Reset</button>
+  </div>
+  <div class="help"><b>Complete each shape to fill the grid.</b> Drag a rectangle around each numbered cell so its area equals the number and its shape matches.
+    <div class="leg"><span><i class="gl" style="width:14px;height:14px"></i> Square</span><span><i class="gl" style="width:9px;height:16px"></i> Tall</span><span><i class="gl" style="width:18px;height:10px"></i> Wide</span><span><i class="gl" style="width:14px;height:14px;border:2px dashed #777;background:none"></i> Any</span></div>
+  </div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  function leg(sq,tall,wide,any){return '<div class="leg"><span><i class="gl" style="width:14px;height:14px"></i> '+sq+'</span><span><i class="gl" style="width:9px;height:16px"></i> '+tall+'</span><span><i class="gl" style="width:18px;height:10px"></i> '+wide+'</span><span><i class="gl" style="width:14px;height:14px;border:2px dashed #777;background:none"></i> '+any+'</span></div>';}
+  var T={
+    en:"<b>Complete each shape to fill the grid.</b> Drag a rectangle around each numbered cell so its area equals the number and its shape matches."+leg("Square","Tall","Wide","Any"),
+    vi:"<b>Hoàn thành mỗi hình để lấp đầy lưới.</b> Kéo một hình chữ nhật quanh mỗi ô có số sao cho diện tích bằng số đó và hình dạng khớp."+leg("Vuông","Cao","Rộng","Bất kỳ"),
+    ko:"<b>각 모양을 완성해 격자를 채우세요.</b> 숫자가 있는 각 칸 주위로 직사각형을 끌어, 넓이가 숫자와 같고 모양이 일치하게 만드세요."+leg("정사각형","세로","가로","자유"),
+    zh:"<b>完成每个形状以填满网格。</b> 围绕每个数字格拖出一个矩形，使其面积等于该数字且形状相符。"+leg("正方形","竖条","横条","任意"),
+    ja:"<b>各シェイプを完成させてグリッドを埋めましょう。</b> 数字のある各マスを囲むように長方形をドラッグし、面積が数字と等しく形が一致するようにします。"+leg("正方形","縦長","横長","自由"),
+    ar:"<b>أكمل كل شكل لملء الشبكة.</b> اسحب مستطيلًا حول كل خانة مرقّمة بحيث تساوي مساحته الرقم ويطابق شكله."+leg("مربع","طويل","عريض","أي")
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2>Solved! 🎉</h2><p id="winmsg"></p><button id="next">Next level</button></div></div>
+<div id="tut">
+  <div id="tutBg"></div>
+  <div id="tutHole"></div>
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script>
+const KEY="patch.level";
+const TUTKEY="patch.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // feature flag: hub passes ?tut=0 to disable
+// Locale for the tutorial — same source order as the "how to play" help above.
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+const PAL=["#7048e8","#e8590c","#2f9e44","#1971c2","#e64980","#f08c00","#0ca678","#9c36b5","#c92a2a","#1098ad","#5c940d","#d6336c"];
+// ── Leaderboard reporter (Go Brain) — see games/zip for notes; paste + change GAME ──
+const GBLB=(function(){
+  var GAME='patch', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(level){ var ms=t0?(Date.now()-t0):0; emit('level_complete',{level:level,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:level,durationMs:ms})}).catch(function(){}); }catch(e){} }
+  };
+})();
+let DATA=null,lvl=0,L=null,regions=[],owner=null,drag=null,cell=0,ox=0,oy=0;
+let tutActive=false, tutStep=0, tutRAF=0, tutT=0, tutRegion=null; // first-run guided tutorial
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
+
+fetch('./levels.json').then(r=>r.json()).then(d=>{DATA=d;lvl=Math.min(+(localStorage.getItem(KEY)||0),d.levels.length-1);load(lvl);});
+function load(i){L=DATA.levels[i];regions=[];owner=Array.from({length:L.rows},()=>Array(L.cols).fill(-1));layout();draw();$('lvl').textContent='Patch · Level '+(i+1);upd();maybeStartTut(); GBLB.start();}
+function layout(){const W=Math.min(document.getElementById('wrap').clientWidth-60,520);cell=Math.floor(W/L.cols);ox=8;oy=8;const px=cell*L.cols+2*ox;cv.width=px*devicePixelRatio;cv.height=px*devicePixelRatio;cv.style.width=px+'px';cv.style.height=px+'px';ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);}
+function clueAt(r,c){return L.clues.find(q=>q.r===r&&q.c===c);}
+function shapeMatch(h,w,s){return s==='any'||(s==='square'?h===w:s==='tall'?h>w:w>h);}
+
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  // claimed region fills
+  for(const rg of regions){ctx.fillStyle=rg.color+'33';ctx.fillRect(ox+rg.c0*cell,oy+rg.r0*cell,rg.w*cell,rg.h*cell);ctx.strokeStyle=rg.color;ctx.lineWidth=3;ctx.strokeRect(ox+rg.c0*cell+1.5,oy+rg.r0*cell+1.5,rg.w*cell-3,rg.h*cell-3);}
+  // grid
+  ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--grid');ctx.lineWidth=1;
+  for(let r=0;r<=L.rows;r++){ctx.beginPath();ctx.moveTo(ox,oy+r*cell);ctx.lineTo(ox+cell*L.cols,oy+r*cell);ctx.stroke();}
+  for(let c=0;c<=L.cols;c++){ctx.beginPath();ctx.moveTo(ox+c*cell,oy);ctx.lineTo(ox+c*cell,oy+cell*L.rows);ctx.stroke();}
+  // drag preview
+  if(drag){const{r0,c0,h,w,ok}=rectOf(drag);ctx.fillStyle=ok?'rgba(112,72,232,.18)':'rgba(224,49,49,.18)';ctx.fillRect(ox+c0*cell,oy+r0*cell,w*cell,h*cell);ctx.strokeStyle=ok?'#7048e8':'#e03131';ctx.lineWidth=3;ctx.strokeRect(ox+c0*cell+1.5,oy+r0*cell+1.5,w*cell-3,h*cell-3);}
+  // clues
+  L.clues.forEach((q,i)=>{const x=ox+q.c*cell,y=oy+q.r*cell,s=cell;const col=PAL[i%PAL.length];
+    // shape badge background
+    ctx.fillStyle='#fff';ctx.strokeStyle=col;ctx.lineWidth=2.5;
+    let bw=s*0.62,bh=s*0.62;if(q.shape==='tall'){bw=s*0.42;bh=s*0.74;}else if(q.shape==='wide'){bw=s*0.74;bh=s*0.42;}
+    const bx=x+(s-bw)/2,by=y+(s-bh)/2;roundRect(bx,by,bw,bh,6);ctx.fillStyle=col+'22';ctx.fill();
+    if(q.shape==='any'){ctx.setLineDash([4,3]);}ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=col;ctx.font='bold '+Math.round(s*0.40)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(q.size,x+s/2,y+s/2+1);
+  });
+  if(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='act') drawTutHint();
+}
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+function cellAt(ev){const b=cv.getBoundingClientRect();const c=Math.floor((ev.clientX-b.left-ox)/cell),r=Math.floor((ev.clientY-b.top-oy)/cell);if(r<0||c<0||r>=L.rows||c>=L.cols)return null;return[r,c];}
+function rectOf(d){const r0=Math.min(d.a[0],d.b[0]),c0=Math.min(d.a[1],d.b[1]),h=Math.abs(d.a[0]-d.b[0])+1,w=Math.abs(d.a[1]-d.b[1])+1;
+  let ok=true,clues=0,clue=null;
+  for(let r=r0;r<r0+h;r++)for(let c=c0;c<c0+w;c++){if(owner[r][c]>=0)ok=false;const q=clueAt(r,c);if(q){clues++;clue=q;}}
+  if(clues!==1)ok=false; else if(clue.size!==h*w||!shapeMatch(h,w,clue.shape))ok=false;
+  return{r0,c0,h,w,ok,clue};}
+
+cv.addEventListener('pointerdown',e=>{e.preventDefault();const cl=cellAt(e);if(!cl)return;
+  if(owner[cl[0]][cl[1]]>=0){ // tap a claimed region to remove it
+    const id=owner[cl[0]][cl[1]];removeRegion(id);draw();upd();return;}
+  drag={a:cl,b:cl};draw();});
+cv.addEventListener('pointermove',e=>{if(!drag)return;e.preventDefault();const cl=cellAt(e);if(cl){drag.b=cl;draw();}});
+// iOS in-app webviews (Messenger/Facebook/Instagram) ignore touch-action:none and
+// pointer-event preventDefault for scroll suppression — a vertical drag on the
+// board still scrolls/bounces the page. A non-passive touchmove preventDefault is
+// the only reliable cross-webview way to keep the board drag from scrolling.
+cv.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+window.addEventListener('pointerup',()=>{if(!drag)return;const R=rectOf(drag);if(R.ok){const color=PAL[regions.length%PAL.length];const id=regions.length;regions.push({...R,color});for(let r=R.r0;r<R.r0+R.h;r++)for(let c=R.c0;c<R.c0+R.w;c++)owner[r][c]=id;}drag=null;draw();upd();checkWin();if(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='act' && regions.length>=1) nextTut();});
+function removeRegion(id){regions.splice(id,1);owner=Array.from({length:L.rows},()=>Array(L.cols).fill(-1));regions.forEach((rg,i)=>{for(let r=rg.r0;r<rg.r0+rg.h;r++)for(let c=rg.c0;c<rg.c0+rg.w;c++)owner[r][c]=i;});}
+function upd(){$('undo').disabled=regions.length===0;const claimed=regions.reduce((s,r)=>s+r.h*r.w,0);$('status').textContent=claimed+'/'+(L.rows*L.cols)+' filled';}
+function checkWin(){if(regions.reduce((s,r)=>s+r.h*r.w,0)===L.rows*L.cols){GBLB.report(lvl+1); $('winmsg').textContent='Level '+(lvl+1)+' of '+DATA.count+' complete.';$('wino').style.display='grid';}}
+$('undo').onclick=()=>{regions.pop();removeRegion(regions.length);draw();upd();};
+$('reset').onclick=()=>{regions=[];owner=Array.from({length:L.rows},()=>Array(L.cols).fill(-1));draw();upd();};
+$('hint').onclick=()=>{ // place one unclaimed solution region
+  for(const rg of L.solution){const q=L.clues.find(c=>c.r>=rg.r0&&c.r<rg.r0+rg.h&&c.c>=rg.c0&&c.c<rg.c0+rg.w);
+    let free=true;for(let r=rg.r0;r<rg.r0+rg.h;r++)for(let c=rg.c0;c<rg.c0+rg.w;c++)if(owner[r][c]>=0)free=false;
+    if(free){const color=PAL[regions.length%PAL.length],id=regions.length;regions.push({r0:rg.r0,c0:rg.c0,h:rg.h,w:rg.w,color});for(let r=rg.r0;r<rg.r0+rg.h;r++)for(let c=rg.c0;c<rg.c0+rg.w;c++)owner[r][c]=id;draw();upd();checkWin();return;}}
+};
+$('next').onclick=()=>{$('wino').style.display='none';lvl=Math.min(lvl+1,DATA.levels.length-1);localStorage.setItem(KEY,lvl);load(lvl);};
+addEventListener('resize',()=>{if(L){layout();draw();if(tutActive)renderTut();}});
+
+/* ── First-run guided tutorial ─────────────────────────────────────────────
+   On the very first visit (only on Level 1) we walk the player through the
+   goal, then have them physically drag a rectangle around a glowing region.
+   Shown once; the "seen" flag lives in localStorage. */
+const TUT_T={
+  en:{w_t:"Welcome to Patch",w_b:"Drag rectangles to fill the whole grid.",start:"Start",
+      s_t:"Match the number",s_b:"Each rectangle must cover one number, with an area equal to it and a matching shape.",next:"Next",
+      t_t:"Drag a rectangle",t_b:"Drag from corner to corner around the glowing number to claim it.",
+      f_t:"You've got it! 🎉",f_b:"Fill every cell with rectangles to solve it.",play:"Play",skip:"Skip"},
+  vi:{w_t:"Chào mừng đến với Patch",w_b:"Kéo các hình chữ nhật để lấp đầy lưới.",start:"Bắt đầu",
+      s_t:"Khớp với số",s_b:"Mỗi hình chữ nhật phải chứa một số, có diện tích bằng số đó và hình dạng khớp.",next:"Tiếp",
+      t_t:"Kéo một hình chữ nhật",t_b:"Kéo từ góc này sang góc kia quanh số đang sáng để chiếm vùng.",
+      f_t:"Bạn làm được rồi! 🎉",f_b:"Lấp đầy mọi ô bằng các hình chữ nhật để giải.",play:"Chơi",skip:"Bỏ qua"},
+  ko:{w_t:"Patch에 오신 것을 환영합니다",w_b:"직사각형을 드래그해 격자 전체를 채우세요.",start:"시작",
+      s_t:"숫자에 맞추기",s_b:"각 직사각형은 숫자 하나를 포함하며, 넓이가 숫자와 같고 모양도 일치해야 합니다.",next:"다음",
+      t_t:"직사각형 드래그하기",t_b:"빛나는 숫자 주위를 모서리에서 모서리까지 드래그해 영역을 차지하세요.",
+      f_t:"잘하셨어요! 🎉",f_b:"직사각형으로 모든 칸을 채워 퍼즐을 완성하세요.",play:"플레이",skip:"건너뛰기"},
+  zh:{w_t:"欢迎来到 Patch",w_b:"拖动矩形填满整个网格。",start:"开始",
+      s_t:"匹配数字",s_b:"每个矩形必须覆盖一个数字，面积等于该数字且形状相符。",next:"下一步",
+      t_t:"拖动矩形",t_b:"围绕发光的数字从角落拖到角落来占领该区域。",
+      f_t:"你学会了！🎉",f_b:"用矩形填满所有格子来解题。",play:"开始玩",skip:"跳过"},
+  ja:{w_t:"Patch へようこそ",w_b:"長方形をドラッグしてグリッド全体を埋めましょう。",start:"スタート",
+      s_t:"数字に合わせる",s_b:"各長方形は数字を一つ含み、面積が数字と等しく形が一致する必要があります。",next:"次へ",
+      t_t:"長方形をドラッグ",t_b:"光っている数字の周りを角から角へドラッグして領域を取りましょう。",
+      f_t:"できました！🎉",f_b:"長方形ですべてのマスを埋めてパズルを解きましょう。",play:"プレイ",skip:"スキップ"},
+  ar:{w_t:"مرحباً بك في Patch",w_b:"اسحب المستطيلات لملء الشبكة بالكامل.",start:"ابدأ",
+      s_t:"طابق الرقم",s_b:"يجب أن يغطي كل مستطيل رقمًا واحدًا، بمساحة مساوية له وشكل مطابق.",next:"التالي",
+      t_t:"اسحب مستطيلًا",t_b:"اسحب من ركن إلى ركن حول الرقم المضيء للمطالبة بالمنطقة.",
+      f_t:"أحسنت! 🎉",f_b:"املأ كل خانة بالمستطيلات لحل اللغز.",play:"العب",skip:"تخطّي"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+const STEPS=[
+  {key:"welcome",target:null,                title:M.w_t,body:M.w_b,btn:M.start},
+  {key:"explain", target:()=>cv,       pad:6, title:M.s_t,body:M.s_b,btn:M.next},
+  {key:"act",     target:()=>cv,       pad:6, interactive:true, title:M.t_t,body:M.t_b},
+  {key:"finish",  target:null,                title:M.f_t,body:M.f_b,btn:M.play}
+];
+
+function maybeStartTut(){
+  if(!TUT_ON)return;                       // feature flag off
+  if(localStorage.getItem(TUTKEY))return;
+  if(lvl!==0||tutActive)return;
+  tutRegion=(L.solution&&L.solution[0])||null;
+  if(!tutRegion)return;
+  tutActive=true; tutStep=0; renderTut();
+}
+function setHole(rect,pad){
+  pad=pad||8; const h=$('tutHole');
+  $('tutBg').style.display='none'; h.style.display='block';
+  h.style.left=(rect.left-pad)+'px'; h.style.top=(rect.top-pad)+'px';
+  h.style.width=(rect.width+pad*2)+'px'; h.style.height=(rect.height+pad*2)+'px';
+}
+function placeCard(rect){
+  const card=$('tutCard'); card.classList.remove('above','below');
+  if(!rect){ card.style.top='50%'; card.style.transform='translate(-50%,-50%)'; return; }
+  card.style.transform='translateX(-50%)';
+  const ch=card.offsetHeight, below=rect.top<innerHeight*0.5;
+  let top=below?rect.bottom+16:rect.top-16-ch;
+  card.classList.add(below?'below':'above');
+  card.style.top=Math.max(12,Math.min(top,innerHeight-ch-12))+'px';
+}
+function renderTut(){
+  const s=STEPS[tutStep], tut=$('tut');
+  tut.classList.add('on'); tut.classList.toggle('block',!s.interactive);
+  if(LANG==='ar')$('tutCard').dir='rtl';
+  $('tutTitle').textContent=s.title; $('tutBody').textContent=s.body;
+  $('tutSkip').textContent=M.skip;
+  const next=$('tutNext');
+  if(s.interactive){ next.style.display='none'; }
+  else { next.style.display='inline-block'; next.textContent=s.btn; }
+  const tgt=s.target&&s.target();
+  if(tgt){ const r=tgt.getBoundingClientRect(); setHole(r,s.pad); placeCard(r); }
+  else { $('tutHole').style.display='none'; $('tutBg').style.display='block'; placeCard(null); }
+  if(s.interactive && !tutRAF) tutRAF=requestAnimationFrame(tutAnimate);
+}
+function nextTut(){ tutStep++; if(tutStep>=STEPS.length){ endTut(); return; } renderTut(); }
+function endTut(){
+  tutActive=false; if(tutRAF){cancelAnimationFrame(tutRAF);tutRAF=0;}
+  localStorage.setItem(TUTKEY,'1'); $('tut').classList.remove('on'); draw();
+}
+$('tutNext').onclick=nextTut;
+$('tutSkip').onclick=endTut;
+
+function tutAnimate(ts){
+  tutT=ts||0;
+  if(!(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='act')){ tutRAF=0; return; }
+  draw(); tutRAF=requestAnimationFrame(tutAnimate);
+}
+function drawTutHint(){
+  if(!tutRegion)return;
+  const t=tutT/1000, col='#7048e8';
+  const {r0,c0,h,w}=tutRegion;
+  const x=ox+c0*cell, y=oy+r0*cell, W=w*cell, H=h*cell;
+  const pulse=0.4+0.45*(0.5+0.5*Math.sin(t*3.2));
+  ctx.save(); ctx.globalAlpha=pulse; ctx.strokeStyle=col; ctx.lineWidth=Math.max(3,cell*0.06);
+  ctx.setLineDash([cell*0.3,cell*0.2]); ctx.strokeRect(x+2,y+2,W-4,H-4); ctx.restore();
+  const period=1.8, hold=0.6, ph=t%(period+hold);
+  let pr=ph<period?ph/period:1; pr=pr<1?(1-Math.cos(pr*Math.PI))/2:1;
+  const tl=[x+cell*0.5,y+cell*0.5], br=[x+W-cell*0.5,y+H-cell*0.5];
+  const cur=[tl[0]+(br[0]-tl[0])*pr, tl[1]+(br[1]-tl[1])*pr];
+  ctx.save(); ctx.fillStyle=col; ctx.beginPath(); ctx.arc(cur[0],cur[1],cell*0.16,0,7); ctx.fill();
+  ctx.lineWidth=3; ctx.strokeStyle='#fff'; ctx.stroke(); ctx.restore();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-VCLVPVRXMV');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#faf8ef" />
+  <title>Blog — Go Brain</title>
+  <meta name="description" content="Tips, puzzles, and brain-game stories from the Go Brain hub — Sudoku, Zip, Patch, and 2048." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://gobrain.fighttech.vn/blog/" />
+  <link rel="icon" type="image/png" sizes="512x512" href="../assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="../assets/app-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem("gobrain.theme")||"system";var d=p==="dark"||(p!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/legal.css" />
+  <style>
+    .post-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:16px; }
+    .post-card { display:block; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:22px 24px; text-decoration:none; color:inherit; transition:border-color .15s ease, transform .15s ease; }
+    .post-card:hover { border-color:var(--border-strong); transform:translateY(-2px); }
+    .post-card .eyebrow { display:inline-block; margin-bottom:8px; }
+    .post-card h2 { margin:0 0 6px; font-size:20px; }
+    .post-card p { margin:0 0 10px; color:var(--muted); font-size:15px; }
+    .post-card .meta { font-family:var(--font-mono); font-size:12px; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="../" aria-label="Go Brain"><img class="logo" src="../assets/app-icon.png" alt="" width="30" height="30" /><span>Go Brain</span></a>
+      <nav class="nav">
+        <div class="nav-links">
+          <a href="../blog/" class="current">Blog</a><a href="../play/">Play online</a><a href="../sdk/">SDK</a><a href="../support/">Support</a>
+        </div>
+        <div class="controls">
+          <div class="select-wrap">
+            <select id="themeSelect" class="theme" aria-label="Theme"><option value="system">◐ System</option><option value="light">☀ Light</option><option value="dark">☾ Dark</option></select>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-main">
+    <div class="container">
+      <div class="legal-wrap">
+        <a class="back-link" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back to home</a>
+
+        <div class="legal-head">
+          <span class="eyebrow">Blog</span>
+          <h1>Go Brain Blog</h1>
+          <p class="legal-lead">Tips, puzzles, and brain-game stories from the hub — Sudoku, Zip, Patch, and 2048.</p>
+        </div>
+
+        <ul class="post-list">
+          <li>
+            <a class="post-card" href="mend-mindful-symmetry/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Mend: The Calm Symmetry Puzzle That Heals Your Focus 🧠</h2>
+              <p>No timer, no losing, no ads. Restore broken mandalas by completing their symmetry — a mindful, anti-doomscroll brain game you can play in 3 minutes.</p>
+              <span class="meta">June 26, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="why-sudoku-web-games/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Sudoku Online: Your 5-Minute Brain Flex 🧠</h2>
+              <p>Got five minutes? Open a tab, grab a grid, flex your brain. No app, no sign-up, no nonsense — here's why browser Sudoku just hits different.</p>
+              <span class="meta">June 24, 2026 · 3 min read</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="margin-top:0;border-top:none">
+        <span>© <span id="year">2026</span> FightTech. All rights reserved.</span>
+        <span><a href="../privacy/">Privacy</a> · <a href="../terms/">Terms</a> · <a href="../support/">Support</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../js/main.js"></script>
+  <script src="../js/app-banner.js"></script>
+</body>
+</html>

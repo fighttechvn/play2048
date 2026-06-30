@@ -1,0 +1,81 @@
+{
+  "app": "GoBrain",
+  "updated": "2026-06-30",
+  "releases": [
+    {
+      "version": "1.1.5",
+      "build": 73,
+      "date": "2026-06-30",
+      "status": "deployed",
+      "channels": ["TestFlight", "Play Internal", "Web", "API"],
+      "highlights": [
+        "Beat now plays a backing beat you can play along to — tap in time with the rhythm.",
+        "The groove speeds up the longer you last in Endless.",
+        "Music plays even with the phone on silent (iOS audio-session fix).",
+        "Builds on the 72 Beat redesign (Piano-Tiles tap, Endless default, inline tutorial)."
+      ],
+      "report": "1.1.5+73/",
+      "e2e": "1.1.5+70/e2e/"
+    },
+    {
+      "version": "1.1.5",
+      "build": 72,
+      "date": "2026-06-30",
+      "status": "released",
+      "channels": ["TestFlight", "Play Internal", "Web", "API"],
+      "highlights": [
+        "Beat music game, reimagined: tap each tile in its lane (Piano-Tiles style).",
+        "Endless is the default — the beat speeds up the longer you last.",
+        "New friendly first-time tutorial guides you right as you play.",
+        "Daily streaks sync across devices; Android leaderboard & sign-in fixes.",
+        "Smoother tab bar; newest games appear first."
+      ],
+      "report": "1.1.5+72/",
+      "e2e": "1.1.5+70/e2e/"
+    },
+    {
+      "version": "1.1.5",
+      "build": 70,
+      "date": "2026-06-29",
+      "status": "released",
+      "channels": ["TestFlight", "Play Internal", "Web", "API"],
+      "highlights": [
+        "New game — Beat: a fast, fun music tap game. Play by level or endless.",
+        "Download extra music tracks to play along to.",
+        "Daily streaks now sync across your devices through your account.",
+        "Fix: leaderboards and sign-in now work reliably on Android.",
+        "Smoother bottom tab bar; the name prompt now shows on the home screen.",
+        "Newest games appear first."
+      ],
+      "report": "1.1.5+70/",
+      "e2e": "1.1.5+70/e2e/"
+    },
+    {
+      "version": "1.1.4",
+      "build": 68,
+      "date": "2026-06-28",
+      "status": "internal",
+      "channels": ["Play Internal", "TestFlight", "Firebase"],
+      "highlights": [
+        "Beat music game + downloadable online music tracks.",
+        "Database-backed daily streaks (server API).",
+        "Android API base fix — leaderboard & sign-in.",
+        "iOS 26 native Liquid Glass tab bar fix."
+      ]
+    },
+    {
+      "version": "1.1.0",
+      "build": 53,
+      "date": "2026-06",
+      "status": "released",
+      "channels": ["App Store", "Google Play"],
+      "highlights": [
+        "Leaderboards — compete for the top spot in every game.",
+        "In-app Contact Support with device info attached.",
+        "Delete Account from Settings anytime.",
+        "Multiple players on one device — add and switch profiles.",
+        "Stability, performance and dark-theme polish."
+      ]
+    }
+  ]
+}

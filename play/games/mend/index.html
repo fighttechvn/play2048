@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Mend</title>
+<style>
+  :root{--bg:#f3f0ea;--card:#fff;--ink:#1a1a1a;--grid:#d8d2c6;--faded:#e7e1d6;--bd:#d0d0d0;--btn:#fff;--accent:#74b3ad;--axis:#bcae98}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(16px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  .top{display:flex;align-items:center;gap:8px;min-height:44px;padding-left:52px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  #lvl{margin:0 auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--accent);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* First-run guided tutorial.
+     The overlay is pass-through by default so an interactive step (the guided
+     trace, and any future touch/swipe step) lets the gesture reach the board.
+     Only non-interactive steps add .block to capture input; the card and its
+     buttons always stay clickable. */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;pointer-events:none}
+  #tut.on{display:block}
+  #tut.block{pointer-events:auto}
+  #tutBg{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.42);pointer-events:none}
+  #tutHole{position:fixed;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.42);transition:left .22s ease,top .22s ease,width .22s ease,height .22s ease;pointer-events:none}
+  /* Translucent "glass" tooltip — the board stays visible through it. */
+  #tutCard{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 40px);max-width:300px;pointer-events:auto;background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);border:1px solid rgba(255,255,255,.55);border-radius:16px;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  #tutCard::after{content:"";position:absolute;left:50%;width:16px;height:16px;background:rgba(255,255,255,.66);transform:translateX(-50%) rotate(45deg);display:none}
+  #tutCard.below::after{display:block;top:-8px}
+  #tutCard.above::after{display:block;bottom:-8px}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:13px;font-weight:600;cursor:pointer;padding:6px 2px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">Mend · Level 1</span><span class="pill" id="status">Restore the pattern</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="btns">
+    <button class="btn" id="undo" disabled>Undo</button>
+    <button class="btn" id="hint">Hint</button>
+    <button class="btn" id="reset">Reset</button>
+  </div>
+  <div class="help"><b>How to play.</b> The pattern is <b>symmetric</b> — but faded tiles have lost their colour. For each faded tile, mirror or rotate it onto a tile that's still showing, and tap to paint that same colour. Restore the whole pattern to mend it. The dashed lines show the symmetry.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> The pattern is <b>symmetric</b> — but faded tiles have lost their colour. For each faded tile, mirror or rotate it onto a tile that's still showing, and tap to paint that same colour. Restore the whole pattern to mend it. The dashed lines show the symmetry.",
+    vi:"<b>Cách chơi.</b> Hoa văn có tính <b>đối xứng</b> — nhưng các ô bị phai đã mất màu. Với mỗi ô phai, hãy phản chiếu hoặc xoay nó về một ô vẫn còn màu, rồi chạm để tô đúng màu đó. Khôi phục toàn bộ hoa văn để vá lành nó. Các đường nét đứt cho thấy trục đối xứng.",
+    ko:"<b>플레이 방법.</b> 무늬는 <b>대칭</b>이지만 흐려진 타일은 색을 잃었습니다. 흐려진 타일마다 아직 색이 남아 있는 타일로 대칭 이동하거나 회전시킨 뒤, 눌러서 같은 색을 칠하세요. 전체 무늬를 복원하여 고치세요. 점선은 대칭축을 나타냅니다.",
+    zh:"<b>玩法。</b> 图案是<b>对称</b>的——但褪色的方块失去了颜色。对每个褪色的方块，把它镜像或旋转到一个仍有颜色的方块上，点按涂上相同的颜色。修复整个图案即可还原。虚线表示对称轴。",
+    ja:"<b>遊び方。</b> 模様は<b>対称</b>ですが、色あせたタイルは色を失っています。色あせたタイルごとに、まだ色が残っているタイルへ鏡映または回転させて対応させ、タップして同じ色を塗ります。模様全体を元に戻して修復しましょう。破線は対称軸を表します。",
+    ar:"<b>طريقة اللعب.</b> النمط <b>متماثل</b> — لكن البلاطات الباهتة فقدت لونها. لكل بلاطة باهتة، اعكسها أو أدِرها لتطابق بلاطة ما زالت ملوّنة، ثم انقر لتلوينها باللون نفسه. أعد بناء النمط بالكامل لإصلاحه. تُظهر الخطوط المتقطعة محاور التماثل."
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2>Restored ✨</h2><p id="winmsg"></p><button id="next">Next level</button></div></div>
+<div id="tut">
+  <div id="tutBg"></div>
+  <div id="tutHole"></div>
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script>
+const KEY="mend.level";
+const TUTKEY="mend.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // feature flag: hub passes ?tut=0 to disable
+// Locale for the tutorial — same source order as the "how to play" help above.
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// colour palette — index 0 = faded/unpainted; 1..5 = stained-glass tones
+const PAL=["#e7e1d6","#dd8a8a","#74b3ad","#e3b261","#9b8fce","#7faf7f"];
+// ── Leaderboard reporter (Go Brain) — see games/zip for notes; paste + change GAME ──
+const GBLB=(function(){
+  var GAME='mend', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(level){ var ms=t0?(Date.now()-t0):0; emit('level_complete',{level:level,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:level,durationMs:ms})}).catch(function(){}); }catch(e){} }
+  };
+})();
+let DATA=null, lvl=0, L=null, g=null, givenSet=null, history=[], cell=0, ox=0, oy=0;
+let tutActive=false, tutStep=0, tutRAF=0, tutT=0, tutTarget=null; // first-run guided tutorial
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+const ckey=(r,c)=>r+','+c;
+
+fetch('./levels.json').then(r=>r.json()).then(d=>{DATA=d; lvl=Math.min(+(localStorage.getItem(KEY)||0), d.levels.length-1); load(lvl);});
+
+function load(i){
+  L=DATA.levels[i]; history=[];
+  g=Array.from({length:L.size},()=>Array(L.size).fill(0));
+  givenSet=new Set();
+  for(const c of L.given){ g[c.r][c.c]=c.v; givenSet.add(ckey(c.r,c.c)); }
+  layout(); draw(); $('lvl').textContent='Mend · Level '+(i+1); upd();
+  maybeStartTut(); GBLB.start();
+}
+function isGiven(r,c){return givenSet.has(ckey(r,c));}
+
+function layout(){
+  const wrap=document.getElementById('wrap');
+  const W=Math.min(wrap.clientWidth-60, 520);
+  cell=Math.floor(W/L.size); ox=Math.floor((W-cell*L.size)/2); oy=ox;
+  const px=cell*L.size+2*ox;
+  cv.width=px*devicePixelRatio; cv.height=px*devicePixelRatio; cv.style.width=px+'px'; cv.style.height=px+'px';
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+function rrect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const gap=Math.max(2,cell*0.06), rad=Math.max(3,cell*0.16);
+  for(let r=0;r<L.size;r++)for(let c=0;c<L.size;c++){
+    const x=ox+c*cell+gap/2, y=oy+r*cell+gap/2, s=cell-gap, v=g[r][c];
+    ctx.fillStyle=PAL[v];
+    rrect(x,y,s,s,rad); ctx.fill();
+    if(v===0){ // faded: subtle "crack" diagonal so empty reads as broken, not blank
+      ctx.strokeStyle='rgba(0,0,0,.05)'; ctx.lineWidth=Math.max(1,cell*0.04);
+      ctx.beginPath();ctx.moveTo(x+s*0.22,y+s*0.62);ctx.lineTo(x+s*0.55,y+s*0.30);ctx.lineTo(x+s*0.70,y+s*0.72);ctx.stroke();
+    } else if(isGiven(r,c)){ // intact tile: a soft ring so clues stand out
+      ctx.strokeStyle='rgba(0,0,0,.16)'; ctx.lineWidth=Math.max(1.5,cell*0.05);
+      rrect(x+1,y+1,s-2,s-2,rad-1); ctx.stroke();
+    }
+  }
+  drawAxes();
+  if(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='act') drawTutHint();
+}
+function drawAxes(){
+  const x0=ox, y0=oy, span=cell*L.size, mid=cell*L.size/2;
+  ctx.save();
+  ctx.strokeStyle=getCss('--axis')||'#bcae98'; ctx.globalAlpha=.55;
+  ctx.lineWidth=Math.max(1.5,cell*0.04); ctx.setLineDash([cell*0.18,cell*0.16]);
+  const grp=L.group;
+  const vline=()=>{ctx.beginPath();ctx.moveTo(x0+mid,y0);ctx.lineTo(x0+mid,y0+span);ctx.stroke();};
+  const hline=()=>{ctx.beginPath();ctx.moveTo(x0,y0+mid);ctx.lineTo(x0+span,y0+mid);ctx.stroke();};
+  const diag=()=>{ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x0+span,y0+span);ctx.moveTo(x0+span,y0);ctx.lineTo(x0,y0+span);ctx.stroke();};
+  const spin=()=>{ctx.setLineDash([]);ctx.beginPath();ctx.arc(x0+mid,y0+mid,cell*0.26,0,7);ctx.stroke();
+    ctx.beginPath();ctx.arc(x0+mid,y0+mid,cell*0.06,0,7);ctx.fillStyle=getCss('--axis')||'#bcae98';ctx.fill();};
+  if(grp==='mirrorV') vline();
+  else if(grp==='mirrorH') hline();
+  else if(grp==='mirror2'){vline();hline();}
+  else if(grp==='rot180') spin();
+  else if(grp==='rot90') spin();
+  else if(grp==='dih4'){vline();hline();diag();}
+  ctx.restore();
+}
+function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+function cellAt(ev){
+  const rect=cv.getBoundingClientRect();
+  const c=Math.floor((ev.clientX-rect.left-ox)/cell), r=Math.floor((ev.clientY-rect.top-oy)/cell);
+  if(r<0||c<0||r>=L.size||c>=L.size) return null; return [r,c];
+}
+function tap(ev){ev.preventDefault();
+  const cl=cellAt(ev); if(!cl) return;
+  const [r,c]=cl; if(isGiven(r,c)) return;            // clues are locked
+  history.push({r,c,prev:g[r][c]});
+  g[r][c]=(g[r][c]+1)%(L.colors+1);                   // cycle 0→1→…→colors→0
+  draw(); upd(); checkWin();
+  if(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='act' && tutTarget && g[tutTarget[0]][tutTarget[1]]===L.solution[tutTarget[0]][tutTarget[1]]) nextTut();
+}
+cv.addEventListener('pointerdown',tap);
+// iOS in-app webviews (Messenger/Facebook/Instagram) ignore touch-action:none and
+// pointer-event preventDefault for scroll suppression — a vertical swipe on the
+// board still scrolls/bounces the page. A non-passive touchmove preventDefault is
+// the only reliable cross-webview way to keep a swipe on the board from scrolling.
+cv.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+
+function remaining(){
+  let n=0; for(let r=0;r<L.size;r++)for(let c=0;c<L.size;c++) if(g[r][c]!==L.solution[r][c]) n++;
+  return n;
+}
+function upd(){
+  $('undo').disabled=history.length===0;
+  const left=remaining();
+  $('status').textContent=left? left+' tile'+(left>1?'s':'')+' to restore' : 'Pattern restored';
+}
+function checkWin(){
+  if(remaining()!==0) return;
+  try{navigator.vibrate&&navigator.vibrate(18);}catch(e){}
+  GBLB.report(lvl+1); $('winmsg').textContent='Level '+(lvl+1)+' of '+DATA.count+' restored.';
+  $('wino').style.display='grid';
+}
+$('undo').onclick=()=>{const h=history.pop(); if(!h)return; g[h.r][h.c]=h.prev; draw(); upd();};
+$('reset').onclick=()=>{ for(let r=0;r<L.size;r++)for(let c=0;c<L.size;c++) if(!isGiven(r,c)) g[r][c]=0; history=[]; draw(); upd(); };
+$('hint').onclick=()=>{ // restore one wrong/empty tile from the solution
+  const opts=[];
+  for(let r=0;r<L.size;r++)for(let c=0;c<L.size;c++) if(!isGiven(r,c)&&g[r][c]!==L.solution[r][c]) opts.push([r,c]);
+  if(!opts.length) return;
+  const [r,c]=opts[(Math.random()*opts.length)|0];
+  history.push({r,c,prev:g[r][c]}); g[r][c]=L.solution[r][c];
+  draw(); upd(); checkWin();
+};
+$('next').onclick=()=>{$('wino').style.display='none';lvl=Math.min(lvl+1,DATA.levels.length-1);localStorage.setItem(KEY,lvl);load(lvl);};
+addEventListener('resize',()=>{if(L){layout();draw();if(tutActive)renderTut();}});
+
+/* ── First-run guided tutorial ─────────────────────────────────────────────
+   On the very first visit (only on Level 1) we walk the player through the
+   goal, then have them physically tap a faded tile to the correct colour.
+   Shown once; the "seen" flag lives in localStorage. */
+const TUT_T={
+  en:{w_t:"Welcome to Mend",w_b:"The pattern is symmetric, but the faded tiles have lost their colour.",start:"Start",
+      s_t:"Follow the symmetry",s_b:"The dashed lines are the symmetry axes. Each faded tile takes the colour of its mirror tile.",next:"Next",
+      t_t:"Tap to paint",t_b:"Tap the glowing tile to cycle its colour until it matches its mirror.",
+      f_t:"Nicely mended! ✨",f_b:"Restore every faded tile to complete the pattern.",play:"Play",skip:"Skip"},
+  vi:{w_t:"Chào mừng đến với Mend",w_b:"Hoa văn có tính đối xứng, nhưng các ô bị phai đã mất màu.",start:"Bắt đầu",
+      s_t:"Theo trục đối xứng",s_b:"Các đường nét đứt là trục đối xứng. Mỗi ô phai lấy màu của ô đối xứng với nó.",next:"Tiếp",
+      t_t:"Chạm để tô màu",t_b:"Chạm vào ô đang sáng để đổi màu cho đến khi khớp với ô đối xứng.",
+      f_t:"Vá lành rồi! ✨",f_b:"Khôi phục mọi ô phai để hoàn thành hoa văn.",play:"Chơi",skip:"Bỏ qua"},
+  ko:{w_t:"Mend에 오신 것을 환영합니다",w_b:"무늬는 대칭이지만 흐려진 타일은 색을 잃었습니다.",start:"시작",
+      s_t:"대칭을 따르세요",s_b:"점선은 대칭축입니다. 각 흐려진 타일은 대칭 타일의 색을 가집니다.",next:"다음",
+      t_t:"눌러서 색칠하기",t_b:"빛나는 타일을 눌러 색을 바꾸어 대칭 타일과 일치시키세요.",
+      f_t:"잘 수선됐어요! ✨",f_b:"모든 흐려진 타일을 복원하여 무늬를 완성하세요.",play:"플레이",skip:"건너뛰기"},
+  zh:{w_t:"欢迎来到 Mend",w_b:"图案是对称的，但褪色的方块失去了颜色。",start:"开始",
+      s_t:"沿对称轴还原",s_b:"虚线是对称轴。每个褪色方块取其镜像方块的颜色。",next:"下一步",
+      t_t:"点按涂色",t_b:"点按发光的方块循环切换颜色，直到与其镜像方块匹配。",
+      f_t:"修复完成！✨",f_b:"还原所有褪色方块以完成图案。",play:"开始玩",skip:"跳过"},
+  ja:{w_t:"Mend へようこそ",w_b:"模様は対称ですが、色あせたタイルは色を失っています。",start:"スタート",
+      s_t:"対称に従いましょう",s_b:"破線は対称軸です。各色あせたタイルは鏡像タイルの色になります。",next:"次へ",
+      t_t:"タップして塗る",t_b:"光っているタイルをタップして色を切り替え、鏡像タイルと合わせましょう。",
+      f_t:"きれいに修復できました！✨",f_b:"すべての色あせたタイルを復元して模様を完成させましょう。",play:"プレイ",skip:"スキップ"},
+  ar:{w_t:"مرحباً بك في Mend",w_b:"النمط متماثل، لكن البلاطات الباهتة فقدت لونها.",start:"ابدأ",
+      s_t:"اتبع التماثل",s_b:"الخطوط المتقطعة هي محاور التماثل. كل بلاطة باهتة تأخذ لون بلاطتها المعاكسة.",next:"التالي",
+      t_t:"انقر للتلوين",t_b:"انقر على البلاطة المضيئة لتغيير لونها حتى تطابق بلاطتها المعاكسة.",
+      f_t:"تم الإصلاح بإتقان! ✨",f_b:"أعد كل البلاطات الباهتة لاستكمال النمط.",play:"العب",skip:"تخطّي"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+const STEPS=[
+  {key:"welcome",target:null,                title:M.w_t,body:M.w_b,btn:M.start},
+  {key:"explain", target:()=>cv,       pad:6, title:M.s_t,body:M.s_b,btn:M.next},
+  {key:"act",     target:()=>cv,       pad:6, interactive:true, title:M.t_t,body:M.t_b},
+  {key:"finish",  target:null,                title:M.f_t,body:M.f_b,btn:M.play}
+];
+
+function maybeStartTut(){
+  if(!TUT_ON)return;                       // feature flag off
+  if(localStorage.getItem(TUTKEY))return;
+  if(lvl!==0||tutActive)return;
+  tutTarget=null;
+  for(let r=0;r<L.size&&!tutTarget;r++)for(let c=0;c<L.size;c++){ if(!isGiven(r,c)&&L.solution[r][c]!==0){tutTarget=[r,c];break;} }
+  if(!tutTarget)return;
+  tutActive=true; tutStep=0; renderTut();
+}
+function setHole(rect,pad){
+  pad=pad||8; const h=$('tutHole');
+  $('tutBg').style.display='none'; h.style.display='block';
+  h.style.left=(rect.left-pad)+'px'; h.style.top=(rect.top-pad)+'px';
+  h.style.width=(rect.width+pad*2)+'px'; h.style.height=(rect.height+pad*2)+'px';
+}
+function placeCard(rect){
+  const card=$('tutCard'); card.classList.remove('above','below');
+  if(!rect){ card.style.top='50%'; card.style.transform='translate(-50%,-50%)'; return; }
+  card.style.transform='translateX(-50%)';
+  const ch=card.offsetHeight, below=rect.top<innerHeight*0.5;
+  let top=below?rect.bottom+16:rect.top-16-ch;
+  card.classList.add(below?'below':'above');
+  card.style.top=Math.max(12,Math.min(top,innerHeight-ch-12))+'px';
+}
+function renderTut(){
+  const s=STEPS[tutStep], tut=$('tut');
+  tut.classList.add('on'); tut.classList.toggle('block',!s.interactive);
+  if(LANG==='ar')$('tutCard').dir='rtl';
+  $('tutTitle').textContent=s.title; $('tutBody').textContent=s.body;
+  $('tutSkip').textContent=M.skip;
+  const next=$('tutNext');
+  if(s.interactive){ next.style.display='none'; }
+  else { next.style.display='inline-block'; next.textContent=s.btn; }
+  const tgt=s.target&&s.target();
+  if(tgt){ const r=tgt.getBoundingClientRect(); setHole(r,s.pad); placeCard(r); }
+  else { $('tutHole').style.display='none'; $('tutBg').style.display='block'; placeCard(null); }
+  if(s.interactive && !tutRAF) tutRAF=requestAnimationFrame(tutAnimate);
+}
+function nextTut(){ tutStep++; if(tutStep>=STEPS.length){ endTut(); return; } renderTut(); }
+function endTut(){
+  tutActive=false; if(tutRAF){cancelAnimationFrame(tutRAF);tutRAF=0;}
+  localStorage.setItem(TUTKEY,'1'); $('tut').classList.remove('on'); draw();
+}
+$('tutNext').onclick=nextTut;
+$('tutSkip').onclick=endTut;
+
+function tutAnimate(ts){
+  tutT=ts||0;
+  if(!(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='act')){ tutRAF=0; return; }
+  draw(); tutRAF=requestAnimationFrame(tutAnimate);
+}
+function drawTutHint(){
+  if(!tutTarget)return;
+  const [r,c]=tutTarget, t=tutT/1000, col=getCss('--accent')||'#74b3ad';
+  const x=ox+c*cell, y=oy+r*cell;
+  const pulse=0.4+0.45*(0.5+0.5*Math.sin(t*3.4));
+  ctx.save(); ctx.globalAlpha=pulse; ctx.strokeStyle=col; ctx.lineWidth=Math.max(3,cell*0.06);
+  rrect(x+2,y+2,cell-4,cell-4,Math.max(4,cell*0.16)); ctx.stroke(); ctx.restore();
+  const fp=0.5+0.5*Math.sin(t*3.4);
+  ctx.save(); ctx.globalAlpha=0.9; ctx.fillStyle=col;
+  ctx.beginPath(); ctx.arc(x+cell/2,y+cell/2,cell*(0.12+0.05*fp),0,7); ctx.fill();
+  ctx.lineWidth=3; ctx.strokeStyle='#fff'; ctx.stroke(); ctx.restore();
+}
+</script>
+</body>
+</html>

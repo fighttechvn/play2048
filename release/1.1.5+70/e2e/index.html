@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GoBrain 1.1.5 (70) — E2E report</title>
+<style>
+  :root{--bg:#0E0E10;--card:#16161a;--line:#28282c;--fg:#f5f5f5;--mut:#9ca3af;
+    --accent:#C44900;--ok:#3ddc84;--warn:#f0b429}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+  .wrap{max-width:1040px;margin:0 auto;padding:40px 20px 64px}
+  h1{font-size:28px;margin:0 0 2px;letter-spacing:-.02em}h1 b{color:var(--accent)}
+  .sub{color:var(--mut);margin:0 0 22px}
+  .back{display:inline-block;margin-bottom:18px;color:var(--mut)}
+  h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);
+    margin:34px 0 14px;border-bottom:1px solid var(--line);padding-bottom:6px}
+  .summary{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 18px}
+  .summary li{margin:9px 0}
+  .ok{color:var(--ok);font-weight:700}
+  .warn{color:var(--warn);font-weight:700}
+  code{background:#121216;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:18px}
+  figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  figure img{display:block;width:100%;height:auto;background:#000}
+  figcaption{padding:9px 12px;font-size:13px;color:var(--mut)}
+  figcaption b{color:var(--fg);font-weight:600}
+  .feature{display:flex;gap:20px;flex-wrap:wrap}
+  .feature figure{max-width:300px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../">← Deploy report</a>
+  <h1>Go<b>Brain</b> 1.1.5 (70) — E2E report</h1>
+  <p class="sub">On-device verification against the production API · 2026-06-29</p>
+
+  <h2>Summary</h2>
+  <ul class="summary">
+    <li><span class="ok">PASS</span> — <b>iOS Simulator</b> (iPhone 17 Pro, iOS 26.5): fresh install, prod env. Hub renders, name dialog on <b>home</b>, games render, streak &amp; leaderboard states verified.</li>
+    <li><span class="ok">PASS</span> — <b>Beat game</b> (iOS, new in 1.1.5): home card → how-to-play → practice round → tile tap registers → streak recorded. Full flow on device.</li>
+    <li><span class="ok">PASS</span> — <b>Streak end-to-end</b> (iOS): playing Beat records a 🔥 flame chip on the card via the database API — verified live, not just unit-tested.</li>
+    <li><span class="ok">PASS</span> — <b>Favorites</b> (iOS): heart-tap → Favorites tab badge "1" → filtered list shows only the favorited game.</li>
+    <li><span class="ok">PASS</span> — <b>Settings</b> (iOS): profile, theme (System/Light/Dark), accent, language, notification permission row, clear-data confirm dialog.</li>
+    <li><span class="ok">PASS</span> — <b>Real Android device</b> (Vsmart Active): fresh install, prod env. Name dialog on <b>home</b> (Vietnamese locale).</li>
+    <li><span class="ok">PASS</span> — <b>Streak API</b> round-trip on prod (<code>POST/GET /api/v1/streaks</code>): consecutive +1, same-day idempotent, gap reset, 400 on bad date, 401 unauthenticated.</li>
+    <li><span class="warn">PENDING</span> — <b>Android leaderboard / sign-in fix</b>: not re-verified on device this round (only Android 4.3 hardware available; app needs Android 6.0+). Covered by code + iOS leaderboard flow.</li>
+  </ul>
+
+  <h2>Fix verified — name prompt now on the home screen</h2>
+  <div class="feature">
+    <figure><img src="ios-home.png" alt="iOS home with name dialog" loading="lazy" />
+      <figcaption><b>iOS Simulator</b> — "What's your name?" over the home hub.</figcaption></figure>
+    <figure><img src="android-home.png" alt="Android home with name dialog" loading="lazy" />
+      <figcaption><b>Real Android</b> — "Tên của bạn là gì?" over the home hub.</figcaption></figure>
+  </div>
+
+  <h2>Beat — new music game (iOS, on-device)</h2>
+  <div class="grid">
+    <figure><img src="ios-1.1.5/ios-home-hub.png" loading="lazy" /><figcaption><b>Home</b> — Beat card first (newest first), Liquid Glass tabs, no name dialog</figcaption></figure>
+    <figure><img src="ios-1.1.5/ios-beat-howto.png" loading="lazy" /><figcaption>How to play — practice intro</figcaption></figure>
+    <figure><img src="ios-1.1.5/ios-beat-practice.png" loading="lazy" /><figcaption>Practice round — "Tap the glowing tile"</figcaption></figure>
+    <figure><img src="ios-1.1.5/ios-beat-gameplay.png" loading="lazy" /><figcaption>Gameplay — tiles fall in 4 lanes, tap registers</figcaption></figure>
+  </div>
+
+  <h2>Streak recorded end-to-end (iOS)</h2>
+  <div class="feature">
+    <figure><img src="ios-1.1.5/ios-streak-recorded.png" loading="lazy" />
+      <figcaption><b>After playing Beat</b> — 🔥1 flame chip on the card. Recorded via the database streak API, not just locally.</figcaption></figure>
+  </div>
+
+  <h2>Favorites (iOS)</h2>
+  <div class="feature">
+    <figure><img src="ios-1.1.5/ios-favorites.png" loading="lazy" />
+      <figcaption><b>Favorites tab</b> — heart filled, tab badge "1", list filtered to the favorited game (flame chip persists).</figcaption></figure>
+  </div>
+
+  <h2>Settings (iOS)</h2>
+  <div class="grid">
+    <figure><img src="ios-1.1.5/ios-settings-top.png" loading="lazy" /><figcaption>Profile · theme · accent · language · notification permission</figcaption></figure>
+    <figure><img src="ios-1.1.5/ios-settings-bottom.png" loading="lazy" /><figcaption>Support links · SDK · upgrade · clear data · delete account</figcaption></figure>
+    <figure><img src="ios-1.1.5/ios-cleardata-confirm.png" loading="lazy" /><figcaption>Clear-data confirm — "This can't be undone"</figcaption></figure>
+  </div>
+
+  <h2>iOS — streak states</h2>
+  <div class="grid">
+    <figure><img src="ios/01-home-no-streak.png" loading="lazy" /><figcaption>Home — fresh (name prompt)</figcaption></figure>
+    <figure><img src="ios/02-streak-at-risk-banner.png" loading="lazy" /><figcaption>At-risk streak — banner + flame</figcaption></figure>
+    <figure><img src="ios/03-streak-safe-today.png" loading="lazy" /><figcaption>Played today — no banner</figcaption></figure>
+    <figure><img src="ios/04-streak-broken.png" loading="lazy" /><figcaption>Missed a day — no banner</figcaption></figure>
+    <figure><img src="ios/05-streak-multi-game.png" loading="lazy" /><figcaption>Several at-risk — targets highest</figcaption></figure>
+    <figure><img src="ios/06-streak-long.png" loading="lazy" /><figcaption>Long streak — 30-day count</figcaption></figure>
+  </div>
+
+  <h2>iOS — leaderboard flow</h2>
+  <div class="grid">
+    <figure><img src="ios/lb-01-hub-player-name.png" loading="lazy" /><figcaption>Game (2048) — in play</figcaption></figure>
+    <figure><img src="ios/lb-02-settings-player-name.png" loading="lazy" /><figcaption>Settings — player name</figcaption></figure>
+    <figure><img src="ios/lb-03-in-game-trophy-btn.png" loading="lazy" /><figcaption>In-game trophy button</figcaption></figure>
+    <figure><img src="ios/lb-04-leaderboard-overlay.png" loading="lazy" /><figcaption>Leaderboard overlay</figcaption></figure>
+  </div>
+
+  <p class="sub" style="margin-top:30px">GoBrain · <a href="/release/">All releases</a> · <a href="/">gobrain.fighttech.vn</a></p>
+</div>
+</body>
+</html>

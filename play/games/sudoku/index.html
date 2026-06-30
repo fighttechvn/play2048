@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Sudoku</title>
+<style>
+  :root{
+    --bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--grid:#cdcdcd;--bd:#d0d0d0;
+    --accent:#3b5bdb;--accentbg:#dbe4ff;--peer:#eef1f8;--same:#c7d2fe;
+    --given:#1a1a1a;--bad:#e03131;--badbg:#ffe3e3;--btn:#fff;--muted:#777
+  }
+  @media (prefers-color-scheme: dark){
+    :root{--bg:#15171c;--card:#1d2027;--ink:#e9ecf1;--grid:#363a44;--bd:#363a44;
+      --accent:#748ffc;--accentbg:#2a3550;--peer:#232733;--same:#34406b;
+      --given:#e9ecf1;--bad:#ff6b6b;--badbg:#3a2326;--btn:#252934;--muted:#8b93a3}
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overscroll-behavior:none;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  #wrap{max-width:520px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;gap:14px;
+    padding:calc(16px + var(--saa-top, env(safe-area-inset-top,0px)))
+            calc(16px + var(--saa-right, env(safe-area-inset-right,0px)))
+            calc(16px + var(--saa-bottom, env(safe-area-inset-bottom,0px)))
+            calc(16px + var(--saa-left, env(safe-area-inset-left,0px)))}
+  /* reserve the left zone for the host's floating back button */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px;padding-left:52px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 14px;
+    font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+  #lvl{margin-right:auto}
+  .pill.warn{color:var(--bad)}
+
+  .board{background:var(--card);border:2px solid var(--ink);border-radius:12px;padding:0;overflow:hidden;
+    display:grid;grid-template-columns:repeat(9,1fr);aspect-ratio:1;touch-action:manipulation;user-select:none}
+  .cell{position:relative;display:flex;align-items:center;justify-content:center;
+    border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);
+    font-size:clamp(18px,6.4vw,30px);font-weight:600;cursor:pointer;color:var(--accent)}
+  .cell:nth-child(9n){border-right:0}
+  .cell:nth-child(n+73){border-bottom:0}
+  /* thick 3×3 box separators */
+  .cell:nth-child(9n+3),.cell:nth-child(9n+6){border-right:2px solid var(--ink)}
+  .row3 .cell{border-bottom:2px solid var(--ink)}
+  .cell.given{color:var(--given);font-weight:800}
+  .cell.peer{background:var(--peer)}
+  .cell.same{background:var(--same)}
+  .cell.sel{background:var(--accentbg);box-shadow:inset 0 0 0 2px var(--accent)}
+  .cell.bad{color:var(--bad)!important;background:var(--badbg)}
+  .cell.hl{animation:pop .25s ease}
+  @keyframes pop{0%{transform:scale(.6);opacity:.3}100%{transform:scale(1);opacity:1}}
+  .notes{position:absolute;top:7%;right:7%;bottom:7%;left:7%;display:grid;grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,1fr);pointer-events:none}
+  .notes span{display:flex;align-items:center;justify-content:center;font-size:clamp(7px,2.4vw,11px);
+    font-weight:600;color:var(--muted);line-height:1}
+
+  .pad{display:grid;grid-template-columns:repeat(9,1fr);gap:6px}
+  .pad button{aspect-ratio:1;border:1px solid var(--bd);background:var(--btn);color:var(--accent);
+    border-radius:10px;font-size:clamp(16px,5vw,22px);font-weight:700;cursor:pointer;position:relative;padding:0}
+  .pad button .rem{position:absolute;top:3px;right:5px;font-size:9px;font-weight:600;color:var(--muted)}
+  .pad button.done{opacity:.32;pointer-events:none}
+  .pad button:active{background:var(--accentbg)}
+
+  .btns{display:flex;gap:8px}
+  .btn{flex:1;padding:12px 6px;border-radius:12px;border:1px solid var(--bd);background:var(--btn);
+    color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;display:flex;gap:6px;
+    align-items:center;justify-content:center}
+  .btn:disabled{opacity:.4}
+  .btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+  .diffs{display:flex;gap:6px;background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:4px}
+  .diffs button{flex:1;border:0;background:transparent;color:var(--muted);font-weight:700;font-size:13px;
+    padding:9px 4px;border-radius:999px;cursor:pointer}
+  .diffs button.on{background:var(--accent);color:#fff}
+
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.55);z-index:9;
+    padding:24px}
+  .win.show{display:grid}
+  .win .card{background:var(--card);color:var(--ink);border-radius:18px;padding:28px 30px;text-align:center;max-width:320px}
+  .win h2{margin:0 0 6px;font-size:26px}
+  .win p{margin:4px 0;color:var(--muted)}
+  .win b{color:var(--ink)}
+  .win button{margin-top:16px;padding:13px 28px;border:0;border-radius:999px;background:var(--accent);
+    color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:8px}.btn>*+*{margin-left:6px}.diffs>*+*{margin-left:6px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top">
+    <span class="pill" id="lvl">Sudoku</span>
+    <span class="pill" id="time">00:00</span>
+    <span class="pill" id="miss">✗ 0</span>
+  </div>
+  <div class="board" id="board"></div>
+  <div class="pad" id="pad"></div>
+  <div class="btns">
+    <button class="btn" id="notes">✎ Notes</button>
+    <button class="btn" id="erase">⌫ Erase</button>
+    <button class="btn" id="hint">Hint</button>
+    <button class="btn" id="undo" disabled>Undo</button>
+    <button class="btn" id="newg">New</button>
+  </div>
+  <div class="diffs" id="diffs"></div>
+</div>
+
+<div class="win" id="wino"><div class="card">
+  <h2>Solved! 🎉</h2>
+  <p>Difficulty <b id="wdiff"></b></p>
+  <p>Time <b id="wtime"></b> · Mistakes <b id="wmiss"></b></p>
+  <button id="wnext">New game</button>
+</div></div>
+
+<script>
+const KEY = "sudoku.save";
+const DIFFS = ["easy","medium","hard","expert"];
+const LABEL = {easy:"Easy",medium:"Medium",hard:"Hard",expert:"Expert"};
+// Minimal embedded fallback (one per tier) so the game still runs if levels.json
+// can't be fetched (e.g. opened from file://). Real pool comes from levels.json.
+const FALLBACK = { levels: { easy:[{
+  g:"530070000600195000098000060800060003400803001700020006060000280000419005000080079",
+  s:"534678912672195348198342567859761423426853791713924856961537284287419635345286179"}] }};
+
+// ── Leaderboard reporter (Go Brain) — sudoku: level = độ khó (1=easy..4=expert), ms = thời gian giải ──
+const GBLB=(function(){
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id='sudoku'; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    report:function(level, ms){ ms=Math.round(ms); emit('level_complete',{level:level,duration_ms:ms});
+      var tok=token(); if(!tok||!ms||ms<250) return;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:'sudoku',level:level,durationMs:ms})}).catch(function(){}); }catch(e){} }
+  };
+})();
+let DB = null;                                  // loaded levels.json
+let diff = "easy", idx = 0;                     // current selection
+let sol = "";                                   // 81-char solution
+let cells = [];                                 // [{v,given,notes:Set}]
+let sel = -1, notesMode = false;
+let history = [];                               // undo stack
+let mistakes = 0, elapsed = 0, tickStart = 0, timer = null, solved = false;
+
+const $ = (id) => document.getElementById(id);
+const boardEl = $("board"), padEl = $("pad");
+const peers = buildPeers();
+
+fetch("./levels.json").then(r => r.ok ? r.json() : Promise.reject())
+  .then(d => start(d)).catch(() => start(FALLBACK));
+
+function start(db){
+  DB = db;
+  buildPad(); buildDiffs(); bind();
+  const saved = load();
+  if (saved && DB.levels[saved.diff]) restore(saved);
+  else deal(diff, 0);
+}
+
+// ---- puzzle setup ----------------------------------------------------------
+function pool(d){ return (DB.levels[d] && DB.levels[d].length) ? DB.levels[d] : FALLBACK.levels.easy; }
+
+function deal(d, i){
+  diff = d; const p = pool(d); idx = ((i % p.length) + p.length) % p.length;
+  const pz = p[idx]; sol = pz.s;
+  cells = [...pz.g].map(ch => ({ v:+ch, given: ch!=="0", notes:new Set() }));
+  sel = -1; history = []; mistakes = 0; elapsed = 0; solved = false;
+  startTimer(); render(); save();
+}
+
+function restore(s){
+  diff = s.diff; idx = s.idx; sol = s.sol;
+  cells = s.cells.map(c => ({ v:c.v, given:c.given, notes:new Set(c.notes||[]) }));
+  sel = -1; history = []; mistakes = s.mistakes||0; elapsed = s.elapsed||0; solved = false;
+  startTimer(); render();
+}
+
+// ---- rendering -------------------------------------------------------------
+function buildPeers(){
+  const P = Array.from({length:81}, () => new Set());
+  for (let i=0;i<81;i++){
+    const r=(i/9|0), c=i%9, br=(r/3|0)*3, bc=(c/3|0)*3;
+    for (let k=0;k<9;k++){ P[i].add(r*9+k); P[i].add(k*9+c); }
+    for (let dr=0;dr<3;dr++) for (let dc=0;dc<3;dc++) P[i].add((br+dr)*9+bc+dc);
+    P[i].delete(i);
+  }
+  return P;
+}
+
+function conflict(i){
+  const v = cells[i].v; if (!v) return false;
+  for (const j of peers[i]) if (cells[j].v === v) return true;
+  return false;
+}
+
+function render(){
+  // group rows so we can thicken the 3×3 horizontal separators
+  if (!boardEl.children.length){
+    for (let i=0;i<81;i++){
+      const d = document.createElement("div");
+      d.className = "cell"; d.dataset.i = i;
+      boardEl.appendChild(d);
+    }
+  }
+  const selV = sel>=0 ? cells[sel].v : 0;
+  for (let i=0;i<81;i++){
+    const cell = cells[i], el = boardEl.children[i];
+    let cls = "cell";
+    if ((((i/9|0)%3)===2)) cls += " row3";
+    if (cell.given) cls += " given";
+    if (i===sel) cls += " sel";
+    else if (sel>=0 && peers[sel].has(i)) cls += " peer";
+    if (selV && cell.v===selV && i!==sel) cls += " same";
+    if (cell.v && conflict(i)) cls += " bad";
+    el.className = cls;
+    if (cell.v){
+      el.textContent = cell.v;
+    } else if (cell.notes.size){
+      el.textContent = "";
+      const n = document.createElement("div"); n.className="notes";
+      for (let d=1;d<=9;d++){ const s=document.createElement("span"); s.textContent = cell.notes.has(d)?d:""; n.appendChild(s); }
+      el.appendChild(n);
+    } else el.textContent = "";
+  }
+  // pad remaining counts
+  for (let d=1;d<=9;d++){
+    let placed=0; for (let i=0;i<81;i++) if (cells[i].v===d) placed++;
+    const b = padEl.querySelector('[data-d="'+d+'"]');
+    b.querySelector(".rem").textContent = placed>=9 ? "" : (9-placed);
+    b.classList.toggle("done", placed>=9);
+  }
+  $("lvl").textContent = "Sudoku · " + LABEL[diff];
+  $("miss").textContent = "✗ " + mistakes;
+  $("miss").classList.toggle("warn", mistakes>0);
+  $("undo").disabled = history.length===0;
+  $("notes").classList.toggle("on", notesMode);
+  DIFFS.forEach(d => $("d_"+d).classList.toggle("on", d===diff));
+}
+
+// ---- input -----------------------------------------------------------------
+function input(d){
+  if (sel<0 || solved) return;
+  const cell = cells[sel]; if (cell.given) return;
+  if (notesMode && d>0){
+    push(); if (cell.notes.has(d)) cell.notes.delete(d); else cell.notes.add(d);
+    cell.v = 0; render(); save(); return;
+  }
+  push();
+  if (d===0){ cell.v = 0; cell.notes.clear(); }
+  else {
+    cell.v = d; cell.notes.clear();
+    // clear this digit from peers' notes (quality-of-life)
+    for (const j of peers[sel]) cells[j].notes.delete(d);
+    if (sol && d !== +sol[sel]) mistakes++;
+  }
+  flash(sel); render(); save(); checkWin();
+}
+
+function push(){
+  history.push(cells.map(c => ({v:c.v, given:c.given, notes:[...c.notes]})));
+  if (history.length>200) history.shift();
+}
+function undo(){
+  if (!history.length) return;
+  const prev = history.pop();
+  cells = prev.map(c => ({v:c.v, given:c.given, notes:new Set(c.notes)}));
+  render(); save();
+}
+function hint(){
+  if (solved) return;
+  let t = (sel>=0 && !cells[sel].given && cells[sel].v!==+sol[sel]) ? sel : -1;
+  if (t<0){ const empt=[]; for(let i=0;i<81;i++) if(!cells[i].given && cells[i].v!==+sol[i]) empt.push(i);
+    if (!empt.length) return; t = empt[(Math.random()*empt.length)|0]; }
+  push(); sel = t; cells[t].v = +sol[t]; cells[t].notes.clear();
+  for (const j of peers[t]) cells[j].notes.delete(cells[t].v);
+  flash(t); render(); save(); checkWin();
+}
+function flash(i){ const el=boardEl.children[i]; el.classList.remove("hl"); void el.offsetWidth; el.classList.add("hl"); }
+
+function checkWin(){
+  for (let i=0;i<81;i++) if (cells[i].v!==+sol[i]) return;
+  solved = true; stopTimer(); GBLB.report(DIFFS.indexOf(diff)+1, elapsed*1000);
+  $("wdiff").textContent = LABEL[diff];
+  $("wtime").textContent = fmt(elapsed);
+  $("wmiss").textContent = mistakes;
+  $("wino").classList.add("show"); save();
+}
+
+// ---- timer -----------------------------------------------------------------
+function startTimer(){ stopTimer(); tickStart = Date.now() - elapsed*1000;
+  timer = setInterval(() => { elapsed = ((Date.now()-tickStart)/1000)|0; $("time").textContent = fmt(elapsed); }, 1000);
+  $("time").textContent = fmt(elapsed); }
+function stopTimer(){ if (timer){ clearInterval(timer); timer=null; } }
+function fmt(s){ const m=(s/60|0); return String(m).padStart(2,"0")+":"+String(s%60).padStart(2,"0"); }
+
+// ---- persistence -----------------------------------------------------------
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify({
+    diff, idx, sol, mistakes, elapsed, solved,
+    cells: cells.map(c => ({v:c.v, given:c.given, notes:[...c.notes]}))
+  })); }catch(e){}
+}
+function load(){ try{ return JSON.parse(localStorage.getItem(KEY)); }catch(e){ return null; } }
+
+// ---- UI wiring -------------------------------------------------------------
+function buildPad(){
+  for (let d=1;d<=9;d++){
+    const b=document.createElement("button"); b.dataset.d=d;
+    b.innerHTML = d+'<span class="rem"></span>'; b.onclick=()=>input(d); padEl.appendChild(b);
+  }
+  // erase button reuses pad styling but spans implicitly via the controls row
+}
+function buildDiffs(){
+  const wrap=$("diffs");
+  DIFFS.forEach(d => { const b=document.createElement("button"); b.id="d_"+d; b.textContent=LABEL[d];
+    b.onclick=()=>{ if(d!==diff || confirmNew()) deal(d,0); }; wrap.appendChild(b); });
+}
+function confirmNew(){ return true; }
+
+function bind(){
+  boardEl.addEventListener("pointerdown", e => {
+    const t = e.target.closest(".cell"); if (!t) return;
+    sel = +t.dataset.i; render();
+  });
+  $("notes").onclick = () => { notesMode=!notesMode; render(); };
+  $("erase").onclick = () => input(0);
+  $("hint").onclick = hint;
+  $("undo").onclick = undo;
+  $("newg").onclick = () => deal(diff, idx+1);
+  $("wnext").onclick = () => { $("wino").classList.remove("show"); deal(diff, idx+1); };
+  window.addEventListener("keydown", e => {
+    if (e.key>="1" && e.key<="9") input(+e.key);
+    else if (e.key==="Backspace"||e.key==="Delete"||e.key==="0") input(0);
+    else if (e.key==="n"||e.key==="N"){ notesMode=!notesMode; render(); }
+    else if (sel>=0 && ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)){
+      const r=(sel/9|0), c=sel%9;
+      if (e.key==="ArrowUp") sel=((r+8)%9)*9+c;
+      if (e.key==="ArrowDown") sel=((r+1)%9)*9+c;
+      if (e.key==="ArrowLeft") sel=r*9+(c+8)%9;
+      if (e.key==="ArrowRight") sel=r*9+(c+1)%9;
+      render(); e.preventDefault();
+    }
+  });
+}
+
+// iOS 12 / old WebKit: no CSS aspect-ratio — keep the board & number pad square via JS.
+if (!(window.CSS && CSS.supports && CSS.supports("aspect-ratio", "1"))) {
+  var squareUp = function () {
+    if (boardEl) boardEl.style.height = boardEl.clientWidth + "px";
+    var pb = padEl ? padEl.querySelectorAll("button") : [];
+    for (var i = 0; i < pb.length; i++) pb[i].style.height = pb[i].clientWidth + "px";
+  };
+  window.addEventListener("resize", squareUp);
+  setTimeout(squareUp, 0);
+  setTimeout(squareUp, 120);
+}
+</script>
+</body>
+</html>

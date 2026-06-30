@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Wend</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--tile:#fff;--tilebd:#333;--blocked:#b7b7b7;--bd:#d0d0d0;--btn:#fff;--sel:#f0a23a}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(16px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  .top{display:flex;align-items:center;gap:8px;min-height:44px;padding-left:52px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  #lvl{margin:0 auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px;display:flex;justify-content:center}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px;max-width:340px}
+  .slots{display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:0 4px}
+  .slotrow{display:flex;gap:6px}
+  .slot{width:30px;height:30px;border-radius:6px;background:#e7e4dd;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:16px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:#e8654a;color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* First-run guided tutorial.
+     The overlay is pass-through by default so an interactive step (the guided
+     trace, and any future touch/swipe step) lets the gesture reach the board.
+     Only non-interactive steps add .block to capture input; the card and its
+     buttons always stay clickable. */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;pointer-events:none}
+  #tut.on{display:block}
+  #tut.block{pointer-events:auto}
+  #tutBg{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.42);pointer-events:none}
+  #tutHole{position:fixed;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.42);transition:left .22s ease,top .22s ease,width .22s ease,height .22s ease;pointer-events:none}
+  /* Translucent "glass" tooltip — the board stays visible through it. */
+  #tutCard{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 40px);max-width:300px;pointer-events:auto;background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);border:1px solid rgba(255,255,255,.55);border-radius:16px;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  #tutCard::after{content:"";position:absolute;left:50%;width:16px;height:16px;background:rgba(255,255,255,.66);transform:translateX(-50%) rotate(45deg);display:none}
+  #tutCard.below::after{display:block;top:-8px}
+  #tutCard.above::after{display:block;bottom:-8px}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:13px;font-weight:600;cursor:pointer;padding:6px 2px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}.slots>*+*{margin-top:6px}.slotrow>*+*{margin-left:6px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">Wend · Level 1</span><span class="pill" id="status">Find 4 words</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="slots" id="slots"></div>
+  <div class="btns">
+    <button class="btn" id="undo" disabled>Undo</button>
+    <button class="btn" id="hint">Hint</button>
+    <button class="btn" id="reset">Reset</button>
+  </div>
+  <div class="help"><b>How to play.</b> Find the <b>4 hidden words</b> — 3, 4, 5 and 6 letters long. Drag across touching tiles to trace a word; use <b>every</b> letter tile exactly once.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Find the <b>4 hidden words</b> — 3, 4, 5 and 6 letters long. Drag across touching tiles to trace a word; use <b>every</b> letter tile exactly once.",
+    vi:"<b>Cách chơi.</b> Tìm <b>4 từ ẩn</b> — dài 3, 4, 5 và 6 chữ cái. Kéo qua các ô liền kề để tạo thành một từ; dùng <b>mỗi</b> ô chữ đúng một lần.",
+    ko:"<b>플레이 방법.</b> 길이가 3, 4, 5, 6글자인 <b>숨은 단어 4개</b>를 찾으세요. 인접한 타일을 가로질러 끌어 단어를 만들고, <b>모든</b> 글자 타일을 정확히 한 번씩 사용하세요.",
+    zh:"<b>玩法。</b> 找出<b>4 个隐藏单词</b>——长度分别为 3、4、5、6 个字母。拖过相邻的字块连成一个单词；每个字母块<b>都</b>要恰好用一次。",
+    ja:"<b>遊び方。</b> 3・4・5・6文字の<b>隠れた4つの単語</b>を見つけましょう。隣り合うタイルをなぞって単語を作り、<b>すべて</b>の文字タイルをちょうど一度ずつ使います。",
+    ar:"<b>طريقة اللعب.</b> اعثر على <b>الكلمات الأربع المخفية</b> — بأطوال 3 و4 و5 و6 أحرف. اسحب عبر المربعات المتلاصقة لتتبّع كلمة؛ استخدم <b>كل</b> مربع حرف مرة واحدة بالضبط."
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2>Solved! 🎉</h2><p id="winmsg"></p><button id="next">Next level</button></div></div>
+<div id="tut">
+  <div id="tutBg"></div>
+  <div id="tutHole"></div>
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script>
+const KEY="wend.level";
+const TUTKEY="wend.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // feature flag: hub passes ?tut=0 to disable
+// Locale for the tutorial — same source order as the "how to play" help above.
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+const COLORS=["#e8654a","#2f9e6f","#3f6fd1","#b070c8"]; // by word index (len 3,4,5,6)
+// ── Leaderboard reporter (Go Brain) — see games/zip for notes; paste + change GAME ──
+const GBLB=(function(){
+  var GAME='wend', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(level){ var ms=t0?(Date.now()-t0):0; emit('level_complete',{level:level,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:level,durationMs:ms})}).catch(function(){}); }catch(e){} }
+  };
+})();
+let DATA=null, lvl=0, L=null, lset=null, blockedSet=null;
+let found=new Map(), order=[], sel=[], drawing=false, cell=0, ox=0, oy=0;
+let tutActive=false, tutStep=0, tutRAF=0, tutT=0; // first-run guided tutorial
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+const ck=(r,c)=>r+','+c;
+
+fetch('./levels.json').then(r=>r.json()).then(d=>{DATA=d; lvl=Math.min(+(localStorage.getItem(KEY)||0), d.levels.length-1); load(lvl);});
+
+function load(i){
+  L=DATA.levels[i]; found=new Map(); order=[]; sel=[];
+  lset=new Map(); for(const t of L.letters) lset.set(ck(t.r,t.c), t.ch);
+  blockedSet=new Set(L.blocked.map(b=>ck(b.r,b.c)));
+  layout(); draw(); buildSlots(); $('lvl').textContent='Wend · Level '+(i+1); upd();
+  maybeStartTut(); GBLB.start();
+}
+function layout(){
+  const wrap=document.getElementById('wrap');
+  const W=Math.min(wrap.clientWidth-60, 312);
+  cell=Math.floor(W/L.cols);
+  const pw=cell*L.cols, ph=cell*L.rows; ox=0; oy=0;
+  cv.width=pw*devicePixelRatio; cv.height=ph*devicePixelRatio; cv.style.width=pw+'px'; cv.style.height=ph+'px';
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function cellColor(r,c){ for(const k of found.keys()){ if(found.get(k).some(p=>p[0]===r&&p[1]===c)) return COLORS[k]; } return null; }
+
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const R=cell*0.16;
+  for(let r=0;r<L.rows;r++)for(let c=0;c<L.cols;c++){
+    const x=ox+c*cell+3,y=oy+r*cell+3,w=cell-6;
+    if(blockedSet.has(ck(r,c))){ roundRect(x,y,w,w,R);ctx.fillStyle=getCss('--blocked');ctx.fill();continue; }
+    const col=cellColor(r,c);
+    roundRect(x,y,w,w,R);
+    ctx.fillStyle=col?col:'#fff'; ctx.fill();
+    ctx.lineWidth=2; ctx.strokeStyle=col?col:getCss('--tilebd'); ctx.stroke();
+    ctx.fillStyle=col?'#fff':'#1a1a1a';
+    ctx.font='bold '+Math.round(cell*0.42)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(lset.get(ck(r,c)), x+w/2, y+w/2+1);
+  }
+  // current selection band
+  if(sel.length){
+    ctx.strokeStyle=getCss('--sel'); ctx.lineWidth=cell*0.34; ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.beginPath();
+    sel.forEach(([r,c],i)=>{const x=ox+c*cell+cell/2,y=oy+r*cell+cell/2;i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+    ctx.stroke();
+    ctx.fillStyle=getCss('--sel');
+    for(const [r,c] of sel){const x=ox+c*cell+cell/2,y=oy+r*cell+cell/2;ctx.beginPath();ctx.arc(x,y,cell*0.14,0,7);ctx.fill();}
+  }
+  if(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='trace') drawTraceHint();
+}
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+function cellAt(ev){
+  const rect=cv.getBoundingClientRect();
+  const c=Math.floor((ev.clientX-rect.left-ox)/cell), r=Math.floor((ev.clientY-rect.top-oy)/cell);
+  if(r<0||c<0||r>=L.rows||c>=L.cols)return null; return [r,c];
+}
+const isLetter=(r,c)=>lset.has(ck(r,c));
+const inFound=(r,c)=>cellColor(r,c)!==null;
+const inSel=(r,c)=>sel.findIndex(p=>p[0]===r&&p[1]===c);
+
+function tryExtend(r,c){
+  if(!isLetter(r,c)||inFound(r,c))return;
+  if(!sel.length){sel.push([r,c]);return;}
+  const idx=inSel(r,c);
+  if(idx!==-1){ if(idx===sel.length-2)sel.pop(); return; } // backtrack
+  const last=sel[sel.length-1];
+  if(Math.abs(r-last[0])+Math.abs(c-last[1])!==1)return;
+  sel.push([r,c]);
+}
+function down(ev){ev.preventDefault();try{cv.setPointerCapture(ev.pointerId);}catch(e){}
+  const cl=cellAt(ev);if(!cl)return;if(isLetter(cl[0],cl[1])&&!inFound(cl[0],cl[1])){sel=[[cl[0],cl[1]]];drawing=true;draw();}}
+function move(ev){if(!drawing)return;ev.preventDefault();const cl=cellAt(ev);if(!cl)return;tryExtend(cl[0],cl[1]);draw();}
+function up(ev){if(!drawing)return;drawing=false;try{cv.releasePointerCapture(ev.pointerId);}catch(e){}evaluate();}
+cv.addEventListener('pointerdown',down);cv.addEventListener('pointermove',move);
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);window.addEventListener('pointerup',up);
+// iOS in-app webviews (Messenger/Facebook/Instagram) ignore touch-action:none and
+// pointer-event preventDefault for scroll suppression — a vertical drag on the
+// board still scrolls/bounces the page. A non-passive touchmove preventDefault is
+// the only reliable cross-webview way to keep the board drag from scrolling.
+cv.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+
+const samePath=(a,b)=>a.length===b.length&&a.every((p,i)=>p[0]===b[i][0]&&p[1]===b[i][1]);
+function evaluate(){
+  if(sel.length>=3){
+    for(let k=0;k<4;k++){ if(found.has(k))continue;
+      const p=L.paths[k], rev=[...p].reverse();
+      if(samePath(sel,p)||samePath(sel,rev)){ found.set(k,p.map(x=>x.slice())); order.push(k); break; }
+    }
+  }
+  sel=[]; draw(); buildSlots(); upd();
+  if(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='trace' && found.size>0){ nextTut(); return; }
+  checkWin();
+}
+
+function buildSlots(){
+  const host=$('slots'); host.innerHTML='';
+  for(let k=0;k<4;k++){
+    const row=document.createElement('div'); row.className='slotrow';
+    const len=k+3, w=L.words[k];
+    for(let j=0;j<len;j++){
+      const b=document.createElement('div'); b.className='slot';
+      if(found.has(k)){ b.style.background=COLORS[k]; b.textContent=w[j]; }
+      row.appendChild(b);
+    }
+    host.appendChild(row);
+  }
+}
+function upd(){ $('undo').disabled=order.length===0; $('status').textContent=`Found ${found.size}/4`; }
+function checkWin(){
+  if(found.size!==4)return;
+  GBLB.report(lvl+1); $('winmsg').textContent='Level '+(lvl+1)+' of '+DATA.count+' complete.';
+  $('wino').style.display='grid';
+}
+$('undo').onclick=()=>{const k=order.pop();if(k===undefined)return;found.delete(k);draw();buildSlots();upd();};
+$('reset').onclick=()=>{found=new Map();order=[];sel=[];draw();buildSlots();upd();};
+$('hint').onclick=()=>{
+  for(let k=0;k<4;k++)if(!found.has(k)){found.set(k,L.paths[k].map(x=>x.slice()));order.push(k);break;}
+  draw();buildSlots();upd();checkWin();
+};
+$('next').onclick=()=>{$('wino').style.display='none';lvl=Math.min(lvl+1,DATA.levels.length-1);localStorage.setItem(KEY,lvl);load(lvl);};
+addEventListener('resize',()=>{if(L){layout();draw();if(tutActive)renderTut();}});
+
+/* ── First-run guided tutorial ─────────────────────────────────────────────
+   On the very first visit (only on Level 1) we walk the player through the
+   goal, then have them physically trace the easy 3-letter word along a glowing
+   animated path. Shown once; the "seen" flag lives in localStorage. */
+const TUT_T={
+  en:{w_t:"Welcome to Wend",w_b:"Four words are hidden on the board — 3, 4, 5 and 6 letters long.",start:"Start",
+      s_t:"The four words",s_b:"These rows are the words to find — one box per letter, shortest to longest.",next:"Next",
+      t_t:"Drag to trace a word",t_b:"Follow the glowing path: press a tile and drag across the touching tiles to spell the word.",
+      f_t:"You've got it! 🎉",f_b:"Now find the other three words. Every letter tile is used exactly once.",play:"Play",skip:"Skip"},
+  vi:{w_t:"Chào mừng đến với Wend",w_b:"Có 4 từ ẩn trên bảng — dài 3, 4, 5 và 6 chữ cái.",start:"Bắt đầu",
+      s_t:"Bốn từ cần tìm",s_b:"Các hàng này là 4 từ cần tìm — mỗi ô một chữ cái, từ ngắn đến dài.",next:"Tiếp",
+      t_t:"Kéo để nối thành từ",t_b:"Theo đường phát sáng: nhấn một ô rồi kéo qua các ô liền kề để ghép thành từ.",
+      f_t:"Bạn làm được rồi! 🎉",f_b:"Giờ hãy tìm 3 từ còn lại. Mỗi ô chữ được dùng đúng một lần.",play:"Chơi",skip:"Bỏ qua"},
+  ko:{w_t:"Wend에 오신 것을 환영합니다",w_b:"보드에 3, 4, 5, 6글자 길이의 단어 4개가 숨어 있습니다.",start:"시작",
+      s_t:"찾을 단어 4개",s_b:"이 줄들이 찾을 단어입니다 — 글자당 한 칸, 짧은 것부터 긴 것까지.",next:"다음",
+      t_t:"드래그해서 단어 잇기",t_b:"빛나는 경로를 따라가세요: 타일을 누른 뒤 인접한 타일을 가로질러 끌어 단어를 만드세요.",
+      f_t:"잘하셨어요! 🎉",f_b:"이제 나머지 단어 3개를 찾으세요. 모든 글자 타일은 정확히 한 번씩 사용됩니다.",play:"플레이",skip:"건너뛰기"},
+  zh:{w_t:"欢迎来到 Wend",w_b:"棋盘上藏着 4 个单词——长度分别为 3、4、5、6 个字母。",start:"开始",
+      s_t:"要找的四个单词",s_b:"这几行就是要找的单词——每个字母一格，由短到长。",next:"下一步",
+      t_t:"拖动连出单词",t_b:"沿着发光的路径：按住一个字块，再拖过相邻的字块连成单词。",
+      f_t:"你学会了！🎉",f_b:"现在找出其余三个单词。每个字母块只用一次。",play:"开始玩",skip:"跳过"},
+  ja:{w_t:"Wend へようこそ",w_b:"ボードには3・4・5・6文字の単語が4つ隠れています。",start:"スタート",
+      s_t:"見つける4つの単語",s_b:"これらの行が見つける単語です——1文字につき1マス、短い順に並びます。",next:"次へ",
+      t_t:"なぞって単語を作る",t_b:"光っている道をたどり、タイルを押して隣り合うタイルをなぞって単語を作ります。",
+      f_t:"できました！🎉",f_b:"残り3つの単語を見つけましょう。すべての文字タイルをちょうど一度ずつ使います。",play:"プレイ",skip:"スキップ"},
+  ar:{w_t:"مرحباً بك في Wend",w_b:"تختبئ على اللوح 4 كلمات — بأطوال 3 و4 و5 و6 أحرف.",start:"ابدأ",
+      s_t:"الكلمات الأربع",s_b:"هذه الصفوف هي الكلمات المطلوبة — مربع لكل حرف، من الأقصر إلى الأطول.",next:"التالي",
+      t_t:"اسحب لتتبّع كلمة",t_b:"اتبع المسار المضيء: اضغط على مربع ثم اسحب عبر المربعات المتلاصقة لتكوين الكلمة.",
+      f_t:"أحسنت! 🎉",f_b:"الآن اعثر على الكلمات الثلاث الأخرى. يُستخدم كل مربع حرف مرة واحدة بالضبط.",play:"العب",skip:"تخطّي"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+const STEPS=[
+  {key:"welcome",target:null,                title:M.w_t,body:M.w_b,btn:M.start},
+  {key:"slots",  target:()=>$('slots'),pad:6,title:M.s_t,body:M.s_b,btn:M.next},
+  {key:"trace",  target:()=>cv,       pad:6, title:M.t_t,body:M.t_b,interactive:true},
+  {key:"finish", target:null,                title:M.f_t,body:M.f_b,btn:M.play}
+];
+
+function maybeStartTut(){
+  if(!TUT_ON)return;                       // feature flag off
+  if(localStorage.getItem(TUTKEY))return;   // already seen
+  if(lvl!==0||tutActive)return;             // only the very first Level 1
+  tutActive=true; tutStep=0; renderTut();
+}
+function setHole(rect,pad){
+  pad=pad||8; const h=$('tutHole');
+  $('tutBg').style.display='none'; h.style.display='block';
+  h.style.left=(rect.left-pad)+'px'; h.style.top=(rect.top-pad)+'px';
+  h.style.width=(rect.width+pad*2)+'px'; h.style.height=(rect.height+pad*2)+'px';
+}
+function placeCard(rect){
+  const card=$('tutCard'); card.classList.remove('above','below');
+  if(!rect){ card.style.top='50%'; card.style.transform='translate(-50%,-50%)'; return; }
+  card.style.transform='translateX(-50%)';
+  const ch=card.offsetHeight, below=rect.top<innerHeight*0.5;
+  let top=below?rect.bottom+16:rect.top-16-ch;
+  card.classList.add(below?'below':'above');
+  card.style.top=Math.max(12,Math.min(top,innerHeight-ch-12))+'px';
+}
+function renderTut(){
+  const s=STEPS[tutStep], tut=$('tut');
+  tut.classList.add('on'); tut.classList.toggle('block',!s.interactive); // interactive steps let touch/swipe through
+  if(LANG==='ar')$('tutCard').dir='rtl';
+  $('tutTitle').textContent=s.title; $('tutBody').textContent=s.body;
+  $('tutSkip').textContent=M.skip;
+  const next=$('tutNext');
+  if(s.interactive){ next.style.display='none'; }
+  else { next.style.display='inline-block'; next.textContent=s.btn; }
+  const tgt=s.target&&s.target();
+  if(tgt){ const r=tgt.getBoundingClientRect(); setHole(r,s.pad); placeCard(r); }
+  else { $('tutHole').style.display='none'; $('tutBg').style.display='block'; placeCard(null); }
+  if(s.interactive && !tutRAF) tutRAF=requestAnimationFrame(tutAnimate);
+}
+function nextTut(){ tutStep++; if(tutStep>=STEPS.length){ endTut(); return; } renderTut(); }
+function endTut(){
+  tutActive=false; if(tutRAF){cancelAnimationFrame(tutRAF);tutRAF=0;}
+  localStorage.setItem(TUTKEY,'1'); $('tut').classList.remove('on'); draw();
+}
+$('tutNext').onclick=nextTut;
+$('tutSkip').onclick=endTut;
+
+function tutAnimate(ts){
+  tutT=ts||0;
+  if(!(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='trace')){ tutRAF=0; return; }
+  draw(); tutRAF=requestAnimationFrame(tutAnimate);
+}
+// Glowing pulse + a looping "fingertip" gesture along Level 1's 3-letter word.
+function drawTraceHint(){
+  const path=L.paths[0]; if(!path||!path.length)return;
+  const t=tutT/1000, sel=getCss('--sel');
+  const pulse=0.4+0.4*(0.5+0.5*Math.sin(t*3.4));
+  ctx.save();
+  ctx.strokeStyle=sel; ctx.lineWidth=3; ctx.globalAlpha=pulse;
+  for(const [r,c] of path){ roundRect(ox+c*cell, oy+r*cell, cell, cell, cell*0.2); ctx.stroke(); }
+  ctx.restore();
+  const pts=path.map(([r,c])=>[ox+c*cell+cell/2, oy+r*cell+cell/2]);
+  const seg=[]; let total=0;
+  for(let i=1;i<pts.length;i++){ const d=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]); seg.push(d); total+=d; }
+  const period=1.8, hold=0.6, ph=t%(period+hold);
+  let prog=ph<period?ph/period:1; prog=prog<1?(1-Math.cos(prog*Math.PI))/2:1;
+  let dist=prog*total, idx=0;
+  while(idx<seg.length && dist>seg[idx]){ dist-=seg[idx]; idx++; }
+  let cur;
+  if(idx>=seg.length) cur=pts[pts.length-1];
+  else { const f=seg[idx]?dist/seg[idx]:0; cur=[pts[idx][0]+(pts[idx+1][0]-pts[idx][0])*f, pts[idx][1]+(pts[idx+1][1]-pts[idx][1])*f]; }
+  ctx.save();
+  ctx.strokeStyle=sel; ctx.globalAlpha=0.45; ctx.lineWidth=cell*0.30; ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<=idx;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+  ctx.lineTo(cur[0],cur[1]); ctx.stroke();
+  ctx.restore();
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cur[0],cur[1],cell*0.20,0,7); ctx.fillStyle=sel; ctx.fill();
+  ctx.lineWidth=3; ctx.strokeStyle='#fff'; ctx.stroke();
+  ctx.restore();
+}
+</script>
+</body>
+</html>

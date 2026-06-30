@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Lật thẻ thương hiệu</title>
+<style>
+  /* Brand variables — overridden at runtime from theme.json (see THEME below). */
+  :root{
+    --primary:#6F4E37; --accent:#C8A06B; --bg:#FFF8F0; --card:#ffffff;
+    --ink:#2b231c; --muted:#8a7d6e; --bd:#e7dccd; --good:#2e9e5b; --gold:#e0b015;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overscroll-behavior:none;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  #app{max-width:560px;margin:0 auto;min-height:100%;padding:max(16px,var(--saa-top, env(safe-area-inset-top, 0px))) 16px max(16px,var(--saa-bottom, env(safe-area-inset-bottom, 0px)));
+    display:flex;flex-direction:column;gap:14px}
+  .screen{display:none;flex-direction:column;gap:14px;flex:1}
+  .screen.on{display:flex}
+  .center{align-items:center;justify-content:center;text-align:center}
+
+  .logo{font-size:46px;line-height:1}
+  h1{font-size:24px;margin:6px 0 0}
+  h2{font-size:21px;margin:0}
+  .sub{color:var(--muted);font-size:14.5px;line-height:1.5;margin:0;max-width:340px}
+
+  .btn{padding:14px 22px;border-radius:999px;border:0;background:var(--primary);color:#fff;
+    font-weight:800;font-size:16px;cursor:pointer;transition:transform .08s,opacity .15s}
+  .btn:active{transform:scale(.97)}
+  .btn.ghost{background:transparent;color:var(--primary);border:1.5px solid var(--bd)}
+  .btn.block{width:100%}
+  .btn:disabled{opacity:.45;cursor:default}
+  .row{display:flex;gap:10px;width:100%}
+
+  .diffs{display:flex;gap:10px;width:100%;max-width:360px}
+  .diff{flex:1;padding:14px 8px;border-radius:16px;border:1.5px solid var(--bd);background:var(--card);
+    cursor:pointer;text-align:center;transition:border-color .15s,transform .08s}
+  .diff:active{transform:scale(.97)}
+  .diff.sel{border-color:var(--primary);box-shadow:0 0 0 3px rgba(127,127,127,.35);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 18%,transparent)}
+  .diff b{display:block;font-size:16px}
+  .diff span{font-size:12.5px;color:var(--muted)}
+
+  /* HUD */
+  .hud{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 14px;font-weight:800;font-size:14px}
+  .pill small{color:var(--muted);font-weight:600}
+  .combo{color:var(--accent)}
+
+  /* Card grid */
+  .grid{display:grid;gap:10px;width:100%;perspective:900px;flex:1;align-content:center}
+  .card{position:relative;aspect-ratio:3/4;cursor:pointer;transform-style:preserve-3d;
+    transition:transform .28s cubic-bezier(.4,.2,.2,1)}
+  .card.flip{transform:rotateY(180deg)}
+  .card.matched{cursor:default}
+  .card .face{position:absolute;top:0;right:0;bottom:0;left:0;border-radius:14px;display:flex;align-items:center;justify-content:center;
+    backface-visibility:hidden;-webkit-backface-visibility:hidden;font-size:clamp(22px,8vw,40px);overflow:hidden}
+  .card .back{background:var(--primary);background:linear-gradient(145deg,var(--primary),color-mix(in srgb,var(--primary) 60%,#000));
+    color:#fff;font-size:clamp(18px,6vw,26px);font-weight:900;border:2px solid rgba(255,255,255,.25);border:2px solid color-mix(in srgb,#fff 25%,transparent)}
+  .card .front{background:var(--card);border:1.5px solid var(--bd);transform:rotateY(180deg)}
+  .card.gold .front{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}
+  .card.matched .front{opacity:.55}
+  .card.matched{animation:pop .3s ease}
+  @keyframes pop{0%{transform:rotateY(180deg) scale(1)}50%{transform:rotateY(180deg) scale(1.07)}100%{transform:rotateY(180deg) scale(1)}}
+
+  .toast{min-height:40px;background:var(--card);border:1px solid var(--bd);border-radius:12px;
+    padding:10px 14px;font-size:14px;color:var(--muted);display:flex;align-items:center;gap:8px;
+    opacity:0;transition:opacity .2s}
+  .toast.on{opacity:1}
+  .toast b{color:var(--ink)}
+
+  /* Win + reward */
+  .big{font-size:40px}
+  .stat{display:flex;justify-content:space-between;width:100%;max-width:300px;padding:6px 0;border-bottom:1px dashed var(--bd)}
+  .stat span{color:var(--muted)}.stat b{font-size:17px}
+  .reward{width:100%;max-width:320px;border:2px dashed var(--gold);border-radius:16px;padding:16px;background:color-mix(in srgb,var(--gold) 10%,transparent)}
+  .reward .code{font-size:26px;font-weight:900;letter-spacing:2px;color:var(--primary);font-family:ui-monospace,Menlo,monospace}
+  .reward.locked .code{filter:blur(7px);user-select:none}
+  .reward small{color:var(--muted)}
+  .lead{width:100%;max-width:320px;display:flex;flex-direction:column;gap:10px}
+  .lead input{padding:13px 16px;border-radius:12px;border:1.5px solid var(--bd);font-size:16px;background:var(--card);color:var(--ink)}
+  .lead input:focus{outline:0;border-color:var(--primary)}
+  .err{color:#d23;font-size:13px;min-height:16px;margin:0}
+
+  /* Leaderboard */
+  .lb{width:100%;max-width:360px;display:flex;flex-direction:column;gap:6px}
+  .lb .r{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--bd);border-radius:12px;background:var(--card)}
+  .lb .r.me{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,transparent)}
+  .lb .rk{width:28px;font-weight:900;color:var(--accent)}
+  .lb .nm{flex:1;font-weight:700}
+  .lb .sc{font-weight:800;font-variant-numeric:tabular-nums}
+  .lb .empty{color:var(--muted);text-align:center;padding:20px}
+  .count{color:var(--muted);font-size:13px}
+  .brandbar{display:flex;align-items:center;gap:8px;justify-content:center;color:var(--muted);font-size:13px;font-weight:700}
+
+  /* Tutorial overlay */
+  .tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;align-items:center;justify-content:center;padding:20px;
+    background:rgba(0,0,0,.5);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+  .tut.on{display:flex;animation:fade .2s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .tut-card{position:relative;width:100%;max-width:340px;background:var(--card);border-radius:22px;
+    padding:30px 24px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  .tut-skip{position:absolute;top:14px;right:16px;border:0;background:transparent;color:var(--muted);
+    font-size:13px;font-weight:700;cursor:pointer;padding:4px}
+  .tut-emoji{font-size:64px;line-height:1;margin-bottom:6px;animation:bob 1.6s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  .tut-title{font-size:21px;margin:8px 0 6px;color:var(--ink)}
+  .tut-text{font-size:15px;line-height:1.55;color:var(--muted);margin:0 0 18px;min-height:66px}
+  .tut-text b{color:var(--ink)}
+  .tut-dots{display:flex;gap:8px;justify-content:center;margin-bottom:18px}
+  .tut-dots i{width:8px;height:8px;border-radius:999px;background:var(--bd);transition:width .2s,background .2s}
+  .tut-dots i.on{width:22px;background:var(--primary)}
+@supports not (inset:0){#app>*+*{margin-top:14px}.screen>*+*{margin-top:14px}.row>*+*{margin-left:10px}.diffs>*+*{margin-left:10px}.lead>*+*{margin-top:10px}.lb>*+*{margin-top:6px}.lb .r>*+*{margin-left:10px}}@supports not (aspect-ratio:1){.card{height:0;padding-bottom:133.333%}}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ START ============ -->
+  <section id="s-start" class="screen on center">
+    <div class="logo" id="brandLogo">☕</div>
+    <h1 id="brandName">Lật thẻ — Đoán sản phẩm</h1>
+    <p class="sub" id="brandTagline">Tìm hết các cặp để mở mã giảm giá. Càng ít lượt & càng nhanh, điểm càng cao!</p>
+    <div class="diffs" id="diffs">
+      <div class="diff sel" data-k="easy"><b>Dễ</b><span>4 × 4</span></div>
+      <div class="diff" data-k="medium"><b>Thường</b><span>6 × 4</span></div>
+      <div class="diff" data-k="hard"><b>Khó</b><span>6 × 6</span></div>
+    </div>
+    <button class="btn block" id="btnPlay" style="max-width:360px">▶  Chơi ngay</button>
+    <div class="row" style="max-width:360px">
+      <button class="btn ghost" id="btnHowTo" style="flex:1">❔ Cách chơi</button>
+      <button class="btn ghost" id="btnLbFromStart" style="flex:1">🏆 Xếp hạng</button>
+    </div>
+  </section>
+
+  <!-- ============ GAME ============ -->
+  <section id="s-game" class="screen">
+    <div class="hud">
+      <span class="pill"><small>⏱</small> <span id="hTime">00:00</span></span>
+      <span class="pill"><small>Lượt</small> <span id="hMoves">0</span></span>
+      <span class="pill combo" id="hCombo">Combo ×0</span>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="toast" id="toast"></div>
+    <button class="btn ghost" id="btnQuit">← Thoát</button>
+  </section>
+
+  <!-- ============ WIN ============ -->
+  <section id="s-win" class="screen center">
+    <div class="big">🎉</div>
+    <h2>Hoàn thành!</h2>
+    <div class="stat"><span>Điểm của bạn</span><b id="wScore">0</b></div>
+    <div class="stat"><span>Thời gian</span><b id="wTime">00:00</b></div>
+    <div class="stat"><span>Số lượt</span><b id="wMoves">0</b></div>
+    <div class="reward locked" id="reward">
+      <small>🎁 Phần thưởng của bạn</small>
+      <div class="code" id="rCode">BRAND10</div>
+      <small id="rLabel">Giảm 10% cho đơn tiếp theo</small>
+    </div>
+    <form class="lead" id="leadForm">
+      <small style="color:var(--muted)">Nhập để lưu điểm & mở mã giảm giá:</small>
+      <input id="leadInput" inputmode="email" placeholder="Email hoặc số điện thoại" autocomplete="off" />
+      <p class="err" id="leadErr"></p>
+      <button class="btn block" type="submit" id="btnClaim">Nhận quà & lưu điểm</button>
+    </form>
+    <div class="row" style="max-width:320px">
+      <button class="btn ghost" id="btnReplay" style="flex:1">🔁 Chơi lại</button>
+      <button class="btn ghost" id="btnShare" style="flex:1">📤 Thách bạn</button>
+    </div>
+    <button class="btn ghost" id="btnLbFromWin" style="max-width:320px">🏆 Xem xếp hạng</button>
+  </section>
+
+  <!-- ============ LEADERBOARD ============ -->
+  <section id="s-lb" class="screen center">
+    <h2>🏆 Xếp hạng tuần</h2>
+    <p class="count" id="lbReset">Reset mỗi thứ Hai • Top 3 nhận quà thật</p>
+    <div class="lb" id="lbList"></div>
+    <button class="btn block" id="btnPlayFromLb" style="max-width:360px">▶ Chơi ngay</button>
+    <button class="btn ghost" id="btnBack" style="max-width:360px">← Về trang đầu</button>
+  </section>
+
+  <div class="brandbar">Powered by <span id="brandFoot">YourBrand</span></div>
+</div>
+
+<!-- ============ TUTORIAL ============ -->
+<div class="tut" id="tut" aria-hidden="true">
+  <div class="tut-card">
+    <button class="tut-skip" id="tutSkip">Bỏ qua</button>
+    <div class="tut-emoji" id="tutEmoji">🃏</div>
+    <h3 class="tut-title" id="tutTitle"></h3>
+    <p class="tut-text" id="tutText"></p>
+    <div class="tut-dots" id="tutDots"></div>
+    <button class="btn block" id="tutNext">Tiếp →</button>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   Lật thẻ thương hiệu — game marketing tự chứa (offline, không phụ thuộc).
+   - Theme tách rời: nạp ./theme.json khi có; nếu không, dùng THEME mặc định.
+   - Lead + leaderboard: lưu localStorage (prototype). Production → đổi sang
+     submitLead()/saveScore() gọi API Supabase.
+   ===================================================================== */
+
+// -------- Theme mặc định (demo cà phê). Ghi đè bằng theme.json --------
+const THEME = {
+  brand: "BrewLab",
+  logo: "☕",
+  name: "Lật thẻ — Đoán sản phẩm",
+  tagline: "Tìm hết các cặp để mở mã giảm giá. Càng ít lượt & càng nhanh, điểm càng cao!",
+  colors: { primary:"#6F4E37", accent:"#C8A06B", bg:"#FFF8F0", card:"#ffffff", ink:"#2b231c", muted:"#8a7d6e", bd:"#e7dccd", gold:"#e0b015" },
+  reward: { code:"BREW10", label:"Giảm 10% cho đơn tiếp theo" },
+  goldenPair: true,
+  // Mỗi phần tử = 1 loại thẻ (1 cặp). img có thể là emoji hoặc URL ảnh.
+  pairs: [
+    { img:"☕", usp:"Espresso — 100% Arabica, đậm vị" },
+    { img:"🥛", usp:"Latte — sữa tươi mịn, ít đắng" },
+    { img:"🧊", usp:"Cold Brew — ủ lạnh 18h, êm dịu" },
+    { img:"🍫", usp:"Mocha — cacao Bỉ nguyên chất" },
+    { img:"🍮", usp:"Affogato — kem vani + shot nóng" },
+    { img:"🥐", usp:"Croissant — bơ Pháp, nướng mỗi sáng" },
+    { img:"🫖", usp:"Trà Ô Long — hái tay Bảo Lộc" },
+    { img:"🍰", usp:"Tiramisu — công thức Ý chuẩn vị" },
+    { img:"🧇", usp:"Waffle — giòn ngoài, mềm trong" },
+    { img:"🍪", usp:"Cookie — socola chip nhập khẩu" },
+    { img:"🥧", usp:"Apple Pie — táo nướng quế" },
+    { img:"🍵", usp:"Matcha — bột trà xanh Uji" },
+    { img:"🧁", usp:"Cupcake — kem tươi không béo ngậy" },
+    { img:"🍩", usp:"Donut — phủ đường tự nhiên" },
+    { img:"🥤", usp:"Soda Ý — vị trái cây thật" },
+    { img:"🍯", usp:"Honey Latte — mật ong rừng" },
+    { img:"🌰", usp:"Hazelnut — hạt dẻ rang thơm" },
+    { img:"🫐", usp:"Blueberry — việt quất tươi" }
+  ]
+};
+
+const LEVELS = {
+  easy:   { cols:4, rows:4, base:1000 },   // 8 cặp
+  medium: { cols:4, rows:6, base:2000 },   // 12 cặp
+  hard:   { cols:6, rows:6, base:4000 },   // 18 cặp
+};
+const MOVE_PENALTY = 15, TIME_PENALTY = 4, COMBO_BONUS = 120;
+
+// -------- State --------
+let cfg = THEME;
+let diff = "easy";
+let deck = [];            // {pairId, img, usp, gold}
+let first = null;         // index of first flipped card
+let busy = false;         // locked during mismatch flip-back
+let moves = 0, combo = 0, maxCombo = 0, matched = 0;
+let t0 = 0, tick = null;
+let lastResult = null;    // {score, time, moves}
+
+const $ = id => document.getElementById(id);
+const screens = ["start","game","win","lb"];
+function show(name){ screens.forEach(s=>$("s-"+s).classList.toggle("on", s===name)); }
+
+// -------- Theme apply --------
+async function loadTheme(){
+  try{
+    const r = await fetch("./theme.json", {cache:"no-store"});
+    if(r.ok) cfg = Object.assign({}, THEME, await r.json());
+  }catch(_){ /* dùng mặc định */ }
+  const c = cfg.colors||{};
+  for(const [k,v] of Object.entries(c)) document.documentElement.style.setProperty("--"+k, v);
+  $("brandLogo").textContent = cfg.logo || "🎴";
+  $("brandName").textContent = cfg.name || "Lật thẻ";
+  $("brandTagline").textContent = cfg.tagline || "";
+  $("brandFoot").textContent = cfg.brand || "YourBrand";
+  $("rCode").textContent = (cfg.reward && cfg.reward.code) || "REWARD";
+  $("rLabel").textContent = (cfg.reward && cfg.reward.label) || "";
+}
+
+// -------- Build & start a round --------
+function gbEmit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id='memory'; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+function startGame(){
+  gbEmit('game_start', { difficulty: diff });
+  const L = LEVELS[diff];
+  const need = (L.cols*L.rows)/2;
+  const pool = cfg.pairs.slice(0, need);
+  if(pool.length < need){ // không đủ thẻ → lặp lại cho đủ
+    while(pool.length < need) pool.push(cfg.pairs[pool.length % cfg.pairs.length]);
+  }
+  deck = [];
+  pool.forEach((p,i)=>{ for(let k=0;k<2;k++) deck.push({pairId:i, img:p.img, usp:p.usp, gold:false}); });
+  // chọn 1 cặp vàng
+  if(cfg.goldenPair){
+    const gp = Math.floor(rnd()*need);
+    deck.forEach(d=>{ if(d.pairId===gp) d.gold=true; });
+  }
+  shuffle(deck);
+
+  first=null; busy=false; moves=0; combo=0; maxCombo=0; matched=0;
+  renderGrid(L);
+  setToast("Lật 2 thẻ để tìm cặp giống nhau.");
+  $("hMoves").textContent = "0";
+  $("hCombo").textContent = "Combo ×0";
+  t0 = now(); $("hTime").textContent="00:00";
+  clearInterval(tick); tick = setInterval(()=>{ $("hTime").textContent = fmt(elapsed()); }, 250);
+  show("game");
+}
+
+function renderGrid(L){
+  const g = $("grid");
+  g.style.gridTemplateColumns = `repeat(${L.cols},1fr)`;
+  g.innerHTML = "";
+  deck.forEach((d,i)=>{
+    const card = document.createElement("div");
+    card.className = "card" + (d.gold ? " gold":"");
+    card.dataset.i = i;
+    const back = document.createElement("div");
+    back.className = "face back";
+    back.textContent = cfg.logo || "★";
+    const front = document.createElement("div");
+    front.className = "face front";
+    front.textContent = d.img;
+    card.appendChild(back); card.appendChild(front);
+    card.addEventListener("click", ()=>flip(i));
+    g.appendChild(card);
+  });
+}
+
+function cardEl(i){ return $("grid").children[i]; }
+
+function flip(i){
+  if(busy) return;
+  const d = deck[i], el = cardEl(i);
+  if(el.classList.contains("matched") || el.classList.contains("flip")) return;
+  el.classList.add("flip");
+
+  if(first===null){ first = i; return; }
+  if(first===i) return;
+
+  moves++; $("hMoves").textContent = String(moves);
+  const a = deck[first], b = deck[i];
+
+  if(a.pairId === b.pairId){
+    // trùng
+    combo++; maxCombo = Math.max(maxCombo, combo);
+    $("hCombo").textContent = "Combo ×" + combo;
+    cardEl(first).classList.add("matched");
+    el.classList.add("matched");
+    setToast(`💡 <b>${b.usp}</b>`);
+    matched++;
+    const wasGold = a.gold;
+    first = null;
+    if(wasGold) setToast("⭐ <b>Cặp vàng!</b> Mã giảm giá đã được mở khóa.");
+    if(matched === deck.length/2) setTimeout(win, 450);
+  }else{
+    // sai → úp lại
+    combo = 0; $("hCombo").textContent = "Combo ×0";
+    busy = true;
+    const f = first; first = null;
+    setTimeout(()=>{
+      cardEl(f).classList.remove("flip");
+      el.classList.remove("flip");
+      busy = false;
+    }, 850);
+  }
+}
+
+function win(){
+  clearInterval(tick);
+  const L = LEVELS[diff];
+  const secs = Math.round(elapsed()/1000);
+  const minMoves = deck.length/2;
+  let score = L.base
+    - MOVE_PENALTY * Math.max(0, moves - minMoves)
+    - TIME_PENALTY * secs
+    + COMBO_BONUS * maxCombo;
+  score = Math.max(0, Math.round(score));
+  lastResult = { score, time:secs, moves };
+  gbEmit('game_over', { score: score, moves: moves, duration_ms: secs*1000 });
+
+  $("wScore").textContent = score.toLocaleString("vi-VN");
+  $("wTime").textContent = fmt(secs*1000);
+  $("wMoves").textContent = String(moves);
+  // reset form/reward về trạng thái khóa
+  $("reward").classList.add("locked");
+  $("leadForm").style.display = "flex";
+  $("leadInput").value = ""; $("leadErr").textContent = "";
+  show("win");
+}
+
+// -------- Lead capture (prototype: localStorage) --------
+function submitLead(contact, score){
+  // PRODUCTION: thay bằng POST tới Supabase (bảng leads + scores).
+  const leads = JSON.parse(localStorage.getItem("mem.leads")||"[]");
+  leads.push({ contact, score, at: nowISO() });
+  localStorage.setItem("mem.leads", JSON.stringify(leads));
+  saveScore(nameFrom(contact), score);
+}
+function nameFrom(contact){
+  // ẩn bớt thông tin để hiển thị trên bảng xếp hạng
+  const s = String(contact).trim();
+  if(s.includes("@")) return s.split("@")[0].slice(0,3) + "***";
+  return s.slice(0,3) + "***" + s.slice(-2);
+}
+function saveScore(name, score){
+  const wk = weekKey();
+  const all = JSON.parse(localStorage.getItem("mem.scores")||"{}");
+  const arr = all[wk] || [];
+  arr.push({ name, score, me:true });
+  arr.forEach(x=>{ if(x!==arr[arr.length-1]) x.me=false; });
+  all[wk] = arr;
+  localStorage.setItem("mem.scores", JSON.stringify(all));
+}
+
+// -------- Leaderboard --------
+function seedIfEmpty(){
+  // Seed demo competitors once per week (independent of the player's own scores),
+  // so the board never looks empty in a demo. PRODUCTION: drop this — real scores
+  // come from the backend.
+  const wk = weekKey();
+  const seeded = JSON.parse(localStorage.getItem("mem.seeded")||"{}");
+  if(seeded[wk]) return;
+  const all = JSON.parse(localStorage.getItem("mem.scores")||"{}");
+  const names = ["Minh","Lan","Huy","Tú","Vy","Nam","An","Bảo","Chi","Đạt"];
+  const bots = names.map((n,i)=>({ name:n+"***", score: 4800 - i*230 - (i*i*7), me:false }));
+  all[wk] = (all[wk]||[]).concat(bots);
+  localStorage.setItem("mem.scores", JSON.stringify(all));
+  seeded[wk] = true;
+  localStorage.setItem("mem.seeded", JSON.stringify(seeded));
+}
+function renderLb(){
+  seedIfEmpty();
+  const wk = weekKey();
+  const all = JSON.parse(localStorage.getItem("mem.scores")||"{}");
+  const arr = (all[wk]||[]).slice().sort((a,b)=>b.score-a.score);
+  const list = $("lbList"); list.innerHTML = "";
+  if(!arr.length){ list.innerHTML = '<div class="empty">Chưa có ai chơi tuần này. Bạn là người đầu tiên!</div>'; return; }
+  const medal = ["🥇","🥈","🥉"];
+  arr.slice(0,12).forEach((x,i)=>{
+    const r = document.createElement("div");
+    r.className = "r" + (x.me?" me":"");
+    r.innerHTML = `<span class="rk">${medal[i]||("#"+(i+1))}</span>
+      <span class="nm">${x.me?"BẠN":esc(x.name)}</span>
+      <span class="sc">${x.score.toLocaleString("vi-VN")}</span>`;
+    list.appendChild(r);
+  });
+  $("lbReset").textContent = `Reset mỗi thứ Hai • Top 3 nhận quà thật • ${arr.length} người chơi`;
+}
+
+// -------- Share --------
+async function share(){
+  const sc = (lastResult && lastResult.score) || 0;
+  const text = `Mình vừa được ${sc.toLocaleString("vi-VN")} điểm ở game Lật thẻ ${cfg.brand}! Thử vượt qua mình nhé 👇`;
+  const url = location.href;
+  try{
+    if(navigator.share){ await navigator.share({title:cfg.name, text, url}); return; }
+  }catch(_){}
+  try{ await navigator.clipboard.writeText(text+" "+url); setToastOn("Đã copy link thách đấu!"); }
+  catch(_){ alert(text+"\n"+url); }
+}
+
+// -------- Helpers --------
+function now(){ return performance.now(); }
+function nowISO(){ const d=new Date(); return d.toISOString(); }
+function elapsed(){ return now()-t0; }
+function fmt(ms){ const s=Math.floor(ms/1000); return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0"); }
+function rnd(){ return Math.random(); }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } }
+function esc(s){ return String(s).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c])); }
+function weekKey(){ const d=new Date(); const onejan=new Date(d.getFullYear(),0,1);
+  const wk=Math.ceil((((d-onejan)/86400000)+onejan.getDay()+1)/7); return d.getFullYear()+"-W"+wk; }
+let toastTimer=null;
+function setToast(html){ const t=$("toast"); t.innerHTML=html; t.classList.add("on"); }
+function setToastOn(msg){ setToast(msg); clearTimeout(toastTimer); toastTimer=setTimeout(()=>$("toast").classList.remove("on"),2200); }
+
+// -------- Tutorial (localized: locale from hub via ?lang=, else device) --------
+function pickLang(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+const LANG = pickLang();
+const TUT_I18N = {
+  en:[
+    { emoji:"🃏", title:"Flip & match", text:"Tap to flip a card. Find <b>2 matching cards</b> to make a pair. A wrong flip turns back over." },
+    { emoji:"⚡", title:"Score high", text:"<b>Fewer moves</b> and <b>faster</b> means a higher score. Match in a row to build a <b>Combo</b>!" },
+    { emoji:"🎁", title:"Unlock rewards & rank up", text:"Find all the pairs (and the <b>golden pair ⭐</b>) to unlock a <b>discount code</b>, then climb the <b>weekly leaderboard</b>." },
+  ],
+  vi:[
+    { emoji:"🃏", title:"Lật & ghép cặp", text:"Chạm để lật thẻ. Tìm <b>2 thẻ giống nhau</b> để ghép thành một cặp. Lật sai sẽ tự úp lại." },
+    { emoji:"⚡", title:"Ghi điểm cao", text:"Càng <b>ít lượt</b> và càng <b>nhanh</b>, điểm càng cao. Ghép đúng liên tiếp để cộng <b>Combo</b>!" },
+    { emoji:"🎁", title:"Mở quà & lên top", text:"Tìm hết các cặp (và <b>cặp vàng ⭐</b>) để mở <b>mã giảm giá</b>, rồi leo <b>bảng xếp hạng tuần</b>." },
+  ],
+  ko:[
+    { emoji:"🃏", title:"뒤집어 짝 맞추기", text:"카드를 탭해 뒤집으세요. <b>같은 카드 2장</b>을 찾아 짝을 맞춥니다. 틀리면 다시 뒤집힙니다." },
+    { emoji:"⚡", title:"높은 점수 얻기", text:"<b>적은 횟수</b>로 <b>빠르게</b> 할수록 점수가 높아집니다. 연속으로 맞춰 <b>콤보</b>를 쌓으세요!" },
+    { emoji:"🎁", title:"보상 잠금 해제 & 순위 올리기", text:"모든 짝(그리고 <b>황금 짝 ⭐</b>)을 찾아 <b>할인 코드</b>를 열고, <b>주간 순위표</b>를 올라가세요." },
+  ],
+  zh:[
+    { emoji:"🃏", title:"翻牌配对", text:"点按翻开卡片。找出<b>2 张相同的卡片</b>配成一对。翻错会自动翻回。" },
+    { emoji:"⚡", title:"刷高分", text:"<b>步数越少</b>、速度<b>越快</b>，分数越高。连续配对可累积<b>连击</b>！" },
+    { emoji:"🎁", title:"解锁奖励并冲榜", text:"找出所有对子（以及<b>金色对子 ⭐</b>）即可解锁<b>折扣码</b>，然后登上<b>每周排行榜</b>。" },
+  ],
+  ja:[
+    { emoji:"🃏", title:"めくってペア", text:"カードをタップしてめくります。<b>同じカード2枚</b>を見つけてペアにしましょう。間違えると裏に戻ります。" },
+    { emoji:"⚡", title:"ハイスコアを狙う", text:"<b>少ない手数</b>で<b>速い</b>ほど高得点。連続でそろえて<b>コンボ</b>を稼ごう！" },
+    { emoji:"🎁", title:"報酬を解放してランクアップ", text:"すべてのペア（と<b>金のペア ⭐</b>）を見つけて<b>割引コード</b>を解放し、<b>週間ランキング</b>を駆け上がろう。" },
+  ],
+  ar:[
+    { emoji:"🃏", title:"اقلب وطابِق", text:"انقر لقلب البطاقة. اعثر على <b>بطاقتين متطابقتين</b> لتكوين زوج. القلب الخاطئ يعود تلقائيًا." },
+    { emoji:"⚡", title:"سجّل نقاطًا عالية", text:"<b>عدد أقل من الحركات</b> و<b>أسرع</b> يعني نقاطًا أعلى. طابِق متتاليًا لبناء <b>كومبو</b>!" },
+    { emoji:"🎁", title:"افتح المكافآت وارتقِ", text:"اعثر على كل الأزواج (و<b>الزوج الذهبي ⭐</b>) لفتح <b>رمز خصم</b>، ثم تسلّق <b>لوحة الصدارة الأسبوعية</b>." },
+  ],
+};
+const TUT_UI = {
+  en:{skip:"Skip",next:"Next →",got:"Got it!",start:"▶ Start playing"},
+  vi:{skip:"Bỏ qua",next:"Tiếp →",got:"Đã hiểu!",start:"▶ Bắt đầu chơi"},
+  ko:{skip:"건너뛰기",next:"다음 →",got:"알겠어요!",start:"▶ 시작하기"},
+  zh:{skip:"跳过",next:"下一步 →",got:"明白了！",start:"▶ 开始游戏"},
+  ja:{skip:"スキップ",next:"次へ →",got:"わかった！",start:"▶ プレイ開始"},
+  ar:{skip:"تخطّي",next:"التالي →",got:"فهمت!",start:"▶ ابدأ اللعب"},
+};
+const TUT_STEPS = TUT_I18N[LANG] || TUT_I18N.en;
+const TL = TUT_UI[LANG] || TUT_UI.en;
+{ const sk=$("tutSkip"); if(sk) sk.textContent=TL.skip; if(LANG==="ar"){ const tb=$("tut"); if(tb) tb.dir="rtl"; } }
+let tutStep = 0, tutThenStart = false;
+function buildDots(){
+  $("tutDots").innerHTML = TUT_STEPS.map((_,i)=>`<i class="${i===tutStep?'on':''}"></i>`).join("");
+}
+function renderTut(){
+  const s = TUT_STEPS[tutStep];
+  $("tutEmoji").textContent = s.emoji;
+  $("tutTitle").textContent = s.title;
+  $("tutText").innerHTML = s.text;
+  $("tutNext").textContent = tutStep === TUT_STEPS.length-1
+    ? (tutThenStart ? TL.start : TL.got) : TL.next;
+  buildDots();
+}
+function openTutorial(thenStart){
+  tutThenStart = thenStart; tutStep = 0; renderTut();
+  $("tut").classList.add("on"); $("tut").setAttribute("aria-hidden","false");
+}
+function closeTutorial(){
+  $("tut").classList.remove("on"); $("tut").setAttribute("aria-hidden","true");
+  localStorage.setItem("mem.tutSeen","1");
+  if(tutThenStart){ tutThenStart = false; startGame(); }
+}
+$("tutNext").onclick = ()=>{ if(tutStep < TUT_STEPS.length-1){ tutStep++; renderTut(); } else closeTutorial(); };
+$("tutSkip").onclick = closeTutorial;
+function playOrTutor(){
+  if(localStorage.getItem("mem.tutSeen")) startGame();
+  else openTutorial(true);   // lần đầu: hiện tutorial rồi vào game
+}
+
+// -------- Wire up UI --------
+$("diffs").addEventListener("click", e=>{
+  const el = e.target.closest(".diff"); if(!el) return;
+  diff = el.dataset.k;
+  [...$("diffs").children].forEach(c=>c.classList.toggle("sel", c===el));
+});
+$("btnPlay").onclick = playOrTutor;
+$("btnHowTo").onclick = ()=> openTutorial(false);   // mở lại tutorial, không tự vào game
+$("btnPlayFromLb").onclick = startGame;
+$("btnReplay").onclick = startGame;
+$("btnQuit").onclick = ()=>{ clearInterval(tick); show("start"); };
+$("btnBack").onclick = ()=> show("start");
+$("btnLbFromStart").onclick = ()=>{ renderLb(); show("lb"); };
+$("btnLbFromWin").onclick = ()=>{ renderLb(); show("lb"); };
+$("btnShare").onclick = share;
+$("leadForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  const v = $("leadInput").value.trim();
+  const okEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  const okPhone = /^[0-9+\-\s]{8,}$/.test(v);
+  if(!okEmail && !okPhone){ $("leadErr").textContent = "Nhập email hoặc số điện thoại hợp lệ."; return; }
+  $("leadErr").textContent = "";
+  submitLead(v, (lastResult && lastResult.score) || 0);
+  $("reward").classList.remove("locked");      // mở khóa mã
+  $("leadForm").style.display = "none";
+  setToastOn("Đã lưu! Mã giảm giá của bạn đã mở khóa.");
+});
+
+// -------- Boot --------
+loadTheme().then(()=> show("start"));
+</script>
+</body>
+</html>

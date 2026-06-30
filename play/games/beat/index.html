@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<title>Beat</title>
+<style>
+  :root { --bg:#0e1116; --fg:#f4f6fb; --accent:#7c5cff; --tile:#111722; --miss:#ff5470; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; overflow:hidden; }
+  #wrap { position:fixed; inset:0; display:flex; flex-direction:column; }
+  canvas { flex:1; display:block; width:100%; touch-action:none; }
+
+  .overlay { position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:18px; text-align:center;
+    background:rgba(14,17,22,.86); backdrop-filter:blur(6px); padding:24px; z-index:5; }
+  .overlay.hidden { display:none; }
+  .overlay h1 { margin:0; font-size:34px; letter-spacing:1px; }
+  .overlay h1 span { color:var(--accent); }
+  .overlay p { margin:0; opacity:.7; font-size:15px; max-width:300px; line-height:1.5; }
+  .btn { background:var(--accent); color:#fff; border:0; border-radius:14px;
+    padding:15px 30px; font-size:17px; font-weight:600; cursor:pointer; min-width:200px; }
+  .btn.ghost { background:rgba(255,255,255,.08); }
+  .stat { font-size:46px; font-weight:700; }
+  .stat small { display:block; font-size:13px; opacity:.6; font-weight:400; letter-spacing:1px; }
+  .levrow { display:flex; align-items:center; gap:14px; }
+  .levrow button { width:46px; height:46px; border-radius:12px; border:0; font-size:22px;
+    background:rgba(255,255,255,.1); color:#fff; cursor:pointer; }
+
+  #hud { position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between;
+    padding:14px 18px; font-size:15px; font-weight:600; pointer-events:none; z-index:3;
+    padding-top:calc(14px + env(safe-area-inset-top)); }
+  #hud .pill { background:rgba(0,0,0,.35); padding:5px 12px; border-radius:20px; }
+
+  /* In-play guided-tutorial instruction banner (the "act" step runs over the live game) */
+  #tutBanner { position:absolute; left:50%; transform:translateX(-50%); top:16%; z-index:4;
+    background:rgba(124,92,255,.92); color:#fff; padding:10px 18px; border-radius:22px;
+    font-size:15px; font-weight:600; box-shadow:0 8px 24px rgba(0,0,0,.35); pointer-events:none;
+    max-width:80%; text-align:center; animation:tutPulse 1.4s ease-in-out infinite; }
+  #tutBanner.hidden { display:none; }
+  @keyframes tutPulse { 0%,100%{ transform:translateX(-50%) scale(1); } 50%{ transform:translateX(-50%) scale(1.05); } }
+
+  #themeGrid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; width:100%; max-width:320px; }
+  .swatch { border:2px solid transparent; border-radius:14px; padding:12px; cursor:pointer;
+    display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
+  .swatch.sel { border-color:#fff; }
+  .swatch .dots { display:flex; gap:6px; }
+  .swatch .dots i { width:18px; height:18px; border-radius:50%; display:block; }
+  .swatch span { font-size:13px; font-weight:600; color:#fff; }
+  .seclabel { font-size:12px; letter-spacing:1px; text-transform:uppercase; opacity:.55; align-self:flex-start; margin-top:4px; }
+  #ovSettings { justify-content:flex-start; padding-top:14vh; gap:12px; overflow:auto; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+  <div id="hud" class="hidden"><span class="pill" id="hL"></span><span class="pill" id="hR"></span></div>
+
+  <!-- home: Endless is the default — one big Play button -->
+  <div class="overlay" id="ovStart">
+    <h1>BE<span>AT</span></h1>
+    <button class="btn" id="bPlay">Play</button>
+    <button class="btn ghost" id="bSettings">⚙ <span id="tSettings">Settings</span></button>
+  </div>
+
+  <!-- by-level picker (each level is a different song); reached from Settings -->
+  <div class="overlay hidden" id="ovLevels">
+    <h1 id="tLevelsTitle">Levels</h1>
+    <div class="levrow">
+      <button id="lPrev">‹</button>
+      <div class="stat" id="lNum">1<small id="tLevel">LEVEL</small></div>
+      <button id="lNext">›</button>
+    </div>
+    <button class="btn" id="bPlayLevel">Play</button>
+    <button class="btn ghost" id="bLevelsBack">Back</button>
+  </div>
+
+  <!-- settings: switch play mode + pick a colour theme -->
+  <div class="overlay hidden" id="ovSettings">
+    <h1 id="tSettingsTitle">Settings</h1>
+    <div class="seclabel" id="tModeLabel">Mode</div>
+    <button class="btn ghost" id="bModeEndless">Endless</button>
+    <button class="btn ghost" id="bModeLevel">By level</button>
+    <button class="btn ghost" id="bModeMusic">Music tracks</button>
+    <div class="seclabel" id="tThemeLabel">Theme</div>
+    <div id="themeGrid"></div>
+    <button class="btn ghost" id="bSettingsBack">Back</button>
+  </div>
+
+  <!-- online song levels (downloaded from the server) -->
+  <div class="overlay hidden" id="ovOnline">
+    <h1 id="tOnline">Music tracks</h1>
+    <div id="onlineList" style="width:100%;max-width:340px;max-height:46vh;overflow:auto;display:flex;flex-direction:column;gap:10px"></div>
+    <button class="btn ghost" id="bOnlineBack">Back</button>
+  </div>
+
+  <!-- game over / win -->
+  <div class="overlay hidden" id="ovEnd">
+    <h1 id="tEnd">Game over</h1>
+    <div class="stat" id="eScore">0<small id="tScore">SCORE</small></div>
+    <button class="btn" id="bNext">Next level</button>
+    <button class="btn ghost" id="bAgain">Play again</button>
+    <button class="btn ghost" id="bMenu">Menu</button>
+  </div>
+
+  <!-- Path-style first-run coachmark card (welcome → finish). Content is set in JS;
+       the middle "act" step happens over the LIVE game with the banner + glow below. -->
+  <div class="overlay hidden" id="ovTut">
+    <h1 id="tutTitle"></h1>
+    <p id="tutBody"></p>
+    <button class="btn" id="tutPrimary"></button>
+    <button class="btn ghost" id="tutSkip"></button>
+  </div>
+
+  <!-- guided-play instruction banner (shown during the first-run guided round) -->
+  <div id="tutBanner" class="hidden"></div>
+</div>
+
+<script src="track.js"></script>
+<script>
+"use strict";
+// ── params: ?lang=vi&tut=0 ─────────────────────────────────────────────────
+// NATIVE: injected by the iOS SDK (BeatGameSDK) before load — carries config +
+// the level DB (file:// can't fetch levels.json in a WKWebView). Web is unaffected.
+const NATIVE = (typeof window!=="undefined" && window.__BEAT_NATIVE) || null;
+const Q = new URLSearchParams(location.search);
+const LANG = ((Q.get("lang")) || (NATIVE && NATIVE.lang) || "en").slice(0,2);
+const I18N = {
+  en:{hint:"Tap the tile in its lane before it slides off the bottom. Each tap plays the next note.",
+      level:"LEVEL",play:"Play",back:"Back",endless:"Endless",levels:"Levels",
+      over:"Game over",win:"Level clear!",score:"SCORE",again:"Play again",menu:"Menu",combo:"combo",
+      online:"Music tracks",loading:"Loading…",empty:"No tracks yet. Add some in /design.",failed:"Couldn't load tracks.",
+      welcomeTitle:"Welcome to Beat",
+      welcomeBody:"Tap each tile in its own lane before it slides off the bottom. Every tap plays the next note.",
+      start:"Start",skip:"Skip",tapHint:"👇 Tap the glowing tile",
+      doneTitle:"You've got the rhythm! 🎉",doneBody:"The longer you last, the faster it gets. Keep tapping!",
+      next:"Next level",settings:"Settings",mode:"Play mode",theme:"Theme"},
+  vi:{hint:"Chạm ô ở đúng cột trước khi nó trôi khỏi màn hình. Mỗi lần chạm phát nốt nhạc kế tiếp.",
+      level:"MÀN",play:"Chơi",back:"Quay lại",endless:"Vô tận",levels:"Theo màn",
+      over:"Kết thúc",win:"Hoàn thành!",score:"ĐIỂM",again:"Chơi lại",menu:"Menu",combo:"chuỗi",
+      online:"Nhạc",loading:"Đang tải…",empty:"Chưa có bản nhạc. Thêm ở /design.",failed:"Không tải được.",
+      welcomeTitle:"Chào mừng đến với Beat",
+      welcomeBody:"Chạm vào ô ở đúng cột của nó trước khi nó trôi khỏi màn hình. Mỗi lần chạm phát nốt nhạc kế tiếp.",
+      start:"Bắt đầu",skip:"Bỏ qua",tapHint:"👇 Chạm ô đang sáng",
+      doneTitle:"Bạn đã bắt được nhịp! 🎉",doneBody:"Càng chơi lâu, nhịp càng nhanh. Cứ chạm theo nhịp nhé!",
+      next:"Màn tiếp",settings:"Cài đặt",mode:"Chế độ chơi",theme:"Màu sắc"},
+};
+const T = I18N[LANG] || I18N.en;
+
+// ── colour themes (Task 4) — youthful palettes the player can switch ─────────
+const THEMES = [
+  { name:"Violet",   bg:"#0e1116", fg:"#f4f6fb", accent:"#7c5cff", accentRGB:"124,92,255",  tile:"#161d29", tileActive:"#262f44", miss:"#ff5470", missRGB:"255,84,112" },
+  { name:"Sunset",   bg:"#1b1020", fg:"#fdeef2", accent:"#ff7a8a", accentRGB:"255,122,138", tile:"#2a1626", tileActive:"#3c2238", miss:"#ff5470", missRGB:"255,84,112" },
+  { name:"Ocean",    bg:"#07131b", fg:"#eafaff", accent:"#2dd4bf", accentRGB:"45,212,191",  tile:"#0f2630", tileActive:"#163945", miss:"#ff6b6b", missRGB:"255,107,107" },
+  { name:"Lime",     bg:"#0c1410", fg:"#f0ffe9", accent:"#a3e635", accentRGB:"163,230,53",  tile:"#16230f", tileActive:"#21351a", miss:"#fb7185", missRGB:"251,113,133" },
+  { name:"Mango",    bg:"#1a1206", fg:"#fff6e6", accent:"#fbbf24", accentRGB:"251,191,36",  tile:"#2a1e0c", tileActive:"#3c2c12", miss:"#f87171", missRGB:"248,113,113" },
+  { name:"Bubblegum",bg:"#14101c", fg:"#fbeeff", accent:"#c084fc", accentRGB:"192,132,252", tile:"#20182c", tileActive:"#2e2440", miss:"#fb7185", missRGB:"251,113,133" },
+];
+let themeIdx = 0;
+try{ themeIdx = Math.min(THEMES.length-1, Math.max(0, +(localStorage.getItem("beat.theme")||0))); }catch(e){}
+let THEME = THEMES[themeIdx];
+function applyTheme(idx){
+  themeIdx = idx; THEME = THEMES[idx];
+  try{ localStorage.setItem("beat.theme", String(idx)); }catch(e){}
+  const r = document.documentElement.style;
+  r.setProperty("--bg", THEME.bg); r.setProperty("--fg", THEME.fg);
+  r.setProperty("--accent", THEME.accent); r.setProperty("--tile", THEME.tile);
+  r.setProperty("--miss", THEME.miss);
+}
+applyTheme(themeIdx);
+
+// ── leaderboard / analytics bridge (Go Brain) ──────────────────────────────
+function emit(name, params){ params = params||{}; params.game_id="beat";
+  try{ if(window.parent && window.parent!==window){
+    window.parent.postMessage({__gb:1, name:name, params:params}, "*"); } }catch(e){}
+  // native bridge (iOS SDK) — forwards every event to the host app
+  try{ if(window.webkit && webkit.messageHandlers && webkit.messageHandlers.gbNative){
+    webkit.messageHandlers.gbNative.postMessage({name:name, params:params}); } }catch(e){} }
+function reportLevel(level, ms){ ms=Math.round(ms); emit("level_complete",{level:level,duration_ms:ms}); }
+
+// ── server bridge: read api base / key / token from shared localStorage (mirrors
+// games/sudoku/index.html GBLB), so the game can fetch online song levels. ──
+const API = {
+  base:function(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; },
+  key:function(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} },
+  token:function(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} },
+  headers:function(){ var h={'x-api-key':this.key()}; var t=this.token(); if(t) h['authorization']='Bearer '+t; return h; },
+};
+
+// ── Web Audio: player-driven melody (the Magic-Tiles feel) ──────────────────
+// Each correct tap sounds the next note of the level's tune, so playing the
+// level *is* playing its music. Synthesized (no audio files) → tiny bundle.
+let AC = null, MASTER = null, audioReady = false;
+function ac(){
+  if(!AC){
+    const C = window.AudioContext || window.webkitAudioContext;
+    if(!C) return null;
+    AC = new C();
+    MASTER = AC.createGain(); MASTER.gain.value = 0.9; MASTER.connect(AC.destination);
+  }
+  if(AC.state === "suspended") AC.resume();
+  return AC;
+}
+// Unlock audio on the first user gesture (required on iOS Safari / Capacitor):
+// resume the context and play one silent buffer so later notes are audible.
+function unlockAudio(){
+  const c = ac(); if(!c) return;
+  if(!audioReady){
+    try{ const b = c.createBuffer(1,1,22050); const s = c.createBufferSource();
+      s.buffer = b; s.connect(c.destination); s.start(0); }catch(e){}
+    audioReady = true;
+  }
+  if(c.state === "suspended") c.resume();
+}
+document.addEventListener("pointerdown", unlockAudio, true);
+document.addEventListener("touchstart", unlockAudio, {capture:true, passive:true});
+
+// C major-ish pool, degrees 0..7
+const FREQ = [261.63,293.66,329.63,349.23,392.00,440.00,493.88,523.25];
+// pentatonic subset for endless → always pleasant
+const PENTA = [0,1,2,4,5];
+function playNote(deg){
+  const c = ac(); if(!c) return;
+  const t = c.currentTime, f = FREQ[((deg%FREQ.length)+FREQ.length)%FREQ.length];
+  // two detuned oscillators through a lowpass → a warmer, more "instrument" tone
+  const o1 = c.createOscillator(), o2 = c.createOscillator();
+  const g = c.createGain(), lp = c.createBiquadFilter();
+  o1.type = "triangle"; o1.frequency.value = f;
+  o2.type = "sine";     o2.frequency.value = f*2;   // octave shimmer
+  lp.type = "lowpass";  lp.frequency.value = 2600;
+  const g2 = c.createGain(); g2.gain.value = 0.35;  // shimmer quieter
+  // ADSR-ish envelope so notes sing rather than click
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.40, t+0.010);
+  g.gain.exponentialRampToValueAtTime(0.18, t+0.10);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+0.70);
+  o1.connect(g); o2.connect(g2).connect(g); g.connect(lp).connect(MASTER);
+  o1.start(t); o2.start(t); o1.stop(t+0.75); o2.stop(t+0.75);
+}
+function thud(){ // miss sound
+  const c = ac(); if(!c) return;
+  const t = c.currentTime, o = c.createOscillator(), g = c.createGain();
+  o.type="sawtooth"; o.frequency.setValueAtTime(180,t); o.frequency.exponentialRampToValueAtTime(60,t+0.18);
+  g.gain.setValueAtTime(0.3,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.2);
+  o.connect(g).connect(MASTER||c.destination); o.start(t); o.stop(t+0.25);
+}
+
+// ── backing groove — a drum + bass pulse so there IS music to play along to.
+// It's locked to the falling tiles (driven by `scroll` in tick), so it stays in
+// time with them AND auto-accelerates with the endless speed ramp. Synthesized,
+// no audio files. ──
+function kick(t){
+  const c = ac(); if(!c) return;
+  const o=c.createOscillator(), g=c.createGain();
+  o.type="sine"; o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(50,t+0.12);
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.75,t+0.005); g.gain.exponentialRampToValueAtTime(0.0001,t+0.18);
+  o.connect(g).connect(MASTER||c.destination); o.start(t); o.stop(t+0.2);
+}
+function hat(t){ // short noise burst → an offbeat hi-hat tick
+  const c = ac(); if(!c) return;
+  const n=Math.floor(c.sampleRate*0.05), buf=c.createBuffer(1,n,c.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=Math.random()*2-1;
+  const s=c.createBufferSource(); s.buffer=buf;
+  const hp=c.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=7000;
+  const g=c.createGain(); g.gain.setValueAtTime(0.12,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.05);
+  s.connect(hp).connect(g).connect(MASTER||c.destination); s.start(t); s.stop(t+0.06);
+}
+function bass(t, deg){ // a low groove note under the kick (an octave below the melody pool)
+  const c = ac(); if(!c) return;
+  const f = FREQ[((deg%FREQ.length)+FREQ.length)%FREQ.length]/2;
+  const o=c.createOscillator(), g=c.createGain(), lp=c.createBiquadFilter();
+  o.type="sawtooth"; o.frequency.value=f; lp.type="lowpass"; lp.frequency.value=520;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.24,t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+0.34);
+  o.connect(lp).connect(g).connect(MASTER||c.destination); o.start(t); o.stop(t+0.4);
+}
+let lastBeat = 0;                                  // last beat index played (drives grooveBeat)
+function grooveBeat(bi){
+  const c = ac(); if(!c) return;
+  const now = c.currentTime, beatSec = speed>0 ? rowH/speed : 0.5;
+  kick(now);
+  if(bi % 2 === 0) bass(now, PENTA[(Math.abs((bi/2)|0))%PENTA.length]);   // bass on the downbeat
+  hat(now + Math.min(0.4, beatSec*0.5));                                   // hi-hat on the offbeat
+}
+
+// ── canvas + layout ─────────────────────────────────────────────────────────
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let W=0, H=0, DPR=1, LANES=4, laneW=0, rowH=0;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2.5);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  laneW = W/LANES; rowH = H/4.0;            // ~4 rows tall
+}
+window.addEventListener("resize", resize);
+
+// ── game state ───────────────────────────────────────────────────────────────
+const MODE = { MENU:0, PLAY:1, END:2 };
+let mode = MODE.MENU;
+let endless = false, level = 1;
+let DB = null;                              // levels.json
+let tiles = [];                            // {lane, deg} bottom-first (index 0 = first to tap)
+let next = 0;                              // index of next tile to tap
+let scroll = 0;                            // px scrolled (drives downward motion)
+let speed = 0;                             // px/s
+let score = 0, combo = 0, best = 0, startMs = 0, lastT = 0, alive = false;
+let flash = 0;                             // miss flash timer
+let tutorial = false;                      // first-run guided round (forgiving + glow)
+let paused = false;                        // freeze the loop while a coachmark card is up
+let tutTaps = 0;                           // taps completed during the guided round
+const TUT_TAPS = 4;                        // taps before the "you've got it" card
+const BANK = [                            // fallback melodies if levels.json missing
+  [0,0,4,4,5,5,4,3,3,2,2,1,1,0],
+  [2,1,0,1,2,2,2,1,1,1,2,4,4],
+  [2,2,3,4,4,3,2,1,0,0,1,2,2,1,1],
+];
+
+const bestKey = "beat.best";
+try{ best = +(localStorage.getItem(bestKey)||0); }catch(e){}
+
+// Levels: native injects them (no file:// fetch); web fetches the JSON.
+if(NATIVE && NATIVE.db){ DB = NATIVE.db; }
+else fetch("./levels.json").then(r=>r.ok?r.json():Promise.reject()).then(d=>{DB=d;}).catch(()=>{DB=null;});
+
+function bpmToSpeed(bpm){ return rowH * bpm / 60; }   // one 1-row tile per beat
+const LEAD_FRAC = 0.55;                                 // tiles start in the top half
+// Endless difficulty: the beat speeds up over time so tiles fall faster.
+const ENDLESS_ACCEL = ()=> rowH*0.06;                   // px/s² added each second
+const ENDLESS_TAP_BUMP = ()=> rowH*0.02;                // small bump per cleared tile
+
+// Stack tiles by row-height; each tile is a single tap (one row tall).
+function prepTiles(){
+  let off = 0;
+  for(const t of tiles){ t._h = rowH; t._off = off; t.done = false; off += t._h; }
+}
+
+function spawnRand(){ return { lane:(Math.random()*LANES)|0, deg:PENTA[(Math.random()*PENTA.length)|0] }; }
+function buildEndless(){
+  tiles = []; let prev=-1;
+  for(let i=0;i<6;i++){ const t=spawnRand(); if(t.lane===prev) t.lane=(t.lane+1)%LANES; prev=t.lane; tiles.push(t); }
+  prepTiles(); speed = bpmToSpeed(90);
+}
+function spawnEndless(){                       // append one tile, continuing the stack
+  const last = tiles[tiles.length-1];
+  const t = spawnRand(); if(last && t.lane===last.lane) t.lane=(t.lane+1)%LANES;
+  t._h = rowH; t._off = last ? last._off+last._h : 0; t.done = false;
+  tiles.push(t);
+}
+
+function buildLevel(n){                         // each level = a different song (melody + bpm)
+  let bpm = 100, raw = null;
+  if(DB && DB.levels && DB.levels[n-1]){ const L = DB.levels[n-1]; bpm = L.bpm; raw = L.tiles; }
+  if(!raw){ // fallback
+    const mel = BANK[(n-1)%BANK.length]; raw = mel.map(d=>[(Math.random()*LANES)|0,d]); bpm = 90 + n*4;
+  }
+  tiles = raw.map(t=>({lane:t[0], deg:t[1]}));   // ignore any legacy 3rd element (units) → all single taps
+  prepTiles(); speed = bpmToSpeed(bpm);
+}
+
+function startGame(isEndless, n, guided){
+  endless = isEndless; level = n||1; tutorial = !!guided; paused = false; tutTaps = 0;
+  score = 0; combo = 0; next = 0; flash = 0; alive = true;
+  if(endless) buildEndless(); else buildLevel(level);
+  scroll = -H*LEAD_FRAC;                       // lead-in: tiles begin in the top half
+  lastBeat = Math.floor(scroll/rowH);          // sync the groove's beat counter to the lead-in
+  startMs = perfNow(); lastT = startMs; mode = MODE.PLAY;
+  hideAll(); document.getElementById("hud").classList.remove("hidden");
+  if(guided){ $("tutBanner").textContent = T.tapHint; $("tutBanner").classList.remove("hidden"); }
+  ac(); // unlock audio on the user gesture that called this
+  emit("game_start", guided?{mode:"tutorial"}:(endless?{mode:"endless"}:{mode:"level",level:level}));
+  requestAnimationFrame(loop);
+}
+
+function perfNow(){ return (window.performance&&performance.now)?performance.now():new Date()*1; }
+
+// geometry — each tile's bottom reaches y=H when scroll≈0; tiles stack upward.
+function tileBottom(i){ const t=tiles[i]; return H - (t?t._off:0) + scroll; }
+function tileTop(i){ const t=tiles[i]; return tileBottom(i) - (t?t._h:rowH); }
+
+function endGame(win){
+  alive = false; mode = MODE.END;
+  if(score>best){ best=score; try{localStorage.setItem(bestKey,best);}catch(e){} }
+  document.getElementById("hud").classList.add("hidden");
+  document.getElementById("tutBanner").classList.add("hidden");
+  const ov = document.getElementById("ovEnd");
+  document.getElementById("tEnd").textContent = win ? T.win : T.over;
+  document.getElementById("eScore").childNodes[0].nodeValue = String(score);
+  // offer "Next level" after clearing a level (not endless, not last one)
+  const maxLv = (DB&&DB.count)||60;
+  const showNext = win && !endless && level < maxLv;
+  const bn = document.getElementById("bNext");
+  bn.style.display = showNext ? "" : "none"; bn.textContent = T.next;
+  document.getElementById("bAgain").className = showNext ? "btn ghost" : "btn";
+  ov.classList.remove("hidden");
+  if(win){ reportLevel(level, perfNow()-startMs); emit("level_complete",{}); }
+  else emit("game_over",{score:score, mode:endless?"endless":"level", level:level});
+}
+
+// ── input ────────────────────────────────────────────────────────────────────
+function laneAt(x){ return Math.min(LANES-1, Math.max(0, (x/laneW)|0)); }
+
+// Piano-Tiles tap: hit the active tile anywhere in its lane (no bottom line).
+function tap(x){
+  if(mode!==MODE.PLAY || !alive || paused) return;
+  const lane = laneAt(x);
+  const cur = tiles[next];
+  if(!cur){ if(!tutorial) miss(); return; }
+  if(cur.lane !== lane){ miss(); return; }            // wrong lane → miss
+  clearTile(cur);                                      // correct lane → hit
+}
+function clearTile(cur){
+  playNote(cur.deg); cur.done = true; next++; score++; combo++; flash = 0;
+  if(endless){ spawnEndless(); if(!tutorial) speed += ENDLESS_TAP_BUMP(); }
+  if(tutorial){ tutTaps++; if(tutTaps>=TUT_TAPS) finishGuided(); return; }
+  if(!endless && next>=tiles.length) endGame(true);    // level cleared
+}
+// A miss in normal play ends the game; the guided round forgives it.
+function miss(){ thud(); combo=0; flash=0.25; if(!tutorial) endGame(false); }
+
+function cvX(e){ return e.clientX - cv.getBoundingClientRect().left; }
+cv.addEventListener("pointerdown", e=>{ e.preventDefault(); tap(cvX(e)); }, {passive:false});
+
+// ── main loop ─────────────────────────────────────────────────────────────────
+// One physics step (extracted so tests can drive it deterministically).
+function tick(dt){
+  if(endless && !tutorial) speed += ENDLESS_ACCEL()*dt;   // beats speed up over time
+  scroll += speed*dt;
+  if(flash>0) flash -= dt;
+
+  const cur = tiles[next];
+  if(tutorial){
+    // the guided round waits: hold the active tile around mid-screen until it's tapped
+    if(cur){ const wait = H*0.72, b = tileBottom(next); if(b > wait) scroll -= (b - wait); }
+  } else if(cur){
+    // die when the active tile has fully slid off the bottom un-tapped
+    if(tileTop(next) > H) miss();
+  }
+
+  // backing groove: a tile bottom reaches the line each time scroll crosses a
+  // row boundary → fire a drum/bass beat there so the music is locked to the tiles.
+  if(alive && rowH>0){
+    const bi = Math.floor(scroll/rowH);
+    // skip the sound above ~12 beats/s (unreachable by a human) so it never
+    // becomes an audio-node buzz; the beat counter still advances.
+    if(bi > lastBeat && speed>0 && rowH/speed > 0.08) grooveBeat(bi);
+    if(bi !== lastBeat) lastBeat = bi;
+  }
+}
+
+function loop(now){
+  if(mode!==MODE.PLAY) return;
+  const dt = Math.min(0.05, (now-lastT)/1000); lastT = now;
+  if(!paused){ tick(dt); if(mode!==MODE.PLAY) return; }   // tick may have ended the game
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // lane separators
+  ctx.strokeStyle = "rgba(255,255,255,.05)"; ctx.lineWidth = 1;
+  for(let l=1;l<LANES;l++){ ctx.beginPath(); ctx.moveTo(l*laneW,0); ctx.lineTo(l*laneW,H); ctx.stroke(); }
+
+  // a faint highlight on the active tile's lane — guides the tap without a bottom bar
+  const cur = tiles[next];
+  if(cur && alive){ ctx.fillStyle = "rgba("+THEME.accentRGB+","+(flash>0?0:0.05)+")"; ctx.fillRect(cur.lane*laneW, 0, laneW, H); }
+  if(flash>0){ ctx.fillStyle = "rgba("+THEME.missRGB+",.18)"; ctx.fillRect(0,0,W,H); }
+
+  // tiles (from the active one upward)
+  for(let i=next; i<tiles.length; i++){
+    const top = tileTop(i); if(top>H) break;
+    const t = tiles[i]; if(t.done) continue;
+    const h = t._h; if(top + h < -rowH) continue;
+    const x = t.lane*laneW;
+    roundRect(x+5, top+4, laneW-10, h-8, 12);
+    ctx.fillStyle = (i===next) ? THEME.tileActive : THEME.tile; ctx.fill();
+    if(i===next){ ctx.fillStyle="rgba("+THEME.accentRGB+",.20)"; roundRect(x+5,top+4,laneW-10,h-8,12); ctx.fill(); }
+  }
+
+  // tutorial: pulsing ring + a fingertip on the tile to tap next
+  if(tutorial && tiles[next]){
+    const cx = tiles[next].lane*laneW + laneW/2, cy = tileTop(next) + tiles[next]._h/2;
+    const p = 0.5 + 0.5*Math.sin(perfNow()/180);
+    ctx.strokeStyle = "rgba("+THEME.accentRGB+","+(0.5+0.4*p)+")"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(cx, cy, 26+8*p, 0, Math.PI*2); ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,.92)"; ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI*2); ctx.fill();
+  }
+
+  // HUD
+  document.getElementById("hL").textContent = endless ? "★ " + best : T.level+" "+level;
+  document.getElementById("hR").textContent = score + (combo>2 ? "  ×"+combo : "");
+}
+
+function roundRect(x,y,w,h,r){ ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+// ── UI wiring ─────────────────────────────────────────────────────────────────
+function $(id){ return document.getElementById(id); }
+function hideAll(){ ["ovStart","ovLevels","ovEnd","ovOnline","ovTut","ovSettings"].forEach(id=>$(id).classList.add("hidden")); $("tutBanner").classList.add("hidden"); }
+function show(id){ hideAll(); $(id).classList.remove("hidden"); $("hud").classList.add("hidden"); }
+
+// apply i18n labels
+$("tLevel").textContent = T.level; $("bPlay").textContent = T.play; $("bPlayLevel").textContent = T.play;
+$("tLevelsTitle").textContent = T.levels;
+$("bAgain").textContent = T.again; $("bMenu").textContent = T.menu; $("tScore").textContent = T.score;
+$("tOnline").textContent = T.online; $("bOnlineBack").textContent = T.back;
+$("tSettings").textContent = T.settings; $("tSettingsTitle").textContent = T.settings;
+$("tModeLabel").textContent = T.mode; $("tThemeLabel").textContent = T.theme;
+$("bModeLevel").textContent = T.levels; $("bModeEndless").textContent = T.endless; $("bModeMusic").textContent = T.online;
+$("bSettingsBack").textContent = T.back; $("bLevelsBack").textContent = T.back;
+
+let lastPlay = null;                         // replay fn for "Play again"
+$("bPlay").onclick = ()=> startGame(true);   // home Play → Endless (the default mode)
+$("bSettings").onclick = ()=> { renderThemes(); show("ovSettings"); };
+$("bSettingsBack").onclick = ()=> show("ovStart");
+$("bModeEndless").onclick = ()=> startGame(true);
+$("bModeLevel").onclick = ()=> show("ovLevels");
+$("bModeMusic").onclick = ()=> { show("ovOnline"); loadOnline(); };
+$("bLevelsBack").onclick = ()=> { renderThemes(); show("ovSettings"); };
+$("bOnlineBack").onclick = ()=> { stopTrack(); show("ovStart"); };
+let pick = 1;
+function setPick(n){ const max = (DB&&DB.count)||60; pick = Math.min(max, Math.max(1,n)); $("lNum").childNodes[0].nodeValue = String(pick); }
+$("lPrev").onclick = ()=> setPick(pick-1);
+$("lNext").onclick = ()=> setPick(pick+1);
+$("bPlayLevel").onclick = ()=> startGame(false, pick);
+$("bNext").onclick = ()=> startGame(false, Math.min((DB&&DB.count)||60, level+1));
+$("bAgain").onclick = ()=> { if(lastPlay) lastPlay(); };
+$("bMenu").onclick = ()=> { stopTrack(); mode=MODE.MENU; show("ovStart"); };
+
+// theme picker (Task 4)
+function renderThemes(){
+  const g = $("themeGrid"); g.innerHTML = "";
+  THEMES.forEach((th, i)=>{
+    const d = document.createElement("div");
+    d.className = "swatch" + (i===themeIdx ? " sel" : "");
+    d.style.background = th.tile;
+    d.innerHTML = '<div class="dots"><i style="background:'+th.accent+'"></i>'+
+      '<i style="background:'+th.tileActive+'"></i><i style="background:'+th.miss+'"></i></div>'+
+      '<span>'+th.name+'</span>';
+    d.onclick = ()=>{ applyTheme(i); renderThemes(); };
+    g.appendChild(d);
+  });
+}
+
+// remember replays for both engines (replay is always non-guided)
+const _startGame = startGame;
+startGame = function(isEndless, n, guided){ lastPlay = ()=>_startGame(isEndless, n, false); return _startGame(isEndless, n, guided); };
+
+// ── track mode (real-song levels via BeatTrack) ─────────────────────────────
+let trackCtl = null;
+function stopTrack(){ if(trackCtl){ try{trackCtl.stop();}catch(e){} trackCtl=null; } }
+function startTrack(lvl, auto){
+  stopTrack(); hideAll(); $("hud").classList.add("hidden"); mode = MODE.MENU;
+  lastPlay = ()=> startTrack(lvl, auto);
+  trackCtl = BeatTrack.mount({
+    canvas: cv, level: lvl, audioUrl: lvl.audio, auto: !!auto, lang: LANG,
+    onEvent:(name, params)=>{
+      emit(name, params);
+      if(Q.get("dbg")==="1") window.__beatLastEvent = {name:name, params:params};
+      if(name==="level_complete" || name==="game_over"){
+        trackCtl = null;
+        if(!auto){
+          $("tEnd").textContent = name==="level_complete" ? T.win : T.over;
+          $("eScore").childNodes[0].nodeValue = String((params&&params.score)||0);
+          $("bNext").style.display = "none"; $("bAgain").className = "btn";
+          show("ovEnd");
+        }
+      }
+    },
+  });
+  if(Q.get("dbg")==="1") window.__trackCtl = trackCtl;
+}
+
+// ── fetch & list online song levels ─────────────────────────────────────────
+function fmtDur(ms){ var s=Math.round((ms||0)/1000); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
+function renderOnline(packs){
+  const box = $("onlineList"); box.innerHTML = "";
+  if(!packs || !packs.length){ box.innerHTML = '<p style="opacity:.6">'+T.empty+'</p>'; return; }
+  packs.forEach(p=>{
+    const b = document.createElement("button");
+    b.className = "btn ghost";
+    b.style.cssText = "width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:10px";
+    b.innerHTML = '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
+      (p.name||"Track")+'</span><span style="opacity:.6;font-size:13px">'+fmtDur(p.duration_ms)+' · '+(p.bpm||"–")+' BPM</span>';
+    b.onclick = ()=> playOnline(p);
+    box.appendChild(b);
+  });
+}
+function loadOnline(){
+  const box = $("onlineList"); box.innerHTML = '<p style="opacity:.6">'+T.loading+'</p>';
+  fetch(API.base()+"/levels/beat", { headers: API.headers() })
+    .then(r=> r.ok ? r.json() : Promise.reject(r.status))
+    .then(d=>{ try{localStorage.setItem("beat.online.list", JSON.stringify(d.packs||[]));}catch(e){} renderOnline(d.packs||[]); })
+    .catch(()=>{
+      let cached=[]; try{cached=JSON.parse(localStorage.getItem("beat.online.list")||"[]");}catch(e){}
+      if(cached.length) renderOnline(cached); else box.innerHTML = '<p style="opacity:.6">'+T.failed+'</p>';
+    });
+}
+function playOnline(p){
+  fetch(p.levelUrl, { cache:"no-store" })
+    .then(r=> r.ok ? r.json() : Promise.reject(r.status))
+    .then(lvl=>{ if(!lvl.audio && p.audioUrl) lvl.audio = p.audioUrl; startTrack(lvl, false); })
+    .catch(()=>{ $("onlineList").innerHTML = '<p style="opacity:.6">'+T.failed+'</p>'; });
+}
+
+// ── /design preview handshake: render the real engine for a generated level ──
+window.addEventListener("message", (e)=>{
+  const d = e.data;
+  if(d && d.__beatPreview && d.level){
+    const lvl = { tiles:d.level.tiles||[], lanes:d.level.lanes||4, duration:d.level.duration||0, bpm:d.level.bpm,
+      audio: d.audioUrl || d.level.audio };
+    startTrack(lvl, d.auto !== false);     // preview defaults to auto-play
+  }
+});
+// tell the embedder we're ready to receive a preview
+try{ if(window.parent && window.parent!==window) window.parent.postMessage({__beatReady:1}, "*"); }catch(e){}
+
+// ── first-run inline tutorial (Path-style: welcome card → guided play → finish) ──
+const TUT_ON = (function(){ let p=Q.get("tut"); if(p==null && NATIVE) p=NATIVE.tut;
+  return !(p==="0"||p==="off"||p==="false"||p===0||p===false); })();
+const tutKey = "beat.tutorialSeen";
+function tutSeen(){ try{ return !!localStorage.getItem(tutKey); }catch(e){ return false; } }
+function markTutSeen(){ try{ localStorage.setItem(tutKey,"1"); }catch(e){} }
+
+// Welcome card → on Start, drop straight into a guided, forgiving Endless round
+// where a glowing fingertip points at each tile to tap (no separate practice mode).
+function showWelcome(){
+  $("tutTitle").textContent = T.welcomeTitle; $("tutBody").textContent = T.welcomeBody;
+  $("tutPrimary").textContent = T.start; $("tutSkip").style.display = ""; $("tutSkip").textContent = T.skip;
+  $("tutPrimary").onclick = ()=> startGame(true, 0, true);   // guided endless
+  $("tutSkip").onclick = ()=> { markTutSeen(); show("ovStart"); };
+  show("ovTut");
+}
+// After a few successful taps, congratulate, then let the real (accelerating) game run.
+function finishGuided(){
+  paused = true; $("tutBanner").classList.add("hidden");
+  $("tutTitle").textContent = T.doneTitle; $("tutBody").textContent = T.doneBody;
+  $("tutPrimary").textContent = T.play; $("tutSkip").style.display = "none";
+  $("tutPrimary").onclick = ()=> {
+    markTutSeen(); tutorial = false; paused = false; tutTaps = 0;
+    $("ovTut").classList.add("hidden"); $("hud").classList.remove("hidden");
+    lastT = perfNow(); requestAnimationFrame(loop);
+  };
+  $("ovTut").classList.remove("hidden");
+}
+
+// boot
+resize(); setPick(1);
+if(TUT_ON && !tutSeen()) showWelcome();      // else the home overlay (ovStart) is visible by default
+
+// debug hook (?dbg=1) — lets automated checks tap the correct lane deterministically
+if(Q.get("dbg")==="1"){
+  window.__beat = {
+    state:()=>({mode, endless, level, next, score, combo, alive, tutorial, paused,
+      speed:Math.round(speed), total:tiles.length, theme:themeIdx, lastBeat,
+      audio: AC ? AC.state : "none",
+      nextLane: tiles[next] ? tiles[next].lane : -1,
+      nextTop: tiles[next] ? Math.round(tileTop(next)) : 0,
+      nextBottom: tiles[next] ? Math.round(tileBottom(next)) : 0, H:Math.round(H)}),
+    tap:(lane)=> tap(lane*laneW + laneW/2),
+    tapNext:()=>{ const c=tiles[next]; if(c) tap(c.lane*laneW + laneW/2); },
+    tick:(dt)=> tick(dt),                       // drive physics deterministically
+    setTheme:(i)=> applyTheme(i),
+    startGuided:()=> startGame(true, 0, true),
+    startEndless:()=> startGame(true),
+    startLevel:(n)=> startGame(false, n||1),
+    endBtns:()=>({ next: document.getElementById('bNext').style.display!=='none',
+      nextText: document.getElementById('bNext').textContent,
+      title: document.getElementById('tEnd').textContent }),
+  };
+}
+</script>
+</body>
+</html>

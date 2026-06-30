@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Endless Runner thương hiệu</title>
+<style>
+  :root{
+    --primary:#1E88E5; --accent:#FFC107; --bg:#E3F2FD; --sky:#bbdefb; --card:#ffffff;
+    --ink:#10243b; --muted:#5b7184; --bd:#cfe0f0; --good:#2e9e5b; --gold:#e0b015; --ground:#36506a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overscroll-behavior:none;touch-action:none;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  #app{max-width:560px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;position:relative}
+
+  /* Canvas */
+  #stage{position:relative;flex:1;min-height:0}
+  canvas{display:block;width:100%;height:100%}
+
+  /* HUD over canvas */
+  .hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;
+    padding:max(10px,var(--saa-top, env(safe-area-inset-top, 0px))) 14px 10px;pointer-events:none;z-index:3}
+  .pill{background:rgba(255,255,255,.85);border-radius:999px;padding:7px 13px;font-weight:800;font-size:14px;
+    box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  .pill small{color:var(--muted);font-weight:600}
+  .buff{background:var(--accent);color:#3a2c00}
+
+  /* Overlay screens */
+  .screen{position:absolute;top:0;right:0;bottom:0;left:0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;text-align:center;padding:24px;background:var(--bg);background:color-mix(in srgb,var(--bg) 92%,transparent);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+  .screen.on{display:flex}
+  .logo{font-size:54px;line-height:1}
+  h1{font-size:24px;margin:4px 0 0}h2{font-size:22px;margin:0}
+  .sub{color:var(--muted);font-size:14.5px;line-height:1.5;margin:0;max-width:330px}
+
+  .btn{padding:14px 22px;border-radius:999px;border:0;background:var(--primary);color:#fff;
+    font-weight:800;font-size:16px;cursor:pointer;transition:transform .08s}
+  .btn:active{transform:scale(.97)}
+  .btn.ghost{background:transparent;color:var(--primary);border:1.5px solid var(--bd)}
+  .btn.block{width:100%;max-width:320px}
+  .row{display:flex;gap:10px;width:100%;max-width:320px}
+
+  .stat{display:flex;justify-content:space-between;width:100%;max-width:300px;padding:6px 0;border-bottom:1px dashed var(--bd)}
+  .stat span{color:var(--muted)}.stat b{font-size:17px}
+  .reward{width:100%;max-width:320px;border:2px dashed var(--gold);border-radius:16px;padding:14px;
+    background:color-mix(in srgb,var(--gold) 12%,transparent)}
+  .reward.locked .code{filter:blur(7px);user-select:none}
+  .reward .code{font-size:24px;font-weight:900;letter-spacing:2px;color:var(--primary);font-family:ui-monospace,Menlo,monospace}
+  .reward small{color:var(--muted)}
+  .reward.none{border-color:var(--bd);background:transparent}
+  .lead{width:100%;max-width:320px;display:flex;flex-direction:column;gap:10px}
+  .lead input{padding:13px 16px;border-radius:12px;border:1.5px solid var(--bd);font-size:16px;background:var(--card);color:var(--ink)}
+  .lead input:focus{outline:0;border-color:var(--primary)}
+  .err{color:#d23;font-size:13px;min-height:16px;margin:0}
+
+  .lb{width:100%;max-width:340px;display:flex;flex-direction:column;gap:6px}
+  .lb .r{display:flex;align-items:center;gap:10px;padding:9px 13px;border:1px solid var(--bd);border-radius:12px;background:var(--card)}
+  .lb .r.me{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,transparent)}
+  .lb .rk{width:30px;font-weight:900;color:var(--accent)}
+  .lb .nm{flex:1;font-weight:700}.lb .sc{font-weight:800;font-variant-numeric:tabular-nums}
+  .count{color:var(--muted);font-size:13px}
+  .brandbar{position:absolute;bottom:6px;left:0;right:0;text-align:center;color:var(--muted);font-size:12px;font-weight:700;z-index:2;pointer-events:none}
+
+  /* Tutorial */
+  .tut-card{position:relative;width:100%;max-width:330px;background:var(--card);border-radius:22px;padding:28px 22px 22px;
+    box-shadow:0 20px 60px rgba(0,0,0,.25)}
+  .tut-skip{position:absolute;top:12px;right:14px;border:0;background:transparent;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}
+  .tut-emoji{font-size:58px;line-height:1;animation:bob 1.6s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  .tut-title{font-size:20px;margin:6px 0 6px}.tut-text{font-size:14.5px;line-height:1.55;color:var(--muted);margin:0 0 16px;min-height:64px}
+  .tut-text b{color:var(--ink)}
+  .tut-dots{display:flex;gap:8px;justify-content:center;margin-bottom:16px}
+  .tut-dots i{width:8px;height:8px;border-radius:999px;background:var(--bd);transition:width .2s,background .2s}
+  .tut-dots i.on{width:22px;background:var(--primary)}
+  .hint{position:absolute;bottom:14px;left:0;right:0;text-align:center;color:var(--muted);font-size:13px;z-index:3;pointer-events:none}
+@supports not (inset:0){.screen>*+*{margin-top:14px}.row>*+*{margin-left:10px}.lead>*+*{margin-top:10px}.lb>*+*{margin-top:6px}.lb .r>*+*{margin-left:10px}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+
+    <!-- HUD -->
+    <div class="hud" id="hud" style="display:none">
+      <span class="pill"><span id="hDist">0</span><small> m</small></span>
+      <span class="pill">🪙 <span id="hCoins">0</span></span>
+      <span class="pill buff" id="hBuff" style="display:none">⚡ <span id="hBuffT">0</span>s</span>
+    </div>
+    <div class="hint" id="hint" style="display:none">Chạm để NHẢY · Vuốt xuống để CÚI</div>
+
+    <!-- START -->
+    <section id="s-start" class="screen on">
+      <div class="logo" id="brandLogo">🏃</div>
+      <h1 id="brandName">Endless Runner</h1>
+      <p class="sub" id="brandTagline">Chạy thật xa, né vật cản, nhặt quà — leo bảng xếp hạng nhận thưởng thật!</p>
+      <button class="btn block" id="btnPlay">▶ Bắt đầu</button>
+      <div class="row">
+        <button class="btn ghost" id="btnHowTo" style="flex:1">❔ Cách chơi</button>
+        <button class="btn ghost" id="btnLbFromStart" style="flex:1">🏆 Xếp hạng</button>
+      </div>
+    </section>
+
+    <!-- GAME OVER -->
+    <section id="s-over" class="screen">
+      <div class="logo">💥</div>
+      <h2>Hết lượt!</h2>
+      <div class="stat"><span>Khoảng cách</span><b id="oDist">0 m</b></div>
+      <div class="stat"><span>Điểm</span><b id="oScore">0</b></div>
+      <div class="stat"><span>Hạng tuần</span><b id="oRank">#–</b></div>
+      <div class="reward locked" id="reward">
+        <small id="rMile">🎁 Mốc thưởng</small>
+        <div class="code" id="rCode">CODE</div>
+        <small id="rLabel"></small>
+      </div>
+      <form class="lead" id="leadForm">
+        <small style="color:var(--muted)">Nhập để lưu điểm & nhận quà:</small>
+        <input id="leadInput" inputmode="tel" placeholder="Số điện thoại hoặc email" autocomplete="off" />
+        <p class="err" id="leadErr"></p>
+        <button class="btn block" type="submit">Lưu & nhận quà</button>
+      </form>
+      <div class="row">
+        <button class="btn ghost" id="btnReplay" style="flex:1">🔁 Chơi lại</button>
+        <button class="btn ghost" id="btnShare" style="flex:1">📤 Thách bạn</button>
+      </div>
+      <button class="btn ghost block" id="btnLbFromOver">🏆 Xem xếp hạng</button>
+    </section>
+
+    <!-- LEADERBOARD -->
+    <section id="s-lb" class="screen">
+      <h2>🏆 Xếp hạng tuần</h2>
+      <p class="count" id="lbReset">Top 3 nhận quà thật cuối tuần</p>
+      <div class="lb" id="lbList"></div>
+      <button class="btn block" id="btnPlayFromLb">▶ Chơi ngay</button>
+      <button class="btn ghost block" id="btnBack">← Về trang đầu</button>
+    </section>
+
+    <!-- TUTORIAL -->
+    <section id="s-tut" class="screen">
+      <div class="tut-card">
+        <button class="tut-skip" id="tutSkip">Bỏ qua</button>
+        <div class="tut-emoji" id="tutEmoji">🏃</div>
+        <h3 class="tut-title" id="tutTitle"></h3>
+        <p class="tut-text" id="tutText"></p>
+        <div class="tut-dots" id="tutDots"></div>
+        <button class="btn block" id="tutNext">Tiếp →</button>
+      </div>
+    </section>
+
+    <div class="brandbar">Powered by <span id="brandFoot">YourBrand</span></div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   Endless Runner thương hiệu — game marketing tự chứa (offline).
+   - Theme tách rời: nạp ./theme.json; fallback THEME mặc định.
+   - Lead + leaderboard: localStorage (prototype). Production → Supabase.
+   ===================================================================== */
+
+const THEME = {
+  brand:"BrewLab", logo:"🏃", name:"BrewLab Dash",
+  tagline:"Chạy thật xa, nhặt cà phê, né vật cản — leo bảng xếp hạng nhận thưởng thật!",
+  colors:{ primary:"#6F4E37", accent:"#E0B015", bg:"#FBF1E6", sky:"#f3e2cd", card:"#ffffff",
+           ink:"#2b231c", muted:"#8a7d6e", bd:"#e7dccd", gold:"#e0b015", ground:"#5a4632" },
+  mascot:"🏃", collectible:"☕",
+  powerup:{ img:"⚡", label:"Espresso bứt tốc!", buffMs:4500 },
+  milestones:[
+    { m:500,  code:"DASH05", label:"Giảm 5% cho đơn tiếp theo" },
+    { m:1000, code:"DASH10", label:"Giảm 10% cho đơn tiếp theo" },
+    { m:2000, code:"DASH20", label:"Giảm 20% + 1 phần quà" },
+  ],
+};
+
+// ---- tuning ----
+const GROUND_H = 64;          // ground strip height (css px)
+const BASE_SPEED = 320;       // px/s
+const SPEED_K = 0.05;         // speed gain per meter
+const MAX_SPEED = 720;
+const GRAVITY = 2600;         // px/s^2
+const JUMP_V = 1020;          // jump impulse
+const M_PER_PX = 0.05;        // distance scale: px scrolled → meters
+const COIN_VALUE = 25;
+const DUCK_MS = 650;          // swipe-duck duration
+
+let cfg = THEME;
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const $ = id => document.getElementById(id);
+let W=0, H=0, groundY=0, dpr=1;
+
+// ---- state ----
+let running=false, raf=0, lastT=0;
+let dist=0, coins=0, speed=BASE_SPEED;
+let mascot=null;             // {x,y,vy,w,h,duckUntil,ducking}
+let ents=[];                 // obstacles/coins/powerups
+let spawnX=0;                // next spawn cursor (world px ahead)
+let buffUntil=0;
+let bestMilestone=null;      // {code,label,m}
+let scrollBg=0;
+let lastResult=null;
+let screens=["start","over","lb","tut"];
+
+function show(name){ // null => gameplay (all overlays off)
+  screens.forEach(s=>$("s-"+s).classList.toggle("on", s===name));
+  const inGame = name===null;
+  $("hud").style.display = inGame ? "flex" : "none";
+  $("hint").style.display = inGame ? "block" : "none";
+}
+
+// ---- theme ----
+async function loadTheme(){
+  try{ const r=await fetch("./theme.json",{cache:"no-store"}); if(r.ok) cfg=Object.assign({},THEME,await r.json()); }catch(_){}
+  const c=cfg.colors||{};
+  for(const [k,v] of Object.entries(c)) document.documentElement.style.setProperty("--"+k,v);
+  $("brandLogo").textContent=cfg.logo||"🏃";
+  $("brandName").textContent=cfg.name||"Endless Runner";
+  $("brandTagline").textContent=cfg.tagline||"";
+  $("brandFoot").textContent=cfg.brand||"YourBrand";
+}
+
+// ---- sizing ----
+function resize(){
+  dpr=Math.min(window.devicePixelRatio||1, 2);
+  const st=document.getElementById("stage");
+  W=st.clientWidth; H=st.clientHeight; groundY=H-GROUND_H;
+  cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener("resize", resize);
+
+// ---- colors helper ----
+function cssvar(n){ return getComputedStyle(document.documentElement).getPropertyValue("--"+n).trim(); }
+
+// ---- game control ----
+function gbEmit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id='runner'; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+function start(){
+  gbEmit('game_start', {});
+  resize();
+  running=true; dist=0; coins=0; speed=BASE_SPEED; ents=[]; buffUntil=0; bestMilestone=null; scrollBg=0;
+  mascot={ x:Math.round(W*0.22), y:groundY, vy:0, w:46, h:54, ducking:false, duckUntil:0 };
+  spawnX=W+200;
+  $("hDist").textContent="0"; $("hCoins").textContent="0"; $("hBuff").style.display="none";
+  show(null);
+  lastT=performance.now();
+  cancelAnimationFrame(raf); raf=requestAnimationFrame(loop);
+}
+
+function gameOver(){
+  running=false; cancelAnimationFrame(raf);
+  const meters=Math.floor(dist);
+  const score=meters + coins*COIN_VALUE;
+  lastResult={ meters, score };
+  gbEmit('game_over', { score: score, meters: meters });
+  $("oDist").textContent=meters.toLocaleString("vi-VN")+" m";
+  $("oScore").textContent=score.toLocaleString("vi-VN");
+  // milestone reward (highest reached)
+  const rw=$("reward");
+  if(bestMilestone){
+    rw.classList.remove("none"); rw.classList.add("locked");
+    $("rMile").textContent=`✅ Đạt mốc ${bestMilestone.m.toLocaleString("vi-VN")}m`;
+    $("rCode").textContent=bestMilestone.code;
+    $("rLabel").textContent=bestMilestone.label;
+    $("leadForm").style.display="flex";
+  }else{
+    rw.classList.add("none"); rw.classList.remove("locked");
+    $("rMile").textContent="Chạy tới mốc 500m để mở mã giảm giá!";
+    $("rCode").textContent=""; $("rLabel").textContent="";
+    $("leadForm").style.display="flex";
+  }
+  // provisional rank
+  $("oRank").textContent = "#"+provisionalRank(score);
+  $("leadInput").value=""; $("leadErr").textContent="";
+  show("over");
+}
+
+// ---- input ----
+function jump(){
+  if(!running||!mascot) return;
+  if(mascot.y>=groundY-0.5){ mascot.vy=-JUMP_V; }       // only from ground
+}
+function duck(ms){
+  if(!running||!mascot) return;
+  mascot.duckUntil=performance.now()+ms;
+}
+function endDuck(){ if(mascot) mascot.duckUntil=0; }
+
+addEventListener("keydown", e=>{
+  if(e.code==="Space"||e.code==="ArrowUp"){ e.preventDefault(); if(running) jump(); }
+  else if(e.code==="ArrowDown"){ e.preventDefault(); if(running) duck(99999); }
+});
+addEventListener("keyup", e=>{ if(e.code==="ArrowDown") endDuck(); });
+
+// pointer/touch: tap=jump, swipe-down=duck
+let pStartY=0, pStartT=0, pMoved=false;
+cv.addEventListener("pointerdown", e=>{ pStartY=e.clientY; pStartT=performance.now(); pMoved=false; });
+cv.addEventListener("pointermove", e=>{ if(e.clientY-pStartY>40 && !pMoved){ pMoved=true; if(running) duck(DUCK_MS); } });
+cv.addEventListener("pointerup", e=>{
+  if(!running) return;
+  const dt=performance.now()-pStartT;
+  if(!pMoved && dt<350) jump();              // quick tap
+});
+
+// ---- spawning ----
+function spawn(){
+  // spawn ahead until spawnX beyond view+buffer
+  const horizon=W+260;
+  while(spawnX < dist/M_PER_PX + horizon){
+    const r=rndFor(Math.floor(spawnX));
+    let type;
+    if(r<0.16) type="powerup"; else if(r<0.52) type="coin"; else type="obstacle";
+    const worldX=spawnX;
+    if(type==="obstacle"){
+      const high = rndFor(worldX*3) < 0.32;     // ~1/3 are overhead → duck
+      if(high) ents.push({type:"obs",hi:true, wx:worldX, y:groundY-78, w:54, h:34});
+      else { const w=28+Math.floor(rndFor(worldX*5)*26); ents.push({type:"obs",hi:false, wx:worldX, y:groundY-(34), w, h:34}); }
+    }else if(type==="coin"){
+      // a small arc of coins
+      const n=3+Math.floor(rndFor(worldX*7)*3);
+      for(let i=0;i<n;i++) ents.push({type:"coin", wx:worldX+i*40, y:groundY-70-Math.round(26*Math.sin(i/(n-1)*Math.PI)), w:26, h:26, got:false});
+    }else{
+      ents.push({type:"pow", wx:worldX, y:groundY-90, w:34, h:34, got:false});
+    }
+    // gap scales with speed so it's always passable
+    const gap = (type==="coin"?160:0) + 260 + speed*0.55*rndFor(worldX*11);
+    spawnX += gap;
+  }
+}
+
+// ---- loop ----
+function loop(now){
+  const dt=Math.min(0.034,(now-lastT)/1000); lastT=now;
+  update(dt); render();
+  if(running) raf=requestAnimationFrame(loop);
+}
+
+function update(dt){
+  const boosted = now()<buffUntil;
+  speed=Math.min(MAX_SPEED, BASE_SPEED + dist*SPEED_K) * (boosted?1.45:1);
+  const dpx=speed*dt;
+  dist += dpx*M_PER_PX;
+  scrollBg += dpx;
+
+  // mascot physics
+  mascot.vy += GRAVITY*dt;
+  mascot.y += mascot.vy*dt;
+  if(mascot.y>groundY){ mascot.y=groundY; mascot.vy=0; }
+  mascot.ducking = now()<mascot.duckUntil && mascot.y>=groundY-0.5;
+
+  // HUD
+  $("hDist").textContent=Math.floor(dist).toLocaleString("vi-VN");
+  $("hCoins").textContent=String(coins);
+  if(boosted){ $("hBuff").style.display="inline-block"; $("hBuffT").textContent=Math.ceil((buffUntil-now())/1000); }
+  else $("hBuff").style.display="none";
+
+  // milestones
+  for(const ms of (cfg.milestones||[])){
+    if(dist>=ms.m && (!bestMilestone || ms.m>bestMilestone.m)) bestMilestone={...ms};
+  }
+
+  spawn();
+
+  // entity update + collision
+  const mb=mascotBox();
+  for(const e of ents){
+    e.x = e.wx - dist/M_PER_PX;      // world→screen
+    if(e.type==="coin"&&!e.got && hit(mb,e)){ e.got=true; coins++; }
+    else if(e.type==="pow"&&!e.got && hit(mb,e)){ e.got=true; buffUntil=now()+((cfg.powerup&&cfg.powerup.buffMs)||4000); }
+    else if(e.type==="obs" && !boosted && hit(mb,e)){ return gameOver(); }
+  }
+  ents = ents.filter(e=> e.x > -80 && !(e.got));
+}
+
+function mascotBox(){
+  const duck=mascot.ducking;
+  const w=duck?mascot.w+10:mascot.w, h=duck?mascot.h*0.55:mascot.h;
+  return { x:mascot.x-w/2+6, y:mascot.y-h, w:w-12, h:h-4 };
+}
+function hit(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y; }
+
+// ---- render ----
+function render(){
+  ctx.clearRect(0,0,W,H);
+  // sky
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,cssvar("bg")); g.addColorStop(1,cssvar("sky")); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // far parallax hills
+  drawHills(scrollBg*0.25, groundY, cssvar("sky"), 0.6);
+  drawHills(scrollBg*0.5, groundY+8, cssvar("sky"), 1);
+  // ground
+  ctx.fillStyle=cssvar("ground"); ctx.fillRect(0,groundY,W,H-groundY);
+  // ground dashes scrolling
+  ctx.strokeStyle="rgba(255,255,255,.25)"; ctx.lineWidth=4; ctx.setLineDash([26,22]);
+  ctx.lineDashOffset=-(scrollBg%48); ctx.beginPath(); ctx.moveTo(0,groundY+18); ctx.lineTo(W,groundY+18); ctx.stroke(); ctx.setLineDash([]);
+
+  // entities
+  for(const e of ents){
+    if(e.x<-80||e.x>W+80) continue;
+    if(e.type==="coin"){ emoji(cfg.collectible||"🪙", e.x+e.w/2, e.y+e.h, e.h); }
+    else if(e.type==="pow"){ glow(e.x+e.w/2,e.y+e.h/2,e.h); emoji((cfg.powerup&&cfg.powerup.img)||"⚡", e.x+e.w/2, e.y+e.h, e.h+4); }
+    else { drawObstacle(e); }
+  }
+
+  // mascot
+  drawMascot();
+
+  // buff aura
+  if(now()<buffUntil){ ctx.save(); ctx.globalAlpha=.35; glow(mascot.x, mascot.y-mascot.h/2, mascot.h*1.4); ctx.restore(); }
+}
+
+function drawHills(off, baseY, color, alpha){
+  const span=260, amp=46; ctx.save(); ctx.globalAlpha=0.5*alpha; ctx.fillStyle=color;
+  ctx.beginPath(); ctx.moveTo(0,baseY);
+  for(let x=-((off)%span)-span; x<=W+span; x+=span){
+    ctx.quadraticCurveTo(x+span/2, baseY-amp, x+span, baseY);
+  }
+  ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath(); ctx.fill(); ctx.restore();
+}
+
+function drawObstacle(e){
+  ctx.save();
+  ctx.fillStyle=cssvar("primary");
+  if(e.hi){ // overhead bar hanging from a post → must duck
+    roundRect(e.x, e.y, e.w, e.h, 7); ctx.fill();
+    ctx.fillStyle="rgba(0,0,0,.18)"; ctx.fillRect(e.x+e.w/2-3, e.y-(groundY-78-0), 6, 0); // (no-op spacer)
+    ctx.fillStyle=cssvar("accent"); roundRect(e.x+6,e.y+e.h-8,e.w-12,5,3); ctx.fill();
+  }else{ // ground crate → jump
+    roundRect(e.x, e.y, e.w, e.h, 6); ctx.fill();
+    ctx.strokeStyle="rgba(255,255,255,.35)"; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(e.x,e.y+e.h/2); ctx.lineTo(e.x+e.w,e.y+e.h/2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawMascot(){
+  const bob = mascot.y>=groundY-0.5 ? Math.sin(scrollBg*0.05)*3 : 0;
+  const size = mascot.ducking ? mascot.h*0.7 : mascot.h;
+  emoji(cfg.mascot||"🏃", mascot.x, mascot.y+bob, size+8);
+}
+
+function emoji(ch,cx,baseY,size){
+  ctx.save(); ctx.font=`${size}px "Apple Color Emoji","Segoe UI Emoji",sans-serif`;
+  ctx.textAlign="center"; ctx.textBaseline="alphabetic"; ctx.fillText(ch,cx,baseY); ctx.restore();
+}
+function glow(cx,cy,r){ const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r); g.addColorStop(0,"rgba(255,220,90,.8)"); g.addColorStop(1,"rgba(255,220,90,0)");
+  ctx.save(); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.fill(); ctx.restore(); }
+function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+// ---- lead + leaderboard (prototype localStorage) ----
+function submitLead(contact,score){
+  const leads=JSON.parse(localStorage.getItem("run.leads")||"[]");
+  leads.push({contact,score,at:new Date().toISOString()}); localStorage.setItem("run.leads",JSON.stringify(leads));
+  saveScore(nameFrom(contact),score);
+}
+function nameFrom(c){ const s=String(c).trim(); return s.includes("@")?s.split("@")[0].slice(0,3)+"***":s.slice(0,3)+"***"+s.slice(-2); }
+function weekKey(){ const d=new Date(),o=new Date(d.getFullYear(),0,1); return d.getFullYear()+"-W"+Math.ceil((((d-o)/864e5)+o.getDay()+1)/7); }
+function seedIfEmpty(){
+  const wk=weekKey(); const seeded=JSON.parse(localStorage.getItem("run.seeded")||"{}"); if(seeded[wk]) return;
+  const all=JSON.parse(localStorage.getItem("run.scores")||"{}");
+  const names=["Tú","Vy","Nam","Minh","Lan","An","Huy","Bảo","Chi","Đạt"];
+  all[wk]=(all[wk]||[]).concat(names.map((n,i)=>({name:n+"***",score:3900-i*240-i*i*8,me:false})));
+  localStorage.setItem("run.scores",JSON.stringify(all)); seeded[wk]=true; localStorage.setItem("run.seeded",JSON.stringify(seeded));
+}
+function saveScore(name,score){ const wk=weekKey(); const all=JSON.parse(localStorage.getItem("run.scores")||"{}");
+  const arr=all[wk]||[]; arr.forEach(x=>x.me=false); arr.push({name,score,me:true}); all[wk]=arr; localStorage.setItem("run.scores",JSON.stringify(all)); }
+function provisionalRank(score){ seedIfEmpty(); const wk=weekKey(); const all=JSON.parse(localStorage.getItem("run.scores")||"{}");
+  const arr=(all[wk]||[]).slice(); arr.push({score}); arr.sort((a,b)=>b.score-a.score); return arr.findIndex(x=>x.score===score)+1; }
+function renderLb(){
+  seedIfEmpty(); const wk=weekKey(); const all=JSON.parse(localStorage.getItem("run.scores")||"{}");
+  const arr=(all[wk]||[]).slice().sort((a,b)=>b.score-a.score); const list=$("lbList"); list.innerHTML="";
+  const medal=["🥇","🥈","🥉"];
+  arr.slice(0,12).forEach((x,i)=>{ const r=document.createElement("div"); r.className="r"+(x.me?" me":"");
+    r.innerHTML=`<span class="rk">${medal[i]||("#"+(i+1))}</span><span class="nm">${x.me?"BẠN":esc(x.name)}</span><span class="sc">${x.score.toLocaleString("vi-VN")}</span>`;
+    list.appendChild(r); });
+  $("lbReset").textContent=`Top 3 nhận quà thật cuối tuần • ${arr.length} người chơi`;
+}
+function esc(s){ return String(s).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c])); }
+
+// ---- share ----
+async function share(){
+  const sc=(lastResult&&lastResult.score)||0;
+  const text=`Mình vừa chạy được ${sc.toLocaleString("vi-VN")} điểm ở ${cfg.name}! Thử vượt mình nhé 👇`;
+  try{ if(navigator.share){ await navigator.share({title:cfg.name,text,url:location.href}); return; } }catch(_){}
+  try{ await navigator.clipboard.writeText(text+" "+location.href); toast("Đã copy link thách đấu!"); }catch(_){ alert(text); }
+}
+let toastT=0; function toast(m){ const h=$("hint"); h.style.display="block"; h.textContent=m; clearTimeout(toastT); toastT=setTimeout(()=>{ h.textContent=TL.hint; },2200); }
+
+// ---- tutorial (localized: locale from hub via ?lang=, else device) ----
+function pickLang(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+const LANG=pickLang();
+const C=(cfg&&cfg.collectible)||"🪙", P=(cfg&&cfg.powerup&&cfg.powerup.img)||"⚡";
+const TUT_I18N={
+  en:[
+    { e:"👆", t:"Jump over obstacles", x:"<b>Tap the screen</b> (or Space) to make the mascot <b>jump</b> over crates and ground obstacles." },
+    { e:"👇", t:"Duck under high obstacles", x:"<b>Swipe down</b> (or ↓) to <b>duck</b> under the high bars." },
+    { e:"🎁", t:"Grab rewards & rank up", x:`Grab ${C} for points, ${P} to dash. Run far to unlock a <b>discount code</b> & climb the <b>leaderboard</b>!` },
+  ],
+  vi:[
+    { e:"👆", t:"Nhảy qua vật cản", x:"<b>Chạm màn hình</b> (hoặc phím cách) để mascot <b>nhảy</b> qua thùng/chướng ngại dưới đất." },
+    { e:"👇", t:"Cúi né vật cản cao", x:"<b>Vuốt xuống</b> (hoặc phím ↓) để <b>cúi</b> né các thanh chắn trên cao." },
+    { e:"🎁", t:"Nhặt quà & lên top", x:`Nhặt ${C} ăn điểm, ${P} để bứt tốc. Chạy xa mở <b>mã giảm giá</b> & leo <b>bảng xếp hạng</b>!` },
+  ],
+  ko:[
+    { e:"👆", t:"장애물 뛰어넘기", x:"<b>화면을 탭</b>(또는 스페이스)하면 마스코트가 상자·지상 장애물을 <b>점프</b>로 넘습니다." },
+    { e:"👇", t:"높은 장애물 숙이기", x:"<b>아래로 스와이프</b>(또는 ↓)하면 높은 막대를 <b>숙여서</b> 피합니다." },
+    { e:"🎁", t:"보상 획득 & 순위 올리기", x:`${C}를 모아 점수를, ${P}로 가속하세요. 멀리 달려 <b>할인 코드</b>를 열고 <b>순위표</b>를 올라가세요!` },
+  ],
+  zh:[
+    { e:"👆", t:"跳过障碍", x:"<b>点按屏幕</b>（或空格键）让吉祥物<b>跳过</b>箱子和地面障碍。" },
+    { e:"👇", t:"下蹲躲高障碍", x:"<b>向下滑动</b>（或 ↓）让角色<b>下蹲</b>躲过高处的横杆。" },
+    { e:"🎁", t:"拾取奖励并冲榜", x:`拾取 ${C} 得分，${P} 加速冲刺。跑得越远，解锁<b>折扣码</b>并登上<b>排行榜</b>！` },
+  ],
+  ja:[
+    { e:"👆", t:"障害物をジャンプ", x:"<b>画面をタップ</b>（またはスペース）でマスコットが箱や地上の障害物を<b>ジャンプ</b>で越えます。" },
+    { e:"👇", t:"高い障害物をしゃがんで回避", x:"<b>下にスワイプ</b>（または↓）で<b>しゃがんで</b>高いバーを避けます。" },
+    { e:"🎁", t:"報酬を集めてランクアップ", x:`${C} を集めて得点、${P} でダッシュ。遠くまで走って<b>割引コード</b>を解放し<b>ランキング</b>を駆け上がろう！` },
+  ],
+  ar:[
+    { e:"👆", t:"اقفز فوق العوائق", x:"<b>انقر الشاشة</b> (أو مسافة) ليقفز التميمة فوق الصناديق وعوائق الأرض." },
+    { e:"👇", t:"انحنِ تحت العوائق العالية", x:"<b>اسحب لأسفل</b> (أو ↓) كي <b>تنحني</b> تحت القضبان العالية." },
+    { e:"🎁", t:"اجمع المكافآت وارتقِ", x:`اجمع ${C} للنقاط، و${P} للاندفاع. اركض بعيدًا لفتح <b>رمز خصم</b> وتسلّق <b>لوحة الصدارة</b>!` },
+  ],
+};
+const TUT_UI={
+  en:{skip:"Skip",next:"Next →",got:"Got it!",start:"▶ Start",hint:"Tap to JUMP · Swipe down to DUCK"},
+  vi:{skip:"Bỏ qua",next:"Tiếp →",got:"Đã hiểu!",start:"▶ Bắt đầu",hint:"Chạm để NHẢY · Vuốt xuống để CÚI"},
+  ko:{skip:"건너뛰기",next:"다음 →",got:"알겠어요!",start:"▶ 시작",hint:"탭하면 점프 · 아래로 스와이프하면 숙이기"},
+  zh:{skip:"跳过",next:"下一步 →",got:"明白了！",start:"▶ 开始",hint:"点按跳跃 · 向下滑动下蹲"},
+  ja:{skip:"スキップ",next:"次へ →",got:"わかった！",start:"▶ 開始",hint:"タップでジャンプ · 下スワイプでしゃがむ"},
+  ar:{skip:"تخطّي",next:"التالي →",got:"فهمت!",start:"▶ ابدأ",hint:"انقر للقفز · اسحب لأسفل للانحناء"},
+};
+const TUT=TUT_I18N[LANG]||TUT_I18N.en;
+const TL=TUT_UI[LANG]||TUT_UI.en;
+{ const sk=$("tutSkip"); if(sk) sk.textContent=TL.skip; const hn=$("hint"); if(hn) hn.textContent=TL.hint; if(LANG==="ar"){ const tb=$("tut"); if(tb) tb.dir="rtl"; } }
+let tStep=0, tThenStart=false;
+function renderTut(){ const s=TUT[tStep]; $("tutEmoji").textContent=s.e; $("tutTitle").textContent=s.t; $("tutText").innerHTML=s.x;
+  $("tutDots").innerHTML=TUT.map((_,i)=>`<i class="${i===tStep?"on":""}"></i>`).join("");
+  $("tutNext").textContent=tStep===TUT.length-1?(tThenStart?TL.start:TL.got):TL.next; }
+function openTut(thenStart){ tThenStart=thenStart; tStep=0; renderTut(); show("tut"); }
+function closeTut(){ localStorage.setItem("run.tutSeen","1"); if(tThenStart){ tThenStart=false; start(); } else show("start"); }
+$("tutNext").onclick=()=>{ if(tStep<TUT.length-1){ tStep++; renderTut(); } else closeTut(); };
+$("tutSkip").onclick=closeTut;
+function playOrTutor(){ if(localStorage.getItem("run.tutSeen")) start(); else openTut(true); }
+
+// ---- helpers ----
+function now(){ return performance.now(); }
+// deterministic pseudo-random per worldX (stable across frames)
+function rndFor(seed){ let x=Math.sin(seed*12.9898+78.233)*43758.5453; return x-Math.floor(x); }
+
+// ---- wire up ----
+$("btnPlay").onclick=playOrTutor;
+$("btnPlayFromLb").onclick=start;
+$("btnReplay").onclick=start;
+$("btnHowTo").onclick=()=>openTut(false);
+$("btnBack").onclick=()=>show("start");
+$("btnLbFromStart").onclick=()=>{ renderLb(); show("lb"); };
+$("btnLbFromOver").onclick=()=>{ renderLb(); show("lb"); };
+$("btnShare").onclick=share;
+$("leadForm").addEventListener("submit", e=>{
+  e.preventDefault(); const v=$("leadInput").value.trim();
+  const ok=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)||/^[0-9+\-\s]{8,}$/.test(v);
+  if(!ok){ $("leadErr").textContent="Nhập email hoặc số điện thoại hợp lệ."; return; }
+  $("leadErr").textContent=""; submitLead(v, (lastResult&&lastResult.score)||0);
+  if(bestMilestone){ $("reward").classList.remove("locked"); }
+  $("leadForm").style.display="none";
+  $("oRank").textContent="#"+provisionalRank((lastResult&&lastResult.score)||0);
+  toast("Đã lưu điểm!");
+});
+
+// ---- boot ----
+loadTheme().then(()=>{ resize(); render(); show("start"); });
+</script>
+</body>
+</html>

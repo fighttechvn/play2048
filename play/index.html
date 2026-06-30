@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Google Analytics (GA4) — loads only on our own web hosts:
+         *.fighttech.vn (gobrain.fighttech.vn/play/) and the GitHub Pages mirror
+         (fighttechvn.github.io/play2048/play/).
+         Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+         Analytics) and in third-party SDK embeds on other domains, so we never
+         double-count app traffic or ingest other sites' visitors. -->
+    <script>
+      (function () {
+        var h = location.hostname;
+        var ours = /(^|\.)fighttech\.vn$/.test(h) || h === "fighttechvn.github.io";
+        if (!ours) return;
+        var s = document.createElement("script");
+        s.async = true;
+        s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+        document.head.appendChild(s);
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        window.gtag = gtag;
+        gtag("js", new Date());
+        gtag("config", "G-VCLVPVRXMV");
+      })();
+    </script>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0e0e10" />
+    <title>GoBrain</title>
+    <style>
+      :root {
+        --bg: #0e0e10;
+        --safe-top: var(--saa-top, env(safe-area-inset-top, 0px));
+        --safe-bottom: var(--saa-bottom, env(safe-area-inset-bottom, 0px));
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+        user-select: none;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        background: var(--bg);
+        overflow: hidden;
+        overscroll-behavior: none;
+        /* NOTE: no `touch-action: none` here — it would block the Hub from
+           scrolling on touch. The game canvas sets it on itself instead. */
+        font-family: Georgia, Cambria, "Times New Roman", "Noto Serif",
+          "Noto Serif KR", "Noto Serif SC", "Noto Naskh Arabic", serif;
+      }
+      #app {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        display: block;
+      }
+      #app canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none; /* game handles its own swipes */
+      }
+    </style>
+    <script>
+      // Safe-area inset (Android): MainActivity inject window.__saa qua JS, nhưng
+      // chỉ lúc onCreate — sau OTA reload thì KHÔNG re-inject → nội dung đè status
+      // bar. Ta định nghĩa __saaApply TRƯỚC (native có guard `if(!window.__saaApply)`
+      // nên sẽ gọi bản này): áp dụng + LƯU localStorage, và KHÔI PHỤC ngay khi tải
+      // (sống sót qua OTA reload). iOS không set __saa → fallback env() như cũ.
+      (function () {
+        function ap(d) {
+          if (!d || !d.documentElement || !window.__saa) return;
+          var s = d.documentElement.style,
+            a = window.__saa;
+          s.setProperty("--saa-top", a.t + "px");
+          s.setProperty("--saa-right", a.r + "px");
+          s.setProperty("--saa-bottom", a.b + "px");
+          s.setProperty("--saa-left", a.l + "px");
+        }
+        // khôi phục giá trị đã lưu (khi native không re-inject, vd sau OTA reload)
+        try {
+          var v = JSON.parse(localStorage.getItem("saa") || "null");
+          if (v) window.__saa = v;
+        } catch (e) {}
+        window.__saaApply = function () {
+          if (window.__saa) {
+            try {
+              localStorage.setItem("saa", JSON.stringify(window.__saa));
+            } catch (e) {}
+          }
+          ap(document);
+          var f = document.getElementsByTagName("iframe");
+          for (var k = 0; k < f.length; k++) {
+            try {
+              ap(f[k].contentDocument);
+            } catch (e) {}
+          }
+        };
+        document.addEventListener(
+          "load",
+          function (e) {
+            if (e.target && e.target.tagName === "IFRAME") window.__saaApply();
+          },
+          true,
+        );
+        try {
+          new MutationObserver(function () {
+            window.__saaApply();
+          }).observe(document.documentElement, { childList: true, subtree: true });
+        } catch (e) {}
+        if (window.__saa) window.__saaApply();
+      })();
+    </script>
+    <script type="module" crossorigin src="./assets/index-DBSHsWXh.js"></script>
+  </head>
+  <body>
+    <div id="hub"></div>
+    <div id="app"></div>
+  </body>
+</html>

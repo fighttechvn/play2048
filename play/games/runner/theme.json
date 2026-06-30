@@ -1,0 +1,26 @@
+{
+  "brand": "BrewLab",
+  "logo": "🏃",
+  "name": "BrewLab Dash",
+  "tagline": "Chạy thật xa, nhặt cà phê, né vật cản — leo bảng xếp hạng nhận thưởng thật!",
+  "colors": {
+    "primary": "#6F4E37",
+    "accent": "#E0B015",
+    "bg": "#FBF1E6",
+    "sky": "#f3e2cd",
+    "card": "#ffffff",
+    "ink": "#2b231c",
+    "muted": "#8a7d6e",
+    "bd": "#e7dccd",
+    "gold": "#e0b015",
+    "ground": "#5a4632"
+  },
+  "mascot": "🏃",
+  "collectible": "☕",
+  "powerup": { "img": "⚡", "label": "Espresso bứt tốc!", "buffMs": 4500 },
+  "milestones": [
+    { "m": 500, "code": "DASH05", "label": "Giảm 5% cho đơn tiếp theo" },
+    { "m": 1000, "code": "DASH10", "label": "Giảm 10% cho đơn tiếp theo" },
+    { "m": 2000, "code": "DASH20", "label": "Giảm 20% + 1 phần quà" }
+  ]
+}
