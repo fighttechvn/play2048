@@ -133,7 +133,7 @@ const I18N = {
       online:"Music tracks",loading:"Loading…",empty:"No tracks yet. Add some in /design.",failed:"Couldn't load tracks.",
       welcomeTitle:"Welcome to Beat",
       welcomeBody:"Tap each tile in its own lane before it slides off the bottom. Every tap plays the next note.",
-      start:"Start",skip:"Skip",tapHint:"👇 Tap the glowing tile",
+      start:"Start",skip:"Skip",tapHint:"👇 Tap the glowing tile",rest:"Rest",
       doneTitle:"You've got the rhythm! 🎉",doneBody:"The longer you last, the faster it gets. Keep tapping!",
       next:"Next level",settings:"Settings",mode:"Play mode",theme:"Theme"},
   vi:{hint:"Chạm ô ở đúng cột trước khi nó trôi khỏi màn hình. Mỗi lần chạm phát nốt nhạc kế tiếp.",
@@ -142,7 +142,7 @@ const I18N = {
       online:"Nhạc",loading:"Đang tải…",empty:"Chưa có bản nhạc. Thêm ở /design.",failed:"Không tải được.",
       welcomeTitle:"Chào mừng đến với Beat",
       welcomeBody:"Chạm vào ô ở đúng cột của nó trước khi nó trôi khỏi màn hình. Mỗi lần chạm phát nốt nhạc kế tiếp.",
-      start:"Bắt đầu",skip:"Bỏ qua",tapHint:"👇 Chạm ô đang sáng",
+      start:"Bắt đầu",skip:"Bỏ qua",tapHint:"👇 Chạm ô đang sáng",rest:"Nghỉ",
       doneTitle:"Bạn đã bắt được nhịp! 🎉",doneBody:"Càng chơi lâu, nhịp càng nhanh. Cứ chạm theo nhịp nhé!",
       next:"Màn tiếp",settings:"Cài đặt",mode:"Chế độ chơi",theme:"Màu sắc"},
 };
@@ -177,7 +177,17 @@ function emit(name, params){ params = params||{}; params.game_id="beat";
   // native bridge (iOS SDK) — forwards every event to the host app
   try{ if(window.webkit && webkit.messageHandlers && webkit.messageHandlers.gbNative){
     webkit.messageHandlers.gbNative.postMessage({name:name, params:params}); } }catch(e){} }
-function reportLevel(level, ms){ ms=Math.round(ms); emit("level_complete",{level:level,duration_ms:ms}); }
+function reportLevel(level, ms, sc){
+  ms=Math.round(ms); emit("level_complete",{level:level,duration_ms:ms});
+  // Leaderboard submit: only on a real level clear (endless has no stable level
+  // dimension to rank against). Silently skipped if the player has no token yet.
+  var tok=API.token(); if(!tok) return;
+  try{ fetch(API.base()+"/scores", {
+    method:"POST",
+    headers:Object.assign({"content-type":"application/json"}, API.headers()),
+    body: JSON.stringify({gameId:"beat", level:level, durationMs:ms, score:sc}),
+  }).catch(function(){}); }catch(e){}
+}
 
 // ── server bridge: read api base / key / token from shared localStorage (mirrors
 // games/sudoku/index.html GBLB), so the game can fetch online song levels. ──
@@ -329,6 +339,14 @@ const LEAD_FRAC = 0.55;                                 // tiles start in the to
 // Endless difficulty: the beat speeds up over time so tiles fall faster.
 const ENDLESS_ACCEL = ()=> rowH*0.06;                   // px/s² added each second
 const ENDLESS_TAP_BUMP = ()=> rowH*0.02;                // small bump per cleared tile
+// Periodic breather: every REST_EVERY s of play, hold the speed steady for
+// REST_DURATION s so the difficulty plateaus — shown as a 5·4·3·2·1 countdown.
+const REST_EVERY = 20;                                   // seconds of play between rests
+const REST_DURATION = 5;                                 // seconds each rest lasts
+const REST_SLOW = 0.55;                                  // during a rest, tiles move at this × speed (easier)
+let restTimer = 0;                                       // seconds left in the current rest (0 = playing)
+let playTimer = 0;                                       // seconds of active play since the last rest
+let savedSpeed = 0;                                      // speed before the rest, restored when it ends
 
 // Stack tiles by row-height; each tile is a single tap (one row tall).
 function prepTiles(){
@@ -361,7 +379,7 @@ function buildLevel(n){                         // each level = a different song
 
 function startGame(isEndless, n, guided){
   endless = isEndless; level = n||1; tutorial = !!guided; paused = false; tutTaps = 0;
-  score = 0; combo = 0; next = 0; flash = 0; alive = true;
+  score = 0; combo = 0; next = 0; flash = 0; alive = true; restTimer = 0; playTimer = 0; savedSpeed = 0;
   if(endless) buildEndless(); else buildLevel(level);
   scroll = -H*LEAD_FRAC;                       // lead-in: tiles begin in the top half
   lastBeat = Math.floor(scroll/rowH);          // sync the groove's beat counter to the lead-in
@@ -394,25 +412,29 @@ function endGame(win){
   bn.style.display = showNext ? "" : "none"; bn.textContent = T.next;
   document.getElementById("bAgain").className = showNext ? "btn ghost" : "btn";
   ov.classList.remove("hidden");
-  if(win){ reportLevel(level, perfNow()-startMs); emit("level_complete",{}); }
+  if(win){ reportLevel(level, perfNow()-startMs, score); emit("level_complete",{}); }
   else emit("game_over",{score:score, mode:endless?"endless":"level", level:level});
 }
 
 // ── input ────────────────────────────────────────────────────────────────────
 function laneAt(x){ return Math.min(LANES-1, Math.max(0, (x/laneW)|0)); }
 
-// Piano-Tiles tap: hit the active tile anywhere in its lane (no bottom line).
-function tap(x){
+// Piano-Tiles tap: you must tap the active tile's RECTANGLE where it is right
+// now (its lane AND within its vertical bounds) — not just the lane, and not at
+// a fixed line. A vertical pad forgives fat fingers.
+function tap(x, y){
   if(mode!==MODE.PLAY || !alive || paused) return;
-  const lane = laneAt(x);
   const cur = tiles[next];
   if(!cur){ if(!tutorial) miss(); return; }
-  if(cur.lane !== lane){ miss(); return; }            // wrong lane → miss
-  clearTile(cur);                                      // correct lane → hit
+  const pad = rowH*0.35;
+  const onTile = laneAt(x) === cur.lane
+    && y >= tileTop(next) - pad && y <= tileBottom(next) + pad;
+  if(!onTile){ miss(); return; }                       // didn't hit the tile → miss
+  clearTile(cur);                                      // hit the tile's rectangle
 }
 function clearTile(cur){
   playNote(cur.deg); cur.done = true; next++; score++; combo++; flash = 0;
-  if(endless){ spawnEndless(); if(!tutorial) speed += ENDLESS_TAP_BUMP(); }
+  if(endless){ spawnEndless(); if(!tutorial && restTimer<=0) speed += ENDLESS_TAP_BUMP(); }  // no bump while resting
   if(tutorial){ tutTaps++; if(tutTaps>=TUT_TAPS) finishGuided(); return; }
   if(!endless && next>=tiles.length) endGame(true);    // level cleared
 }
@@ -420,12 +442,26 @@ function clearTile(cur){
 function miss(){ thud(); combo=0; flash=0.25; if(!tutorial) endGame(false); }
 
 function cvX(e){ return e.clientX - cv.getBoundingClientRect().left; }
-cv.addEventListener("pointerdown", e=>{ e.preventDefault(); tap(cvX(e)); }, {passive:false});
+function cvY(e){ return e.clientY - cv.getBoundingClientRect().top; }
+cv.addEventListener("pointerdown", e=>{ e.preventDefault(); tap(cvX(e), cvY(e)); }, {passive:false});
 
 // ── main loop ─────────────────────────────────────────────────────────────────
 // One physics step (extracted so tests can drive it deterministically).
 function tick(dt){
-  if(endless && !tutorial) speed += ENDLESS_ACCEL()*dt;   // beats speed up over time
+  if(endless && !tutorial){
+    if(restTimer > 0){
+      restTimer -= dt;                                    // resting → tiles stay slowed (no accel)
+      if(restTimer <= 0){ restTimer = 0; speed = savedSpeed; }   // rest over → restore speed, resume ramp
+    } else {
+      speed += ENDLESS_ACCEL()*dt;                        // beats speed up over time
+      playTimer += dt;
+      if(playTimer >= REST_EVERY){                        // start a breather
+        playTimer = 0; restTimer = REST_DURATION;
+        savedSpeed = speed;                               // remember, to restore after the rest
+        speed *= REST_SLOW;                               // slow the tiles down so it's easier to play
+      }
+    }
+  }
   scroll += speed*dt;
   if(flash>0) flash -= dt;
 
@@ -463,9 +499,7 @@ function draw(){
   ctx.strokeStyle = "rgba(255,255,255,.05)"; ctx.lineWidth = 1;
   for(let l=1;l<LANES;l++){ ctx.beginPath(); ctx.moveTo(l*laneW,0); ctx.lineTo(l*laneW,H); ctx.stroke(); }
 
-  // a faint highlight on the active tile's lane — guides the tap without a bottom bar
-  const cur = tiles[next];
-  if(cur && alive){ ctx.fillStyle = "rgba("+THEME.accentRGB+","+(flash>0?0:0.05)+")"; ctx.fillRect(cur.lane*laneW, 0, laneW, H); }
+  // miss flash (the tap target is the tile rectangle itself, highlighted below)
   if(flash>0){ ctx.fillStyle = "rgba("+THEME.missRGB+",.18)"; ctx.fillRect(0,0,W,H); }
 
   // tiles (from the active one upward)
@@ -476,7 +510,11 @@ function draw(){
     const x = t.lane*laneW;
     roundRect(x+5, top+4, laneW-10, h-8, 12);
     ctx.fillStyle = (i===next) ? THEME.tileActive : THEME.tile; ctx.fill();
-    if(i===next){ ctx.fillStyle="rgba("+THEME.accentRGB+",.20)"; roundRect(x+5,top+4,laneW-10,h-8,12); ctx.fill(); }
+    if(i===next){                                        // active tile = the tap target
+      ctx.fillStyle="rgba("+THEME.accentRGB+",.22)"; roundRect(x+5,top+4,laneW-10,h-8,12); ctx.fill();
+      ctx.strokeStyle="rgba("+THEME.accentRGB+",.9)"; ctx.lineWidth=3;
+      roundRect(x+6,top+5,laneW-12,h-10,11); ctx.stroke();
+    }
   }
 
   // tutorial: pulsing ring + a fingertip on the tile to tap next
@@ -486,6 +524,22 @@ function draw(){
     ctx.strokeStyle = "rgba("+THEME.accentRGB+","+(0.5+0.4*p)+")"; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(cx, cy, 26+8*p, 0, Math.PI*2); ctx.stroke();
     ctx.fillStyle = "rgba(255,255,255,.92)"; ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI*2); ctx.fill();
+  }
+
+  // breather countdown — big 5·4·3·2·1 up top so the player knows the speed is
+  // holding steady for a moment (drawn over the tiles, out of the tap zone).
+  if(restTimer > 0){
+    const n = Math.ceil(restTimer), cx = W/2, cy = H*0.26;
+    ctx.save();
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba("+THEME.accentRGB+",.75)";
+    ctx.font = "600 15px -apple-system,system-ui,sans-serif";
+    ctx.fillText(T.rest.toUpperCase(), cx, cy - rowH*0.5);
+    const pop = 1 + 0.12*(restTimer % 1);                 // gentle per-second pop
+    ctx.fillStyle = "rgba("+THEME.accentRGB+",.95)";
+    ctx.font = "800 "+Math.round(rowH*0.62*pop)+"px -apple-system,system-ui,sans-serif";
+    ctx.fillText(String(n), cx, cy);
+    ctx.restore();
   }
 
   // HUD
@@ -656,17 +710,19 @@ if(Q.get("dbg")==="1"){
   window.__beat = {
     state:()=>({mode, endless, level, next, score, combo, alive, tutorial, paused,
       speed:Math.round(speed), total:tiles.length, theme:themeIdx, lastBeat,
+      restTimer:Math.round(restTimer*100)/100, playTimer:Math.round(playTimer*100)/100,
       audio: AC ? AC.state : "none",
       nextLane: tiles[next] ? tiles[next].lane : -1,
       nextTop: tiles[next] ? Math.round(tileTop(next)) : 0,
       nextBottom: tiles[next] ? Math.round(tileBottom(next)) : 0, H:Math.round(H)}),
-    tap:(lane)=> tap(lane*laneW + laneW/2),
-    tapNext:()=>{ const c=tiles[next]; if(c) tap(c.lane*laneW + laneW/2); },
+    tap:(lane,y)=> tap(lane*laneW + laneW/2, y!=null ? y : (tiles[next] ? tileTop(next)+tiles[next]._h/2 : H/2)),
+    tapNext:()=>{ const c=tiles[next]; if(c) tap(c.lane*laneW + laneW/2, tileTop(next)+c._h/2); },
     tick:(dt)=> tick(dt),                       // drive physics deterministically
     setTheme:(i)=> applyTheme(i),
     startGuided:()=> startGame(true, 0, true),
     startEndless:()=> startGame(true),
     startLevel:(n)=> startGame(false, n||1),
+    setRest:(s)=>{ savedSpeed = speed; speed *= REST_SLOW; restTimer = s; playTimer = 0; },   // force a breather (for tests)
     endBtns:()=>({ next: document.getElementById('bNext').style.display!=='none',
       nextText: document.getElementById('bNext').textContent,
       title: document.getElementById('tEnd').textContent }),

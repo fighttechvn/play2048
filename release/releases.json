@@ -1,7 +1,22 @@
 {
   "app": "GoBrain",
-  "updated": "2026-06-30",
+  "updated": "2026-07-01",
   "releases": [
+    {
+      "version": "1.1.5",
+      "build": 76,
+      "date": "2026-07-01",
+      "status": "pending",
+      "channels": ["TestFlight", "Play Internal", "Web", "API"],
+      "highlights": [
+        "Beat leaderboard now ranks by score, with time as the tiebreaker.",
+        "Beat: tap anywhere on the tile for more forgiving hit detection.",
+        "Beat: slower rest between rounds, with a countdown.",
+        "Fix: the name prompt only appears when tapping Play, not on the home screen."
+      ],
+      "report": "1.1.5+76/",
+      "e2e": "1.1.5+70/e2e/"
+    },
     {
       "version": "1.1.5",
       "build": 73,
