@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Crowns</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--grid:#b9b3a6;--gold:#e2a52e;--goldd:#8a6206;--btn:#fff;--bd:#d0d0d0;--err:#e03131}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 14px;font-weight:700;white-space:nowrap}
+  .pill.err{color:var(--err);border-color:var(--err);background:#fff5f5}
+  #clock{margin-left:auto;font-variant-numeric:tabular-nums}
+  #errbtn{cursor:pointer;-webkit-user-select:none;user-select:none}
+  #errbtn.off{opacity:.4}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--gold);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* First-run guided tutorial (same pattern as games/zip). */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;pointer-events:none}
+  #tut.on{display:block}
+  #tut.block{pointer-events:auto}
+  #tutBg{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.42);pointer-events:none}
+  #tutHole{position:fixed;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.42);transition:left .22s ease,top .22s ease,width .22s ease,height .22s ease;pointer-events:none}
+  #tutCard{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 40px);max-width:300px;pointer-events:auto;background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);border:1px solid rgba(255,255,255,.55);border-radius:16px;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  #tutCard::after{content:"";position:absolute;left:50%;width:16px;height:16px;background:rgba(255,255,255,.66);transform:translateX(-50%) rotate(45deg);display:none}
+  #tutCard.below::after{display:block;top:-8px}
+  #tutCard.above::after{display:block;bottom:-8px}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;min-height:44px;margin:-4px -8px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">Crowns · 1</span><span class="pill" id="clock">0:00</span><span class="pill" id="errbtn" title="Toggle error highlight">⚠︎</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="btns">
+    <button class="btn" id="undo" disabled>Undo</button>
+    <button class="btn" id="hint">Hint</button>
+    <button class="btn" id="reset">Reset</button>
+  </div>
+  <div class="help"><b>How to play.</b> Place one crown 👑 in <b>each row, each column and each color region</b>. Crowns may never touch — not even diagonally. Tap once for an ✕ note, tap again for a crown, tap again to clear.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Place one crown 👑 in <b>each row, each column and each color region</b>. Crowns may never touch — not even diagonally. Tap once for an ✕ note, tap again for a crown, tap again to clear.",
+    vi:"<b>Cách chơi.</b> Đặt một vương miện 👑 vào <b>mỗi hàng, mỗi cột và mỗi vùng màu</b>. Các vương miện không được chạm nhau — kể cả theo đường chéo. Chạm một lần để ghi chú ✕, chạm lần nữa để đặt vương miện, chạm lần nữa để xóa.",
+    ko:"<b>플레이 방법.</b> <b>각 행, 각 열, 각 색상 구역</b>에 왕관 👑 하나씩 놓으세요. 왕관은 서로 닿을 수 없습니다 — 대각선도 안 됩니다. 한 번 탭하면 ✕ 메모, 다시 탭하면 왕관, 다시 탭하면 지워집니다.",
+    zh:"<b>玩法。</b> 在<b>每行、每列和每个颜色区域</b>各放一个王冠 👑。王冠之间不能相邻——对角线也不行。点一下是 ✕ 标记，再点是王冠，再点清除。",
+    ja:"<b>遊び方。</b> <b>各行・各列・各色エリア</b>に王冠 👑 を1つずつ置きます。王冠同士は接してはいけません — 斜めもだめです。1回タップで ✕ メモ、もう1回で王冠、もう1回で消去。",
+    ar:"<b>طريقة اللعب.</b> ضع تاجًا 👑 واحدًا في <b>كل صف وكل عمود وكل منطقة لونية</b>. لا يجوز أن تتلامس التيجان — ولا حتى قطريًا. انقر مرة لعلامة ✕، ومرة أخرى للتاج، ومرة أخرى للمسح."
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2>Solved! 🎉</h2><p id="winmsg"></p><button id="next">Next level</button></div></div>
+<div id="tut">
+  <div id="tutBg"></div>
+  <div id="tutHole"></div>
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script>
+const KEY="crowns.level";
+const TUTKEY="crowns.tutorialSeen";
+const ERRKEY="crowns.errhl";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // feature flag: hub passes ?tut=0 to disable
+// Locale for the tutorial — same source order as the "how to play" help above.
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) — see games/zip for notes; paste + change GAME ──
+const GBLB=(function(){
+  var GAME='crowns', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(level){ var ms=t0?(Date.now()-t0):0; emit('level_complete',{level:level,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:level,durationMs:ms})}).catch(function(){}); }catch(e){} }
+  };
+})();
+// Cell states: 0 empty · 1 = ✕ note · 2 = crown
+let DATA=null, lvl=0, L=null, g=null, history=[], cell=0, ox=0, oy=0;
+let startT=0, clockInt=0, won=false;
+let errHl=localStorage.getItem(ERRKEY)!=="0"; // auto-error highlight, default ON
+let tutActive=false, tutStep=0, tutRAF=0, tutT=0, tutTarget=null; // first-run guided tutorial
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+const ckey=(r,c)=>r+','+c;
+// pastel region palette (up to 9 regions)
+const PAL=['#f6cdc9','#c9dcf6','#cdeec9','#f6ecc2','#e3cdf3','#c6ebf2','#f6dcb8','#dbe6c3','#f0c9e2'];
+
+fetch('./levels.json').then(r=>r.json()).then(d=>{DATA=d; lvl=Math.min(+(localStorage.getItem(KEY)||0), d.levels.length-1); load(lvl);});
+
+function load(i){
+  L=DATA.levels[i]; history=[]; won=false;
+  g=[]; for(let r=0;r<L.size;r++){const row=[];for(let c=0;c<L.size;c++)row.push(0);g.push(row);}
+  layout(); draw(); $('lvl').textContent='Crowns · '+(i+1);
+  startT=Date.now(); if(!clockInt)clockInt=setInterval(tick,500); tick();
+  maybeStartTut(); GBLB.start();
+}
+function tick(){
+  if(won)return;
+  const s=((Date.now()-startT)/1000)|0;
+  $('clock').textContent=((s/60)|0)+':'+('0'+(s%60)).slice(-2);
+}
+function layout(){
+  const wrap=document.getElementById('wrap');
+  const W=Math.min(wrap.clientWidth-60, 500);
+  cell=Math.floor(W/L.size); ox=Math.floor((W-cell*L.size)/2); oy=ox;
+  const px=cell*L.size+2*ox;
+  cv.width=px*devicePixelRatio; cv.height=px*devicePixelRatio; cv.style.width=px+'px'; cv.style.height=px+'px';
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+// Conflicting crowns: >1 per row / column / region, or any two touching (8-dir).
+function violations(){
+  const bad=new Set(); const S=L.size; const crowns=[];
+  for(let r=0;r<S;r++)for(let c=0;c<S;c++)if(g[r][c]===2)crowns.push([r,c]);
+  const rows={},cols={},regs={};
+  for(const cr of crowns){
+    const k1='r'+cr[0],k2='c'+cr[1],k3='g'+L.regions[cr[0]][cr[1]];
+    (rows[k1]=rows[k1]||[]).push(cr);(cols[k2]=cols[k2]||[]).push(cr);(regs[k3]=regs[k3]||[]).push(cr);
+  }
+  for(const m of [rows,cols,regs])for(const k in m)if(m[k].length>1)for(const cr of m[k])bad.add(ckey(cr[0],cr[1]));
+  for(let i=0;i<crowns.length;i++)for(let j=i+1;j<crowns.length;j++){
+    if(Math.abs(crowns[i][0]-crowns[j][0])<=1&&Math.abs(crowns[i][1]-crowns[j][1])<=1){
+      bad.add(ckey(crowns[i][0],crowns[i][1]));bad.add(ckey(crowns[j][0],crowns[j][1]));
+    }
+  }
+  return bad;
+}
+
+function drawCrown(x,y,s,alpha){
+  ctx.save(); if(alpha!==undefined)ctx.globalAlpha=alpha;
+  ctx.beginPath();
+  ctx.moveTo(x-s,y+s*0.55); ctx.lineTo(x-s,y-s*0.25); ctx.lineTo(x-s*0.45,y+s*0.05);
+  ctx.lineTo(x,y-s*0.65); ctx.lineTo(x+s*0.45,y+s*0.05); ctx.lineTo(x+s,y-s*0.25);
+  ctx.lineTo(x+s,y+s*0.55); ctx.closePath();
+  ctx.fillStyle=getCss('--gold'); ctx.fill();
+  ctx.lineWidth=Math.max(1.5,s*0.14); ctx.lineJoin='round'; ctx.strokeStyle=getCss('--goldd'); ctx.stroke();
+  ctx.restore();
+}
+function drawX(x,y,s){
+  ctx.save(); ctx.strokeStyle='#7d7d7d'; ctx.lineWidth=Math.max(2,s*0.22); ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(x-s,y-s);ctx.lineTo(x+s,y+s);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x+s,y-s);ctx.lineTo(x-s,y+s);ctx.stroke();
+  ctx.restore();
+}
+
+function draw(){
+  const S=L.size; ctx.clearRect(0,0,cv.width,cv.height);
+  const bad=errHl?violations():new Set();
+  // region-colored cells
+  for(let r=0;r<S;r++)for(let c=0;c<S;c++){
+    const x=ox+c*cell,y=oy+r*cell;
+    ctx.fillStyle=PAL[L.regions[r][c]%PAL.length];
+    ctx.fillRect(x,y,cell,cell);
+    if(bad.has(ckey(r,c))){ctx.fillStyle='rgba(224,49,49,.30)';ctx.fillRect(x,y,cell,cell);}
+  }
+  // thin grid
+  ctx.strokeStyle='rgba(0,0,0,.14)'; ctx.lineWidth=1;
+  for(let r=0;r<=S;r++){ctx.beginPath();ctx.moveTo(ox,oy+r*cell);ctx.lineTo(ox+cell*S,oy+r*cell);ctx.stroke();}
+  for(let c=0;c<=S;c++){ctx.beginPath();ctx.moveTo(ox+c*cell,oy);ctx.lineTo(ox+c*cell,oy+cell*S);ctx.stroke();}
+  // thick region borders
+  ctx.strokeStyle='#3b3b3b'; ctx.lineWidth=Math.max(2,cell*0.055); ctx.lineCap='square';
+  for(let r=0;r<S;r++)for(let c=0;c<S;c++){
+    const gg=L.regions[r][c];
+    if(c<S-1&&L.regions[r][c+1]!==gg){const x=ox+(c+1)*cell;ctx.beginPath();ctx.moveTo(x,oy+r*cell);ctx.lineTo(x,oy+(r+1)*cell);ctx.stroke();}
+    if(r<S-1&&L.regions[r+1][c]!==gg){const y=oy+(r+1)*cell;ctx.beginPath();ctx.moveTo(ox+c*cell,y);ctx.lineTo(ox+(c+1)*cell,y);ctx.stroke();}
+  }
+  ctx.strokeRect(ox,oy,cell*S,cell*S);
+  // marks + crowns
+  for(let r=0;r<S;r++)for(let c=0;c<S;c++){
+    const v=g[r][c]; if(!v)continue;
+    const x=ox+c*cell+cell/2, y=oy+r*cell+cell/2;
+    if(v===1)drawX(x,y,cell*0.16); else drawCrown(x,y,cell*0.33);
+  }
+  if(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='act') drawTutHint();
+}
+
+function cellAt(ev){
+  const rect=cv.getBoundingClientRect();
+  const c=Math.floor((ev.clientX-rect.left-ox)/cell), r=Math.floor((ev.clientY-rect.top-oy)/cell);
+  if(r<0||c<0||r>=L.size||c>=L.size)return null; return [r,c];
+}
+let downCell=null;
+cv.addEventListener('pointerdown',ev=>{ev.preventDefault();downCell=cellAt(ev);});
+cv.addEventListener('pointerup',ev=>{ev.preventDefault();const cl=cellAt(ev);
+  if(cl&&downCell&&cl[0]===downCell[0]&&cl[1]===downCell[1])tap(cl[0],cl[1]);downCell=null;});
+// iOS in-app webviews (Messenger/Facebook/Instagram) ignore touch-action:none and
+// pointer-event preventDefault for scroll suppression — a vertical swipe on the
+// board still scrolls/bounces the page. A non-passive touchmove preventDefault is
+// the only reliable cross-webview way to keep a tap/swipe on the board from scrolling.
+cv.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+
+function tap(r,c){
+  if(won)return;
+  history.push({r:r,c:c,v:g[r][c]});
+  g[r][c]=g[r][c]===0?1:g[r][c]===1?2:0; // empty → ✕ → crown → empty
+  draw();upd();checkWin();
+  if(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='act' && tutTarget && g[tutTarget[0]][tutTarget[1]]===2) nextTut();
+}
+function upd(){ $('undo').disabled=history.length===0; }
+function checkWin(){
+  const S=L.size; let n=0;
+  for(let r=0;r<S;r++)for(let c=0;c<S;c++)if(g[r][c]===2)n++;
+  if(n!==S)return;
+  if(violations().size)return;
+  won=true;
+  GBLB.report(lvl+1);
+  const s=((Date.now()-startT)/1000)|0;
+  $('winmsg').textContent='Level '+(lvl+1)+' of '+DATA.count+' · '+((s/60)|0)+':'+('0'+(s%60)).slice(-2);
+  $('wino').style.display='grid';
+}
+$('undo').onclick=()=>{const m=history.pop();if(!m)return;g[m.r][m.c]=m.v;draw();upd();};
+$('reset').onclick=()=>{for(let r=0;r<L.size;r++)for(let c=0;c<L.size;c++)g[r][c]=0;history=[];draw();upd();};
+$('hint').onclick=()=>{ // reveal one correct crown from the solution
+  const S=L.size; const opts=[];
+  for(let r=0;r<S;r++)if(g[r][L.solution[r]]!==2)opts.push(r);
+  if(!opts.length)return;
+  const r=opts[(Math.random()*opts.length)|0], c=L.solution[r];
+  history.push({r:r,c:c,v:g[r][c]});
+  g[r][c]=2; draw();upd();checkWin();
+};
+$('next').onclick=()=>{$('wino').style.display='none';lvl=Math.min(lvl+1,DATA.levels.length-1);localStorage.setItem(KEY,lvl);load(lvl);};
+$('errbtn').onclick=()=>{errHl=!errHl;localStorage.setItem(ERRKEY,errHl?'1':'0');$('errbtn').classList.toggle('off',!errHl);draw();};
+$('errbtn').classList.toggle('off',!errHl);
+addEventListener('resize',()=>{if(L){layout();draw();if(tutActive)renderTut();}});
+
+/* ── First-run guided tutorial ─────────────────────────────────────────────
+   On the very first visit (only on Level 1) we explain the rules and the ✕
+   marks, then have the player place their first crown on a glowing cell.
+   Shown once; the "seen" flag lives in localStorage. */
+const TUT_T={
+  en:{w_t:"Welcome to Crowns",w_b:"Place one crown in every row, every column and every color region. Crowns may never touch — not even diagonally.",start:"Start",
+      s_t:"Use ✕ marks",s_b:"Tap once to note ✕ where a crown can't go. Tap again to place a crown, tap again to clear.",next:"Next",
+      t_t:"Place your first crown",t_b:"Tap the glowing cell twice to place a crown there.",
+      f_t:"You've got it! 🎉",f_b:"Place all the crowns without conflicts to solve the level.",play:"Play",skip:"Skip"},
+  vi:{w_t:"Chào mừng đến với Crowns",w_b:"Đặt một vương miện vào mỗi hàng, mỗi cột và mỗi vùng màu. Các vương miện không được chạm nhau — kể cả chéo.",start:"Bắt đầu",
+      s_t:"Dùng dấu ✕",s_b:"Chạm một lần để đánh dấu ✕ nơi không thể có vương miện. Chạm lần nữa để đặt vương miện, lần nữa để xóa.",next:"Tiếp",
+      t_t:"Đặt vương miện đầu tiên",t_b:"Chạm hai lần vào ô đang sáng để đặt vương miện.",
+      f_t:"Bạn làm được rồi! 🎉",f_b:"Đặt đủ vương miện không xung đột để giải màn chơi.",play:"Chơi",skip:"Bỏ qua"},
+  ko:{w_t:"Crowns에 오신 것을 환영합니다",w_b:"각 행, 각 열, 각 색상 구역에 왕관을 하나씩 놓으세요. 왕관은 서로 닿을 수 없습니다 — 대각선도 안 됩니다.",start:"시작",
+      s_t:"✕ 메모 활용",s_b:"왕관이 올 수 없는 곳은 한 번 탭해 ✕로 표시하세요. 다시 탭하면 왕관, 또 탭하면 지워집니다.",next:"다음",
+      t_t:"첫 왕관을 놓으세요",t_b:"빛나는 칸을 두 번 탭해 왕관을 놓으세요.",
+      f_t:"잘하셨어요! 🎉",f_b:"충돌 없이 모든 왕관을 놓으면 클리어!",play:"플레이",skip:"건너뛰기"},
+  zh:{w_t:"欢迎来到 Crowns",w_b:"在每行、每列和每个颜色区域各放一个王冠。王冠之间不能相邻——对角线也不行。",start:"开始",
+      s_t:"善用 ✕ 标记",s_b:"点一下标记 ✕ 表示这里不能放王冠。再点一下放王冠，再点清除。",next:"下一步",
+      t_t:"放下第一个王冠",t_b:"点两下发光的格子放置王冠。",
+      f_t:"你学会了！🎉",f_b:"无冲突地放好所有王冠即可过关。",play:"开始玩",skip:"跳过"},
+  ja:{w_t:"Crowns へようこそ",w_b:"各行・各列・各色エリアに王冠を1つずつ置きます。王冠同士は接してはいけません — 斜めもだめです。",start:"スタート",
+      s_t:"✕ メモを使おう",s_b:"王冠が置けない場所は1回タップで ✕ メモ。もう1回で王冠、もう1回で消去。",next:"次へ",
+      t_t:"最初の王冠を置こう",t_b:"光っているマスを2回タップして王冠を置きます。",
+      f_t:"できました！🎉",f_b:"矛盾なくすべての王冠を置ければクリア！",play:"プレイ",skip:"スキップ"},
+  ar:{w_t:"مرحباً بك في Crowns",w_b:"ضع تاجًا واحدًا في كل صف وكل عمود وكل منطقة لونية. لا يجوز أن تتلامس التيجان — ولا حتى قطريًا.",start:"ابدأ",
+      s_t:"استخدم علامات ✕",s_b:"انقر مرة لوضع علامة ✕ حيث لا يمكن وضع تاج. انقر مرة أخرى لوضع تاج، ومرة أخرى للمسح.",next:"التالي",
+      t_t:"ضع تاجك الأول",t_b:"انقر مرتين على الخانة المضيئة لوضع تاج فيها.",
+      f_t:"أحسنت! 🎉",f_b:"ضع كل التيجان دون تعارض لحل المستوى.",play:"العب",skip:"تخطّي"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+const STEPS=[
+  {key:"welcome",target:null,                title:M.w_t,body:M.w_b,btn:M.start},
+  {key:"explain", target:()=>cv,       pad:6, title:M.s_t,body:M.s_b,btn:M.next},
+  {key:"act",     target:()=>cv,       pad:6, interactive:true, title:M.t_t,body:M.t_b},
+  {key:"finish",  target:null,                title:M.f_t,body:M.f_b,btn:M.play}
+];
+
+function maybeStartTut(){
+  if(!TUT_ON)return;                       // feature flag off
+  if(localStorage.getItem(TUTKEY))return;
+  if(lvl!==0||tutActive)return;
+  tutTarget=[0,L.solution[0]];             // guided crown: row 0's solution cell
+  tutActive=true; tutStep=0; renderTut();
+}
+function setHole(rect,pad){
+  pad=pad||8; const h=$('tutHole');
+  $('tutBg').style.display='none'; h.style.display='block';
+  h.style.left=(rect.left-pad)+'px'; h.style.top=(rect.top-pad)+'px';
+  h.style.width=(rect.width+pad*2)+'px'; h.style.height=(rect.height+pad*2)+'px';
+}
+function placeCard(rect){
+  const card=$('tutCard'); card.classList.remove('above','below');
+  if(!rect){ card.style.top='50%'; card.style.transform='translate(-50%,-50%)'; return; }
+  card.style.transform='translateX(-50%)';
+  const ch=card.offsetHeight, below=rect.top<innerHeight*0.5;
+  let top=below?rect.bottom+16:rect.top-16-ch;
+  card.classList.add(below?'below':'above');
+  card.style.top=Math.max(12,Math.min(top,innerHeight-ch-12))+'px';
+}
+function renderTut(){
+  const s=STEPS[tutStep], tut=$('tut');
+  tut.classList.add('on'); tut.classList.toggle('block',!s.interactive);
+  if(LANG==='ar')$('tutCard').dir='rtl';
+  $('tutTitle').textContent=s.title; $('tutBody').textContent=s.body;
+  $('tutSkip').textContent=M.skip;
+  const next=$('tutNext');
+  if(s.interactive){ next.style.display='none'; }
+  else { next.style.display='inline-block'; next.textContent=s.btn; }
+  const tgt=s.target&&s.target();
+  if(tgt){ const r=tgt.getBoundingClientRect(); setHole(r,s.pad); placeCard(r); }
+  else { $('tutHole').style.display='none'; $('tutBg').style.display='block'; placeCard(null); }
+  if(s.interactive && !tutRAF) tutRAF=requestAnimationFrame(tutAnimate);
+}
+function nextTut(){ tutStep++; if(tutStep>=STEPS.length){ endTut(); return; } renderTut(); }
+function endTut(){
+  tutActive=false; if(tutRAF){cancelAnimationFrame(tutRAF);tutRAF=0;}
+  localStorage.setItem(TUTKEY,'1'); $('tut').classList.remove('on'); draw();
+}
+$('tutNext').onclick=nextTut;
+$('tutSkip').onclick=endTut;
+
+function tutAnimate(ts){
+  tutT=ts||0;
+  if(!(tutActive && STEPS[tutStep] && STEPS[tutStep].key==='act')){ tutRAF=0; return; }
+  draw(); tutRAF=requestAnimationFrame(tutAnimate);
+}
+function drawTutHint(){
+  if(!tutTarget)return;
+  const r=tutTarget[0], c=tutTarget[1], t=tutT/1000, col=getCss('--goldd')||'#8a6206';
+  const x=ox+c*cell, y=oy+r*cell;
+  const pulse=0.4+0.45*(0.5+0.5*Math.sin(t*3.4));
+  ctx.save(); ctx.globalAlpha=pulse; ctx.strokeStyle=col; ctx.lineWidth=Math.max(3,cell*0.07);
+  ctx.strokeRect(x+3,y+3,cell-6,cell-6); ctx.restore();
+  const fp=0.5+0.5*Math.sin(t*3.4);
+  ctx.save(); ctx.globalAlpha=0.55+0.35*fp;
+  drawCrown(x+cell/2,y+cell/2,cell*(0.24+0.05*fp));
+  ctx.restore();
+}
+</script>
+</body>
+</html>

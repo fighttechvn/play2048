@@ -1,0 +1,1 @@
+{"game":"stroop","count":1,"levels":[{"id":1,"mode":"endless-timed","durationMs":60000,"wrongPenaltyMs":1000,"colors":6,"inks":["#d62839","#0072b2","#009e73","#f2b705","#8a3ffc","#e8590c"],"matchRate":{"warmupTrials":10,"warmup":0.5,"main":0.35},"reverse":{"startMs":30000,"lenMs":10000,"scoreMult":2}}]}

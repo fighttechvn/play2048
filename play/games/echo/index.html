@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Echo</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--acc:#3b5bdb;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  .pill.err{color:#e03131;border-color:#e03131;background:#fff5f5}
+  #lives{color:#e03131;letter-spacing:3px;font-size:17px}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px;position:relative}
+  #grid{display:grid;grid-template-columns:repeat(3,1fr);grid-gap:10px;gap:10px;transition:opacity .3s}
+  #grid.n4{grid-template-columns:repeat(4,1fr)}
+  #grid.shake{animation:shake .4s}
+  .tile{position:relative;border:0;border-radius:14px;padding:0;cursor:pointer;transition:transform .12s ease,box-shadow .18s ease,filter .18s ease;-webkit-transition:-webkit-transform .12s ease,box-shadow .18s ease,-webkit-filter .18s ease;outline:none}
+  .tile::before{content:"";display:block;padding-top:100%}
+  .tile.lit{-webkit-filter:brightness(1.14) saturate(1.5);filter:brightness(1.14) saturate(1.5);box-shadow:0 0 0 3px rgba(59,91,219,.35),0 0 20px rgba(59,91,219,.5);-webkit-transform:scale(1.06);transform:scale(1.06);z-index:1}
+  .tile.press{-webkit-transform:scale(.9);transform:scale(.9)}
+  .tile.bad{-webkit-filter:none;filter:none;background:#ffa8a8!important;box-shadow:0 0 0 3px rgba(224,49,49,.5)}
+  #banner{position:absolute;top:0;left:0;right:0;bottom:0;display:none;align-items:center;justify-content:center;pointer-events:none;font-size:34px;font-weight:800;color:rgba(26,26,26,.88);text-shadow:0 2px 14px #fff,0 0 6px #fff;z-index:2}
+  #banner.on{display:flex;animation:bpop .9s ease both}
+  @keyframes bpop{0%{opacity:0;-webkit-transform:scale(.6);transform:scale(.6)}22%{opacity:1;-webkit-transform:scale(1.04);transform:scale(1.04)}34%{-webkit-transform:scale(1);transform:scale(1)}78%{opacity:1}100%{opacity:0}}
+  @keyframes shake{0%,100%{-webkit-transform:translateX(0);transform:translateX(0)}20%,60%{-webkit-transform:translateX(-7px);transform:translateX(-7px)}40%,80%{-webkit-transform:translateX(7px);transform:translateX(7px)}}
+  .statusrow{display:flex;justify-content:center}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win p{margin:4px 0}
+  .win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--acc);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* First-run tutorial — simple 2-step centered card */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;background:rgba(0,0,0,.45)}
+  #tut.on{display:block}
+  #tutCard{position:fixed;left:50%;top:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);width:calc(100% - 40px);max-width:320px;background:#fff;border-radius:16px;padding:20px 22px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;min-height:44px;margin:-4px -8px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}#tutCard .row>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">Echo · Round 1</span><span class="pill" id="lives">♥♥♥</span></div>
+  <div class="board">
+    <div id="grid"></div>
+    <div id="banner"></div>
+  </div>
+  <div class="statusrow"><span class="pill" id="status">…</span></div>
+  <div class="help"><b>How to play.</b> Tiles light up one by one, each with its own tone. Repeat the sequence by tapping the tiles in the same order. Every round adds one step — and playback speeds up. 3 mistakes ends the run.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Tiles light up one by one, each with its own tone. Repeat the sequence by tapping the tiles in the same order. Every round adds one step — and playback speeds up. 3 mistakes ends the run.",
+    vi:"<b>Cách chơi.</b> Các ô sáng lần lượt, mỗi ô một âm riêng. Hãy chạm lại các ô theo đúng thứ tự. Mỗi vòng thêm một bước — tốc độ tăng dần. Sai 3 lần là kết thúc.",
+    ko:"<b>플레이 방법.</b> 타일이 고유한 소리와 함께 하나씩 켜집니다. 같은 순서대로 타일을 눌러 따라 하세요. 라운드마다 한 단계씩 길어지고 점점 빨라집니다. 3번 틀리면 종료됩니다.",
+    zh:"<b>玩法。</b> 方块会依次亮起，每块有自己的音调。按相同顺序点击方块进行复述。每回合增加一步，速度也会加快。错3次游戏结束。",
+    ja:"<b>遊び方。</b> タイルが音とともに順番に光ります。同じ順番でタイルをタップして再現しましょう。ラウンドごとに1つ長くなり、だんだん速くなります。3回ミスで終了です。",
+    ar:"<b>طريقة اللعب.</b> تضيء المربعات واحدًا تلو الآخر، ولكل منها نغمة. كرّر التسلسل بالنقر على المربعات بنفس الترتيب. تزداد خطوة كل جولة وتتسارع اللعبة. ثلاثة أخطاء تنهي الجولة."
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="starto" style="display:grid"><div><h2>Echo</h2><p id="startMsg"></p><button id="startBtn">Play</button></div></div>
+<div class="win" id="wino"><div><h2 id="goTitle">Game over</h2><p id="goScore"></p><p id="goBest"></p><button id="again">Play again</button></div></div>
+<div id="tut">
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script>
+const KEY="echo.best";
+const TUTKEY="echo.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // hub passes ?tut=0 to disable
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Echo is endless/score-based, so it POSTs a fixed `level: 1` with the
+// score — the server ranks score games by score first, then time. Reads the
+// shared player token (set by the hub, same origin). No token → silently skips.
+// Mirrors the GBLB block in games/zip/index.html; keep in sync.
+const GBLB=(function(){
+  var GAME='echo', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+
+// ── UI strings (6 languages) ──────────────────────────────────────────────
+const STR={
+  en:{watch:"Watch…",turn:"Your turn!",wrong:"Oops! Watch again",expand:"Grid expands!",round:"Round",over:"Game over",score:"Score",best:"Best",play:"Play",again:"Play again",tap:"Repeat the growing sequence of lights and tones."},
+  vi:{watch:"Quan sát…",turn:"Đến lượt bạn!",wrong:"Sai rồi! Xem lại nhé",expand:"Lưới mở rộng!",round:"Vòng",over:"Kết thúc",score:"Điểm",best:"Kỷ lục",play:"Chơi",again:"Chơi lại",tap:"Lặp lại chuỗi đèn và âm thanh ngày càng dài."},
+  ko:{watch:"잘 보세요…",turn:"당신 차례!",wrong:"틀렸어요! 다시 보세요",expand:"그리드가 커집니다!",round:"라운드",over:"게임 오버",score:"점수",best:"최고 기록",play:"플레이",again:"다시 하기",tap:"점점 길어지는 빛과 소리의 순서를 따라 하세요."},
+  zh:{watch:"注意看…",turn:"到你了！",wrong:"错了！再看一遍",expand:"网格变大了！",round:"回合",over:"游戏结束",score:"得分",best:"最佳",play:"开始",again:"再玩一次",tap:"重复越来越长的灯光与音序。"},
+  ja:{watch:"よく見て…",turn:"あなたの番！",wrong:"ミス！もう一度見て",expand:"グリッド拡大！",round:"ラウンド",over:"ゲームオーバー",score:"スコア",best:"ベスト",play:"プレイ",again:"もう一度",tap:"長くなっていく光と音の順番を繰り返そう。"},
+  ar:{watch:"راقب…",turn:"دورك!",wrong:"خطأ! شاهد مجددًا",expand:"الشبكة تتوسع!",round:"جولة",over:"انتهت اللعبة",score:"النقاط",best:"الأفضل",play:"العب",again:"العب مجددًا",tap:"كرّر تسلسل الأضواء والنغمات المتزايد."}
+};
+const S=STR[LANG]||STR.en;
+
+// ── Pure logic (kept in sync with games/echo/logic.mjs — source of truth) ──
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function paramsForRound(len){var grid=len>=8?4:3;var playMs=Math.max(320,640-(len-1)*22);var gapMs=Math.max(90,210-(len-1)*8);return {grid:grid,tiles:grid*grid,playMs:playMs,gapMs:gapMs};}
+function extendSequence(seq,rnd,tiles){var v;do{v=Math.floor(rnd()*tiles);}while(seq.length>=2&&seq[seq.length-1]===v&&seq[seq.length-2]===v);seq.push(v);return seq;}
+
+// ── WebAudio beeps — OscillatorNode only, no files; silent-fail if blocked ──
+var actx=null;
+function ensureAudio(){try{var AC=window.AudioContext||window.webkitAudioContext;if(!actx&&AC)actx=new AC();if(actx&&actx.state==="suspended")actx.resume();}catch(e){actx=null;}}
+function tone(freq,dur,type,vol){
+  try{
+    if(!actx)return;
+    var t=actx.currentTime,o=actx.createOscillator(),g=actx.createGain();
+    o.type=type||"sine";o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.linearRampToValueAtTime(vol||0.22,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g);g.connect(actx.destination);
+    o.start(t);o.stop(t+dur+0.05);
+  }catch(e){}
+}
+// One tone per tile — a pleasant pentatonic ladder spanning three octaves.
+const PENTA=[0,2,4,7,9,12,14,16,19,21,24,26,28,31,33,36];
+function tileFreq(i){return 261.63*Math.pow(2,PENTA[i%16]/12);}
+// Soft pastel palette, one per tile position (stable across grid growth).
+const COLORS=["#ffadad","#ffd6a5","#fdffb6","#caffbf","#9bf6ff","#a0c4ff","#bdb2ff","#ffc6ff","#e2f0cb","#ffdac1","#b5ead7","#c7ceea","#f9c6c9","#d0f4de","#fcf5c7","#a9def9"];
+
+// ── Game state ────────────────────────────────────────────────────────────
+let seq=[],input=0,lives=3,score=0,best=+(localStorage.getItem(KEY)||0),state="idle",gridN=3,timers=[];
+let rnd=mulberry32(((Date.now()%2147483647)>>>0)||1);
+const $=function(id){return document.getElementById(id);};
+const grid=$("grid");
+function later(fn,ms){timers.push(setTimeout(fn,ms));}
+function clearTimers(){for(var i=0;i<timers.length;i++)clearTimeout(timers[i]);timers=[];}
+function hearts(){var s="";for(var i=0;i<3;i++)s+=(i<lives?"♥":"♡");$("lives").textContent=s;}
+function setStatus(t,err){var st=$("status");st.textContent=t;if(err)st.classList.add("err");else st.classList.remove("err");}
+function setRoundPill(){$("lvl").textContent="Echo · "+S.round+" "+Math.max(1,seq.length);}
+function tiles(){return grid.children;}
+function buildGrid(){
+  grid.innerHTML="";
+  if(gridN===4)grid.classList.add("n4");else grid.classList.remove("n4");
+  var n=gridN*gridN;
+  for(var i=0;i<n;i++){(function(i){
+    var b=document.createElement("button");
+    b.className="tile";b.style.background=COLORS[i];
+    b.addEventListener("pointerdown",function(ev){ev.preventDefault();tapTile(i,b);});
+    grid.appendChild(b);
+  })(i);}
+}
+function flash(b,i,ms){
+  if(!b)return;
+  b.classList.add("lit");
+  tone(tileFreq(i),Math.max(0.12,(ms/1000)*0.9),"sine",0.22);
+  later(function(){b.classList.remove("lit");},Math.max(90,ms*0.8));
+}
+function banner(t,ms){
+  var b=$("banner");b.textContent=t;
+  b.classList.remove("on");void b.offsetWidth;b.classList.add("on");
+  later(function(){b.classList.remove("on");},ms||900);
+}
+
+// ── Round flow ────────────────────────────────────────────────────────────
+function playSeq(){
+  state="watch";setStatus(S.watch);input=0;
+  var p=paramsForRound(seq.length);
+  for(var k=0;k<seq.length;k++){(function(k){
+    later(function(){var i=seq[k];flash(tiles()[i],i,p.playMs);},600+k*(p.playMs+p.gapMs));
+  })(k);}
+  later(function(){state="input";setStatus(S.turn);},600+seq.length*(p.playMs+p.gapMs));
+}
+function tapTile(i,b){
+  if(state!=="input")return;
+  ensureAudio();
+  b.classList.add("press");later(function(){b.classList.remove("press");},130);
+  if(i===seq[input]){
+    flash(b,i,240);
+    input++;
+    if(input===seq.length)roundDone();
+  }else{
+    wrong(b);
+  }
+}
+function roundDone(){
+  state="pause";
+  score=seq.length;
+  if(score>best){best=score;try{localStorage.setItem(KEY,String(best));}catch(e){}}
+  later(function(){tone(523.25,0.12,"sine",0.18);},160);
+  later(function(){tone(783.99,0.2,"sine",0.18);},300);
+  later(nextRound,750);
+}
+function wrong(b){
+  state="pause";lives--;hearts();
+  if(b)b.classList.add("bad");
+  grid.classList.add("shake");
+  tone(130,0.35,"square",0.14);
+  later(function(){if(b)b.classList.remove("bad");grid.classList.remove("shake");},450);
+  if(lives<=0){later(gameOver,650);return;}
+  setStatus(S.wrong,true);
+  later(function(){banner(S.round+" "+seq.length,800);later(playSeq,300);},1000);
+}
+function nextRound(){
+  var nl=seq.length+1,p=paramsForRound(nl),grew=false;
+  if(p.grid!==gridN){gridN=p.grid;grew=true;}
+  extendSequence(seq,rnd,p.tiles);
+  setRoundPill();
+  if(grew){
+    // subtle transition: fade the board out, rebuild at 4×4, fade back in
+    setStatus(S.expand);banner(S.expand,1100);
+    grid.style.opacity="0";
+    later(function(){buildGrid();grid.style.opacity="1";},350);
+    later(function(){banner(S.round+" "+seq.length,800);later(playSeq,300);},1350);
+  }else{
+    banner(S.round+" "+seq.length,800);
+    later(playSeq,450);
+  }
+}
+function gameOver(){
+  state="over";
+  GBLB.report(score);
+  $("goTitle").textContent=S.over;
+  $("goScore").textContent=S.score+": "+score;
+  $("goBest").textContent=S.best+": "+best;
+  $("wino").style.display="grid";
+}
+function startRun(){
+  clearTimers();
+  $("wino").style.display="none";$("starto").style.display="none";
+  seq=[];input=0;lives=3;score=0;gridN=3;state="pause";
+  rnd=mulberry32(((Date.now()%2147483647)>>>0)||1);
+  hearts();buildGrid();setStatus(S.watch);setRoundPill();
+  GBLB.start();
+  later(nextRound,400);
+}
+
+// ── Start / restart ───────────────────────────────────────────────────────
+$("startMsg").textContent=S.tap;
+$("startBtn").textContent=S.play;
+$("again").textContent=S.again;
+if(LANG==="ar"){$("starto").dir="rtl";$("wino").dir="rtl";}
+$("startBtn").onclick=function(){ensureAudio();if(TUT_ON&&!localStorage.getItem(TUTKEY)){$("starto").style.display="none";showTut();}else{startRun();}};
+$("again").onclick=function(){ensureAudio();startRun();};
+
+// ── First-run tutorial (2 steps) ──────────────────────────────────────────
+const TUT_T={
+  en:{t1:"Welcome to Echo",b1:"Watch the tiles light up one by one — each has its own tone.",t2:"Repeat it",b2:"Tap the tiles in the same order. Each round adds one step. You have 3 lives.",skip:"Skip",next:"Next",play:"Play"},
+  vi:{t1:"Chào mừng đến Echo",b1:"Quan sát các ô sáng lần lượt — mỗi ô một âm riêng.",t2:"Lặp lại",b2:"Chạm các ô theo đúng thứ tự. Mỗi vòng thêm một bước. Bạn có 3 mạng.",skip:"Bỏ qua",next:"Tiếp",play:"Chơi"},
+  ko:{t1:"Echo에 오신 것을 환영합니다",b1:"타일이 하나씩 켜지는 것을 보세요 — 각자 고유한 소리가 있어요.",t2:"따라 하세요",b2:"같은 순서로 타일을 누르세요. 라운드마다 한 단계씩 길어져요. 라이프는 3개.",skip:"건너뛰기",next:"다음",play:"플레이"},
+  zh:{t1:"欢迎来到 Echo",b1:"注意看方块依次亮起——每块有自己的音调。",t2:"复述顺序",b2:"按相同顺序点击方块。每回合加一步。你有3条命。",skip:"跳过",next:"下一步",play:"开始玩"},
+  ja:{t1:"Echo へようこそ",b1:"タイルが順番に光るのを見てください — それぞれ音が違います。",t2:"再現しよう",b2:"同じ順番でタイルをタップ。ラウンドごとに1つ長くなります。ライフは3つ。",skip:"スキップ",next:"次へ",play:"プレイ"},
+  ar:{t1:"مرحبًا بك في Echo",b1:"راقب المربعات وهي تضيء واحدًا تلو الآخر — لكل منها نغمة.",t2:"كرّر التسلسل",b2:"انقر المربعات بنفس الترتيب. تزداد خطوة كل جولة. لديك 3 محاولات.",skip:"تخطّي",next:"التالي",play:"العب"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+var tutStep=0;
+function showTut(){
+  tutStep=0;
+  if(LANG==="ar")$("tutCard").dir="rtl";
+  renderTut();$("tut").classList.add("on");
+}
+function renderTut(){
+  $("tutTitle").textContent=tutStep===0?M.t1:M.t2;
+  $("tutBody").textContent=tutStep===0?M.b1:M.b2;
+  $("tutSkip").textContent=M.skip;
+  $("tutNext").textContent=tutStep===0?M.next:M.play;
+}
+function endTut(){
+  try{localStorage.setItem(TUTKEY,"1");}catch(e){}
+  $("tut").classList.remove("on");
+  startRun();
+}
+$("tutNext").onclick=function(){if(tutStep===0){tutStep=1;renderTut();}else{endTut();}};
+$("tutSkip").onclick=endTut;
+
+// initial idle board behind the start overlay
+hearts();buildGrid();setStatus(S.watch);
+</script>
+</body>
+</html>

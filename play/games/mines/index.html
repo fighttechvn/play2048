@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Mines</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--grid:#cdcdcd;--accent:#3b5bdb;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 12px;font-weight:700;white-space:nowrap;font-size:14px}
+  #lvl{margin-right:auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:10px;display:flex;justify-content:center}
+  canvas{display:block;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .btn.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--accent);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* First-run tutorial (2 steps, non-interactive) */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;pointer-events:auto}
+  #tut.on{display:block}
+  #tutBg{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.42);pointer-events:none}
+  #tutHole{position:fixed;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.42);transition:left .22s ease,top .22s ease,width .22s ease,height .22s ease;pointer-events:none}
+  #tutCard{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 40px);max-width:300px;pointer-events:auto;background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);border:1px solid rgba(255,255,255,.55);border-radius:16px;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;min-height:44px;margin:-4px -8px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">Mines · 1</span><span class="pill" id="time">⏱ 0:00</span><span class="pill" id="left">💣 10</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="btns">
+    <button class="btn" id="flag">🚩 0</button>
+    <button class="btn" id="reset">Reset</button>
+  </div>
+  <div class="help"><b>How to play.</b> Tap to reveal a square — numbers count the mines touching it. <b>Long-press</b> (or toggle 🚩) to flag a mine. Tap a number that has all its flags to open its other neighbors. The marked dot is a safe start; every board is solvable without guessing.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Tap to reveal a square — numbers count the mines touching it. <b>Long-press</b> (or toggle 🚩) to flag a mine. Tap a number that has all its flags to open its other neighbors. The marked dot is a safe start; every board is solvable without guessing.",
+    vi:"<b>Cách chơi.</b> Chạm để mở một ô — con số cho biết có bao nhiêu mìn xung quanh. <b>Nhấn giữ</b> (hoặc bật 🚩) để cắm cờ. Chạm vào số đã đủ cờ để mở các ô còn lại quanh nó. Chấm đánh dấu là điểm bắt đầu an toàn; mọi bàn đều giải được mà không cần đoán.",
+    ko:"<b>플레이 방법.</b> 탭하여 칸을 여세요 — 숫자는 주변 지뢰 수입니다. <b>길게 누르면</b>(또는 🚩 전환) 깃발을 꽂습니다. 깃발이 다 꽂힌 숫자를 탭하면 나머지 이웃 칸이 열립니다. 표시된 점은 안전한 시작점이며, 모든 판은 추측 없이 풀 수 있습니다.",
+    zh:"<b>玩法。</b> 点击翻开方块——数字表示周围的地雷数。<b>长按</b>（或切换 🚩）插旗标记地雷。点击已插满旗的数字可翻开它周围其余方块。标记的圆点是安全起点；每一关都无需猜测即可解开。",
+    ja:"<b>遊び方。</b> タップしてマスを開きます — 数字は隣接する地雷の数です。<b>長押し</b>（または 🚩 切替）で旗を立てます。旗が揃った数字をタップすると残りの隣接マスが開きます。印の付いた点は安全なスタート地点。どの盤面も推測なしで解けます。",
+    ar:"<b>طريقة اللعب.</b> اضغط لكشف مربع — الأرقام تعدّ الألغام الملاصقة له. <b>اضغط مطوّلاً</b> (أو فعّل 🚩) لوضع علم. اضغط على رقم اكتملت أعلامه لفتح بقية جيرانه. النقطة المعلّمة بداية آمنة؛ وكل لوحة قابلة للحل دون تخمين."
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2 id="wint">Cleared! 🎉</h2><p id="winmsg"></p><button id="winbtn">Next level</button></div></div>
+<div id="tut">
+  <div id="tutBg"></div>
+  <div id="tutHole"></div>
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script>
+const KEY="mines.level";
+const TUTKEY="mines.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // feature flag: hub passes ?tut=0 to disable
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Times each level and POSTs the completion to the leaderboard API using the
+// shared player token (set by the hub, same origin). No token → silently skips.
+// Paste this block into other bundles, changing only GAME, to roll the feature out.
+const GBLB=(function(){
+  var GAME='mines', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(level){ var ms=t0?(Date.now()-t0):0; emit('level_complete',{level:level,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:level,durationMs:ms})}).catch(function(){}); }catch(e){} }
+  };
+})();
+// ── Game state ────────────────────────────────────────────────────────────
+const NUMCOL=['','#2a5cd5','#188038','#d93025','#1b2a6b','#8a3b12','#0d7d74','#1a1a1a','#5f6368'];
+let DATA=null, lvl=0, L=null;
+let R=0,C=0,n=0,cell=28,startIdx=0;
+let mine=null,adj=null,rev=null,flg=null,nbr=null;
+let firstDone=false, over=false, won=false, flagMode=false, flags=0, revealedSafe=0;
+let t0=0, timerIv=0;
+let boom=null, boomRAF=0; // explosion reveal animation
+let tutActive=false, tutStep=0;
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+
+fetch('./levels.json').then(r=>r.json()).then(d=>{DATA=d; lvl=Math.min(+(localStorage.getItem(KEY)||0), d.levels.length-1); load(lvl);});
+
+function load(i){
+  L=DATA.levels[i]; R=L.rows; C=L.cols; n=R*C;
+  startIdx=L.start.r*C+L.start.c;
+  mine=new Uint8Array(n);
+  for(let k=0;k<L.layout.length;k++)mine[L.layout[k]]=1;
+  buildNbr(); computeAdj();
+  rev=new Uint8Array(n); flg=new Uint8Array(n);
+  firstDone=false; over=false; won=false; flags=0; revealedSafe=0; boom=null;
+  stopTimer(); t0=0; $('time').textContent='⏱ 0:00';
+  layout(); draw();
+  $('lvl').textContent='Mines · '+(i+1);
+  upd(); maybeStartTut(); GBLB.start();
+}
+function buildNbr(){
+  nbr=new Array(n);
+  for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+    const list=[];
+    for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+      if(!dr&&!dc)continue;
+      const rr=r+dr,cc=c+dc;
+      if(rr>=0&&rr<R&&cc>=0&&cc<C)list.push(rr*C+cc);
+    }
+    nbr[r*C+c]=list;
+  }
+}
+function computeAdj(){
+  adj=new Uint8Array(n);
+  for(let i=0;i<n;i++){let a=0;for(let k=0;k<nbr[i].length;k++)a+=mine[nbr[i][k]];adj[i]=a;}
+}
+
+function layout(){
+  const wrap=document.getElementById('wrap');
+  const W=Math.min(wrap.clientWidth-52, 520);
+  // fit by shrinking, but never below 24px cells (fat-finger floor); ≤44px cap
+  cell=Math.max(24,Math.min(44,Math.floor(W/C)));
+  const pw=cell*C, ph=cell*R;
+  cv.width=pw*devicePixelRatio; cv.height=ph*devicePixelRatio;
+  cv.style.width=pw+'px'; cv.style.height=ph+'px';
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const now=boom?performance.now():0;
+  for(let i=0;i<n;i++){
+    const r=(i/C)|0, c=i%C, x=c*cell, y=r*cell;
+    if(rev[i]){
+      ctx.fillStyle='#eceae4';
+      ctx.fillRect(x,y,cell,cell);
+      if(adj[i]>0){
+        ctx.fillStyle=NUMCOL[adj[i]];
+        ctx.font='bold '+Math.round(cell*0.52)+'px sans-serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(adj[i], x+cell/2, y+cell/2+1);
+      }
+    } else {
+      ctx.fillStyle='#fff';
+      ctx.fillRect(x,y,cell,cell);
+      // raised tile look
+      ctx.fillStyle='#f7f6f2';
+      ctx.fillRect(x+1,y+1,cell-2,2);
+      ctx.fillStyle='#e2e0d9';
+      ctx.fillRect(x+1,y+cell-3,cell-2,2);
+    }
+    ctx.strokeStyle=getCss('--grid'); ctx.lineWidth=1;
+    ctx.strokeRect(x+0.5,y+0.5,cell-1,cell-1);
+    // flags
+    if(flg[i]&&!rev[i]) drawFlag(x,y,over&&!mine[i]);
+    // mines during/after the explosion reveal
+    if(boom&&mine[i]&&!flg[i]){
+      const el=now-boom.start-boom.delay[i];
+      if(el>0) drawMine(x,y,Math.min(1,el/220),i===boom.hit);
+    }
+  }
+  // safe-start marker before the first reveal
+  if(!firstDone&&!over){
+    const r=(startIdx/C)|0, c=startIdx%C;
+    ctx.strokeStyle=getCss('--accent'); ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(c*cell+cell/2, r*cell+cell/2, cell*0.22, 0, 7); ctx.stroke();
+    ctx.fillStyle=getCss('--accent');
+    ctx.beginPath(); ctx.arc(c*cell+cell/2, r*cell+cell/2, cell*0.08, 0, 7); ctx.fill();
+  }
+}
+function drawFlag(x,y,wrong){
+  const s=cell;
+  ctx.strokeStyle='#5f6368'; ctx.lineWidth=Math.max(2,s*0.07); ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(x+s*0.42,y+s*0.22); ctx.lineTo(x+s*0.42,y+s*0.78); ctx.stroke();
+  ctx.fillStyle='#d93025';
+  ctx.beginPath(); ctx.moveTo(x+s*0.42,y+s*0.22); ctx.lineTo(x+s*0.78,y+s*0.36); ctx.lineTo(x+s*0.42,y+s*0.5); ctx.closePath(); ctx.fill();
+  if(wrong){
+    ctx.strokeStyle='#1a1a1a'; ctx.lineWidth=Math.max(2,s*0.08);
+    ctx.beginPath(); ctx.moveTo(x+s*0.2,y+s*0.2); ctx.lineTo(x+s*0.8,y+s*0.8);
+    ctx.moveTo(x+s*0.8,y+s*0.2); ctx.lineTo(x+s*0.2,y+s*0.8); ctx.stroke();
+  }
+}
+function drawMine(x,y,p,isHit){
+  const s=cell, cx=x+s/2, cy=y+s/2;
+  if(isHit){ ctx.fillStyle='#ffd7d2'; ctx.fillRect(x,y,s,s); }
+  // flash ring while appearing
+  if(p<1){
+    ctx.strokeStyle='rgba(217,48,37,'+(1-p).toFixed(2)+')';
+    ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(cx,cy,s*0.18+s*0.3*p,0,7); ctx.stroke();
+  }
+  const r=s*0.2*Math.min(1,0.4+0.6*p);
+  ctx.fillStyle='#1a1a1a';
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.fill();
+  ctx.lineWidth=Math.max(1.5,s*0.045); ctx.strokeStyle='#1a1a1a'; ctx.lineCap='round';
+  for(let k=0;k<4;k++){
+    const a=k*Math.PI/4;
+    ctx.beginPath();
+    ctx.moveTo(cx-Math.cos(a)*r*1.6,cy-Math.sin(a)*r*1.6);
+    ctx.lineTo(cx+Math.cos(a)*r*1.6,cy+Math.sin(a)*r*1.6);
+    ctx.stroke();
+  }
+}
+function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+// ── Rules ─────────────────────────────────────────────────────────────────
+function reveal(i0){
+  const stack=[i0];
+  while(stack.length){
+    const i=stack.pop();
+    if(rev[i]||flg[i]||mine[i])continue;
+    rev[i]=1; revealedSafe++;
+    if(adj[i]===0)for(let k=0;k<nbr[i].length;k++)stack.push(nbr[i][k]);
+  }
+}
+function firstTap(i){
+  firstDone=true;
+  if(mine[i]){ // relocate so the first tap is always safe
+    mine[i]=0;
+    for(let j=0;j<n;j++){ if(!mine[j]&&j!==i){mine[j]=1;break;} }
+    computeAdj();
+  }
+  startTimer();
+}
+function tapCell(i){
+  if(over||tutActive)return;
+  if(!rev[i]){
+    if(flagMode){toggleFlag(i);return;}
+    if(flg[i])return;
+    if(!firstDone)firstTap(i);
+    if(mine[i]){lose(i);return;}
+    startTimer();
+    reveal(i); draw(); upd(); checkWin();
+  } else if(adj[i]>0){
+    chord(i);
+  }
+}
+function chord(i){
+  let f=0;
+  for(let k=0;k<nbr[i].length;k++)if(flg[nbr[i][k]])f++;
+  if(f!==adj[i])return;
+  let hit=-1;
+  const open=[];
+  for(let k=0;k<nbr[i].length;k++){
+    const j=nbr[i][k];
+    if(rev[j]||flg[j])continue;
+    if(mine[j]){hit=j;} else open.push(j);
+  }
+  if(hit>=0){lose(hit);return;}
+  for(let k=0;k<open.length;k++)reveal(open[k]);
+  draw(); upd(); checkWin();
+}
+function toggleFlag(i){
+  if(rev[i]||over)return;
+  if(flg[i]){flg[i]=0;flags--;}
+  else{flg[i]=1;flags++;}
+  draw(); upd();
+}
+function checkWin(){
+  if(revealedSafe!==n-L.mines)return;
+  won=true; over=true; stopTimer();
+  for(let i=0;i<n;i++)if(mine[i]&&!flg[i]){flg[i]=1;flags++;}
+  draw(); upd();
+  GBLB.report(lvl+1);
+  $('wint').textContent='Cleared! 🎉';
+  $('winmsg').textContent='Level '+(lvl+1)+' of '+DATA.count+' · '+fmtTime()+'.';
+  $('winbtn').textContent='Next level';
+  $('wino').style.display='grid';
+}
+function lose(hit){
+  over=true; stopTimer();
+  // explosion reveal: mines pop outward from the hit, delay ∝ distance
+  const hr=(hit/C)|0, hc=hit%C;
+  const delay=new Float32Array(n);
+  let maxD=0;
+  for(let i=0;i<n;i++){
+    if(!mine[i])continue;
+    const d=Math.hypot(((i/C)|0)-hr, (i%C)-hc)*45;
+    delay[i]=d; if(d>maxD)maxD=d;
+  }
+  boom={start:performance.now(),delay:delay,hit:hit,maxD:maxD};
+  if(!boomRAF)boomRAF=requestAnimationFrame(boomStep);
+}
+function boomStep(){
+  boomRAF=0;
+  if(!boom)return;
+  draw();
+  if(performance.now()-boom.start<boom.maxD+420){
+    boomRAF=requestAnimationFrame(boomStep);
+  } else {
+    $('wint').textContent='💥 Boom!';
+    $('winmsg').textContent='Level '+(lvl+1)+' — that was a mine. Try again.';
+    $('winbtn').textContent='Retry';
+    $('wino').style.display='grid';
+  }
+}
+
+// ── Timer / status ────────────────────────────────────────────────────────
+function fmtTime(){
+  const s=t0?Math.floor((Date.now()-t0)/1000):0;
+  return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2);
+}
+function startTimer(){
+  if(t0)return;
+  t0=Date.now();
+  timerIv=setInterval(function(){$('time').textContent='⏱ '+fmtTime();},500);
+}
+function stopTimer(){ if(timerIv){clearInterval(timerIv);timerIv=0;} if(t0)$('time').textContent='⏱ '+fmtTime(); }
+function upd(){
+  $('left').textContent='💣 '+Math.max(0,L.mines-flags);
+  $('flag').textContent='🚩 '+flags;
+  $('flag').classList.toggle('active',flagMode);
+}
+
+// ── Input: tap reveals, long-press (600 ms) flags ─────────────────────────
+let downCell=-1, downX=0, downY=0, lpTimer=0, lpFired=false;
+function cellAt(ev){
+  const rect=cv.getBoundingClientRect();
+  const c=Math.floor((ev.clientX-rect.left)/cell), r=Math.floor((ev.clientY-rect.top)/cell);
+  if(r<0||c<0||r>=R||c>=C)return -1;
+  return r*C+c;
+}
+function down(ev){
+  ev.preventDefault();
+  try{cv.setPointerCapture(ev.pointerId);}catch(e){}
+  downCell=cellAt(ev); downX=ev.clientX; downY=ev.clientY; lpFired=false;
+  if(downCell>=0&&!over&&!tutActive&&!rev[downCell]){
+    lpTimer=setTimeout(function(){
+      lpFired=true; lpTimer=0;
+      toggleFlag(downCell);
+      try{if(navigator.vibrate)navigator.vibrate(20);}catch(e){}
+    },600);
+  }
+}
+function move(ev){
+  if(lpTimer&&(Math.abs(ev.clientX-downX)>12||Math.abs(ev.clientY-downY)>12)){clearTimeout(lpTimer);lpTimer=0;}
+}
+function up(ev){
+  if(lpTimer){clearTimeout(lpTimer);lpTimer=0;}
+  try{cv.releasePointerCapture(ev.pointerId);}catch(e){}
+  if(lpFired)return;
+  const c=cellAt(ev);
+  if(c>=0&&c===downCell)tapCell(c);
+  downCell=-1;
+}
+cv.addEventListener('pointerdown',down);
+cv.addEventListener('pointermove',move);
+cv.addEventListener('pointerup',up);
+cv.addEventListener('pointercancel',function(){if(lpTimer){clearTimeout(lpTimer);lpTimer=0;}downCell=-1;});
+// iOS in-app webviews ignore touch-action:none for scroll suppression — a
+// non-passive touchmove preventDefault is the only reliable way to keep board
+// taps/long-presses from scrolling the page.
+cv.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+
+$('flag').onclick=function(){flagMode=!flagMode;upd();};
+$('reset').onclick=function(){load(lvl);};
+$('winbtn').onclick=function(){
+  $('wino').style.display='none';
+  if(won){lvl=Math.min(lvl+1,DATA.levels.length-1);localStorage.setItem(KEY,lvl);}
+  load(lvl);
+};
+
+/* ── First-run tutorial: 2 steps (reveal, flag), shown once on Level 1 ──── */
+const TUT_T={
+  en:{s1t:"Tap to reveal",s1b:"Tap a square to reveal it. Numbers count the mines in the 8 squares around them. Start at the marked dot — it's always safe.",next:"Next",
+      s2t:"Hold to flag",s2b:"Long-press a square (or toggle the 🚩 button) to mark a mine. Reveal every safe square to win — no guessing needed.",play:"Play",skip:"Skip"},
+  vi:{s1t:"Chạm để mở",s1b:"Chạm một ô để mở nó. Con số đếm số mìn trong 8 ô xung quanh. Bắt đầu từ chấm đánh dấu — luôn an toàn.",next:"Tiếp",
+      s2t:"Nhấn giữ để cắm cờ",s2b:"Nhấn giữ một ô (hoặc bật nút 🚩) để đánh dấu mìn. Mở hết các ô an toàn để thắng — không cần đoán.",play:"Chơi",skip:"Bỏ qua"},
+  ko:{s1t:"탭하여 열기",s1b:"칸을 탭해 여세요. 숫자는 주변 8칸의 지뢰 수입니다. 표시된 점에서 시작하세요 — 항상 안전합니다.",next:"다음",
+      s2t:"길게 눌러 깃발",s2b:"칸을 길게 누르거나(🚩 버튼 전환) 지뢰를 표시하세요. 안전한 칸을 모두 열면 승리 — 추측은 필요 없습니다.",play:"플레이",skip:"건너뛰기"},
+  zh:{s1t:"点击翻开",s1b:"点击方块将其翻开。数字表示周围8格中的地雷数。从标记的圆点开始——它总是安全的。",next:"下一步",
+      s2t:"长按插旗",s2b:"长按方块（或切换 🚩 按钮）标记地雷。翻开所有安全方块即获胜——无需猜测。",play:"开始玩",skip:"跳过"},
+  ja:{s1t:"タップして開く",s1b:"マスをタップして開きます。数字は周囲8マスの地雷の数です。印の付いた点から始めましょう — 常に安全です。",next:"次へ",
+      s2t:"長押しで旗",s2b:"マスを長押し（または 🚩 ボタン切替）で地雷に印を付けます。安全なマスをすべて開けば勝ち — 推測は不要です。",play:"プレイ",skip:"スキップ"},
+  ar:{s1t:"اضغط للكشف",s1b:"اضغط على مربع لكشفه. الأرقام تعدّ الألغام في المربعات الثمانية المحيطة. ابدأ من النقطة المعلّمة — فهي آمنة دائمًا.",next:"التالي",
+      s2t:"اضغط مطوّلاً للعلم",s2b:"اضغط مطوّلاً على مربع (أو فعّل زر 🚩) لتعليم لغم. اكشف كل المربعات الآمنة لتفوز — دون تخمين.",play:"العب",skip:"تخطّي"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+const STEPS=[
+  {target:()=>cv,pad:6,title:M.s1t,body:M.s1b,btn:M.next},
+  {target:()=>$('flag'),pad:6,title:M.s2t,body:M.s2b,btn:M.play}
+];
+function maybeStartTut(){
+  if(!TUT_ON)return;
+  if(localStorage.getItem(TUTKEY))return;
+  if(lvl!==0||tutActive)return;
+  tutActive=true;tutStep=0;renderTut();
+}
+function setHole(rect,pad){
+  pad=pad||8;const h=$('tutHole');
+  $('tutBg').style.display='none';h.style.display='block';
+  h.style.left=(rect.left-pad)+'px';h.style.top=(rect.top-pad)+'px';
+  h.style.width=(rect.width+pad*2)+'px';h.style.height=(rect.height+pad*2)+'px';
+}
+function placeCard(rect){
+  const card=$('tutCard');
+  if(!rect){card.style.top='50%';card.style.transform='translate(-50%,-50%)';return;}
+  card.style.transform='translateX(-50%)';
+  const ch=card.offsetHeight, below=rect.top<innerHeight*0.5;
+  let top=below?rect.bottom+16:rect.top-16-ch;
+  card.style.top=Math.max(12,Math.min(top,innerHeight-ch-12))+'px';
+}
+function renderTut(){
+  const s=STEPS[tutStep];
+  $('tut').classList.add('on');
+  if(LANG==='ar')$('tutCard').dir='rtl';
+  $('tutTitle').textContent=s.title;$('tutBody').textContent=s.body;
+  $('tutSkip').textContent=M.skip;
+  $('tutNext').textContent=s.btn;
+  const tgt=s.target&&s.target();
+  if(tgt){const r=tgt.getBoundingClientRect();setHole(r,s.pad);placeCard(r);}
+  else{$('tutHole').style.display='none';$('tutBg').style.display='block';placeCard(null);}
+}
+function nextTut(){tutStep++;if(tutStep>=STEPS.length){endTut();return;}renderTut();}
+function endTut(){tutActive=false;localStorage.setItem(TUTKEY,'1');$('tut').classList.remove('on');draw();}
+$('tutNext').onclick=nextTut;
+$('tutSkip').onclick=endTut;
+
+addEventListener('resize',()=>{if(L){layout();draw();if(tutActive)renderTut();}});
+</script>
+</body>
+</html>

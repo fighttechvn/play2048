@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-VCLVPVRXMV');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#faf8ef" />
+  <title>Domino Fit Online Free — Tiling Puzzle, 99 Levels, No Sign-Up</title>
+  <meta name="description" content="Cover the board with dominoes, no overlaps and no gaps. Learn the chessboard parity argument that kills wrong starts instantly. 99 free levels, no account." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://gobrain.fighttech.vn/blog/domino-fit-tiling-puzzle/" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Domino Fit: Tiling Puzzles and the Parity Trick 🁢" />
+  <meta property="og:description" content="Cover the board with dominoes, no overlaps and no gaps. Learn the chessboard parity argument that kills wrong starts instantly. 99 free levels, no account." />
+  <meta property="og:url" content="https://gobrain.fighttech.vn/blog/domino-fit-tiling-puzzle/" />
+  <meta property="og:site_name" content="Go Brain" />
+  <meta property="og:image" content="https://gobrain.fighttech.vn/play/thumbs/domino.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://gobrain.fighttech.vn/play/thumbs/domino.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="../../assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="../../assets/app-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem("gobrain.theme")||"system";var d=p==="dark"||(p!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");}catch(e){}})();</script>
+  <link rel="stylesheet" href="../../css/styles.css" />
+  <link rel="stylesheet" href="../../css/legal.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "Domino Fit: Tiling Puzzles and the Parity Trick 🁢",
+    "description": "Cover the board with dominoes, no overlaps and no gaps. Learn the chessboard parity argument that kills wrong starts instantly. 99 free levels, no account.",
+    "author": {
+      "@type": "Organization",
+      "name": "FightTech"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Go Brain"
+    },
+    "datePublished": "2026-08-10",
+    "mainEntityOfPage": "https://gobrain.fighttech.vn/blog/domino-fit-tiling-puzzle/"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is the parity trick in domino tiling?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Colour the board like a chessboard. Every domino covers one light and one dark cell, so a region with unequal light and dark counts can never be tiled. It rules out dead ends instantly."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can dominoes be rotated?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes — every domino can be placed horizontally or vertically. That's the only transformation there is."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is every board solvable?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Each level is generated from a complete valid tiling and then presented to you, so a solution is guaranteed to exist."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="../../" aria-label="Go Brain"><img class="logo" src="../../assets/app-icon.png" alt="" width="30" height="30" /><span>Go Brain</span></a>
+      <nav class="nav">
+        <div class="nav-links">
+          <a href="../">Blog</a><a href="../../play/">Play online</a><a href="../../sdk/">SDK</a><a href="../../support/">Support</a>
+        </div>
+        <div class="controls">
+          <div class="select-wrap">
+            <select id="themeSelect" class="theme" aria-label="Theme"><option value="system">◐ System</option><option value="light">☀ Light</option><option value="dark">☾ Dark</option></select>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-main">
+    <div class="container">
+      <div class="legal-wrap">
+        <a class="back-link" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> All articles</a>
+
+        <div class="legal-head">
+          <span class="eyebrow">Brain Games</span>
+          <h1>Domino Fit: Tiling Puzzles and the Parity Trick 🁢</h1>
+          <p class="updated"><strong>Published:</strong> August 10, 2026 · 5 min read</p>
+          <p class="legal-lead">Domino Fit is a tiling puzzle: cover a shaped board completely with 2×1 dominoes. It looks like a fitting exercise, and for the first twenty levels it is. Then it becomes a lesson in one of the prettiest arguments in recreational maths.</p>
+        </div>
+
+        <nav class="toc" aria-label="Table of contents">
+          <h2>Contents</h2>
+          <ol>
+            <li><a href="#rules">The rules</a></li>
+            <li><a href="#parity">The parity trick</a></li>
+            <li><a href="#forced">Forced cells</a></li>
+            <li><a href="#ours">About our version</a></li>
+          </ol>
+        </nav>
+
+        <div class="legal-body">
+
+          <h2 id="rules">The rules</h2>
+          <p>Place 2×1 dominoes on the board — horizontally or vertically — until every open cell is covered. No overlaps, no gaps, no domino hanging off the edge or over a blocked cell.</p>
+
+          <h2 id="parity">The parity trick</h2>
+          <p>Colour the board like a chessboard, alternating light and dark. Every domino, wherever you put it, covers exactly <strong>one light cell and one dark cell</strong>. It cannot do otherwise.</p>
+          <p>That gives you a free test: <strong>if the board doesn't have equal numbers of light and dark cells, it cannot be tiled at all.</strong> The classic demonstration is a chessboard with two opposite corners removed — both corners are the same colour, so the remaining 62 squares split 30/32 and no arrangement of 31 dominoes can cover it. No searching required; the colouring settles it.</p>
+          <p>In play, you use it locally. When your placements have carved the remaining space into a region with unequal counts, that region is dead — undo back to the branch point rather than fiddling with it. Learning to <em>see</em> that imbalance is what makes the late levels tractable.</p>
+
+          <h2 id="forced">Forced cells</h2>
+          <p>The other technique is simpler: find any open cell with exactly one open neighbour. Its domino is forced. Place it, and often a new cell becomes forced next to it — these chains run surprisingly long, especially into the corners and dead-end arms of a shaped board.</p>
+          <p>Between forced chains and parity checks, most levels resolve without any real trial and error.</p>
+
+          <h2 id="ours">About our version</h2>
+          <p>99 levels with boards that start rectangular and grow holes and awkward arms as you climb. Drag along two cells to place a domino, tap to remove, unlimited undo. Every board is generated from a valid tiling, so a solution always exists.</p>
+          <p>It runs in your browser, works offline once loaded, needs no account, and costs nothing.</p>
+
+
+          <h2 id="faq">Questions people actually ask</h2>
+          <p><strong>What is the parity trick in domino tiling?</strong><br />Colour the board like a chessboard. Every domino covers one light and one dark cell, so a region with unequal light and dark counts can never be tiled. It rules out dead ends instantly.</p>
+          <p><strong>Can dominoes be rotated?</strong><br />Yes — every domino can be placed horizontally or vertically. That's the only transformation there is.</p>
+          <p><strong>Is every board solvable?</strong><br />Yes. Each level is generated from a complete valid tiling and then presented to you, so a solution is guaranteed to exist.</p>
+
+          <h2 id="more">Keep reading</h2>
+          <ul>
+            <li><a href="../shikaku-patch-puzzle/">Patch: Shikaku, the Rectangle-Cutting Puzzle ▭</a> — Divide the grid into rectangles, each containing one number equal to its area. Primes are your best friends here — and they tell you exactly where to start.</li>
+            <li><a href="../zip-one-line-path-puzzle/">Zip: Draw One Line Through Every Cell 🧩</a> — One line, every cell, numbers in order. A Hamiltonian path puzzle that looks like doodling and plays like deduction.</li>
+            <li><a href="../block-fit-puzzle/">Block Fit: No Gravity, No Rotation, No Excuses 🧱</a> — Three pieces at a time on an 8×8 board. You can't rotate them, which means bad boards are always something you did three moves ago.</li>
+          </ul>
+
+          <div class="legal-contact" id="play">
+            <h2>Play Domino Fit now</h2>
+            <p>99 tiling levels, drag to place, unlimited undo. Free, no account, plays offline.</p>
+            <p style="margin-top:16px"><a class="btn btn-primary" href="../../play/?open=domino">▶ Play Domino Fit</a></p>
+          </div>
+
+          <div class="legal-nav-links">
+            <a href="../">← All articles</a>
+            <a href="../../play/">Play online</a>
+            <a href="../../support/">Support</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="margin-top:0;border-top:none">
+        <span>© <span id="year">2026</span> FightTech. All rights reserved.</span>
+        <span><a href="../../privacy/">Privacy</a> · <a href="../../terms/">Terms</a> · <a href="../../support/">Support</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../../js/main.js"></script>
+  <script src="../../js/app-banner.js"></script>
+</body>
+</html>

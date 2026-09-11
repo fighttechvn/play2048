@@ -1,0 +1,1 @@
+{"game":"merge","count":1,"levels":[{"id":1,"mode":"endless","cols":5,"rows":7,"spawn":[{"maxAchieved":0,"pool":[2,4,8]},{"maxAchieved":64,"pool":[2,4,8,16]},{"maxAchieved":128,"pool":[2,4,8,16,32]},{"maxAchieved":512,"pool":[4,8,16,32,64,128]},{"maxAchieved":2048,"pool":[8,16,32,64,128,256]}],"merge":"equal 4-adjacent tiles combine into value*2^(n-1); cascades with gravity"}]}

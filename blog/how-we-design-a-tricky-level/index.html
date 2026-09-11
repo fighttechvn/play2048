@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-VCLVPVRXMV');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#faf8ef" />
+  <title>How We Design a Tricky Level in Brain Twist — Go Brain</title>
+  <meta name="description" content="A look inside the craft of building a tricky puzzle: setting the trap, hiding the clue fairly, and the fine line between clever and cheap in a brain-teaser game." />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta name="keywords" content="puzzle design, tricky puzzle game, brain teaser design, level design, lateral thinking puzzle, brain puzzle, brain twist, go brain" />
+  <link rel="canonical" href="https://gobrain.fighttech.vn/blog/how-we-design-a-tricky-level/" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="How We Design a Tricky Level in Brain Twist 🧠" />
+  <meta property="og:description" content="Setting the trap, hiding the clue fairly, and the fine line between clever and cheap in a brain-teaser game." />
+  <meta property="og:url" content="https://gobrain.fighttech.vn/blog/how-we-design-a-tricky-level/" />
+  <meta property="og:image" content="https://gobrain.fighttech.vn/assets/cards/card-01-cover.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="How We Design a Tricky Level in Brain Twist 🧠" />
+  <meta name="twitter:description" content="Setting the trap, hiding the clue fairly, and the fine line between clever and cheap in a brain-teaser game." />
+  <meta name="twitter:image" content="https://gobrain.fighttech.vn/assets/cards/card-01-cover.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="../../assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="../../assets/app-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem("gobrain.theme")||"system";var d=p==="dark"||(p!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");}catch(e){}})();</script>
+  <link rel="stylesheet" href="../../css/styles.css" />
+  <link rel="stylesheet" href="../../css/legal.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "How We Design a Tricky Level in Brain Twist",
+    "description": "Inside the craft of building a tricky puzzle: setting the trap, hiding the clue fairly, and the line between clever and cheap.",
+    "author": { "@type": "Organization", "name": "FightTech" },
+    "publisher": { "@type": "Organization", "name": "Go Brain" },
+    "datePublished": "2026-07-13",
+    "mainEntityOfPage": "https://gobrain.fighttech.vn/blog/how-we-design-a-tricky-level/"
+  }
+  </script>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="../../" aria-label="Go Brain"><img class="logo" src="../../assets/app-icon.png" alt="" width="30" height="30" /><span>Go Brain</span></a>
+      <nav class="nav">
+        <div class="nav-links">
+          <a href="../">Blog</a><a href="../../play/">Play online</a><a href="../../sdk/">SDK</a><a href="../../support/">Support</a>
+        </div>
+        <div class="controls">
+          <div class="select-wrap">
+            <select id="themeSelect" class="theme" aria-label="Theme"><option value="system">◐ System</option><option value="light">☀ Light</option><option value="dark">☾ Dark</option></select>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-main">
+    <div class="container">
+      <div class="legal-wrap">
+        <a class="back-link" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> All articles</a>
+
+        <div class="legal-head">
+          <span class="eyebrow">Behind the Game</span>
+          <h1>How We Design a Tricky Level 🧠</h1>
+          <p class="updated"><strong>Published:</strong> July 13, 2026 · 6 min read</p>
+          <p class="legal-lead">A great tricky puzzle feels effortless once you've solved it — "of course, it was obvious!" Getting there is anything but. Here's a peek behind the curtain at how a single Brain Twist level goes from a rough idea to a brain teaser that fools almost everyone, fairly.</p>
+        </div>
+
+        <nav class="toc" aria-label="Table of contents">
+          <h2>Contents</h2>
+          <ol>
+            <li><a href="#trap">Start with the trap, not the answer</a></li>
+            <li><a href="#fair">The fairness test</a></li>
+            <li><a href="#one">One twist per level</a></li>
+            <li><a href="#curve">Tuning the difficulty curve</a></li>
+            <li><a href="#playtest">Playtesting the "aha"</a></li>
+            <li><a href="#play">See the craft in action</a></li>
+          </ol>
+        </nav>
+
+        <div class="legal-body">
+          <h2 id="trap">Start with the trap, not the answer</h2>
+          <p>Most puzzle types start from a solution and hide it. A tricky puzzle works backwards. We start by asking: <em>what assumption does everyone make here?</em> That assumption is the trap. Only once we know the trap do we design an answer that lives just on the other side of it.</p>
+          <p>Say the level shows three candles and asks how many are left after you blow two out. The trap is arithmetic — you subtract. The real answer is the two you blew out, because the lit one burns down to nothing. We didn't invent the answer first; we found the wrong instinct first, then built the scene to trigger it.</p>
+
+          <h2 id="fair">The fairness test</h2>
+          <p>The single rule that separates a clever brain teaser from a cheap one: <strong>the solution must be visible or reachable before the reveal.</strong> A tricky level is allowed to mislead you with framing, tone, or a distracting character. It is never allowed to require information you had no way to find.</p>
+          <p>Every level goes through a fairness pass where we ask three questions:</p>
+          <ul>
+            <li>Could a careful player find this on a calm second look?</li>
+            <li>Does the twist use a rule the game has already taught (scroll, tilt, drag, re-read)?</li>
+            <li>When you see the answer, do you groan "ohh" — or do you feel cheated?</li>
+          </ul>
+          <p>If the honest reaction is "that's not fair," the level is cut or reworked, no matter how clever it seemed. This is the same principle we hold our <a href="../meet-twisty-brain-twist-characters/">characters</a> to: mislead by tone, never hide the only clue.</p>
+
+          <h2 id="one">One twist per level</h2>
+          <p>The temptation is always to stack tricks — a hidden object <em>and</em> a word-play catch <em>and</em> a tilt. Resist it. Two twists don't double the delight; they usually just produce confusion, and the player can't tell which insight actually mattered. Our best levels have exactly one clean idea. The satisfaction comes from the crispness of that single realisation, not from a pile-up.</p>
+
+          <h2 id="curve">Tuning the difficulty curve</h2>
+          <p>Early levels teach the <em>vocabulary</em> of trickery — that you can scroll, that words matter, that the frame isn't sacred. We introduce each mechanic gently, with a level where the twist is almost visible, before we start disguising it. By the time you're deep in the game, we can be ruthless, because you've learned to distrust the obvious. A good curve never feels like a wall; it feels like the game and your suspicion levelling up together.</p>
+
+          <h2 id="playtest">Playtesting the "aha"</h2>
+          <p>We watch real people play, muted, without hints. The metric we care about isn't just solve rate — it's the <em>face</em>. We're hunting for that specific micro-expression: a frown, a pause, then the eyebrows jumping up. That's the "aha." If testers solve it instantly, the trap is too weak. If they give up frustrated and the reveal makes them roll their eyes, it's unfair. The sweet spot is a short struggle followed by a delighted groan. When we hit it consistently, the level ships.</p>
+
+          <div class="legal-contact" id="play">
+            <h2>See the craft in action</h2>
+            <p>Every one of Brain Twist's 500+ levels went through this loop — trap first, fairness test, one clean twist, playtested for the "aha." Play a few and see if you can feel the seams.</p>
+            <p style="margin-top:16px"><a class="btn btn-primary" href="../../twist/">▶ Explore Brain Twist</a></p>
+          </div>
+
+          <div class="legal-nav-links">
+            <a href="../what-is-a-lateral-thinking-puzzle/">What is a lateral-thinking puzzle? →</a>
+            <a href="../brain-twist-vs-the-classics-genre-guide/">Brain Twist vs the classics →</a>
+            <a href="../">← All articles</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="margin-top:0;border-top:none">
+        <span>© <span id="year">2026</span> FightTech. All rights reserved.</span>
+        <span><a href="../../privacy/">Privacy</a> · <a href="../../terms/">Terms</a> · <a href="../../support/">Support</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../../js/main.js"></script>
+  <script src="../../js/app-banner.js"></script>
+</body>
+</html>

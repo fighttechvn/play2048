@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-VCLVPVRXMV');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#faf8ef" />
+  <title>Flap — Free Tap-to-Fly Arcade Game Online, No Sign-Up</title>
+  <meta name="description" content="Tap to flap, thread the gaps, try not to throw your phone. A one-button arcade game built on PixiJS. Free in your browser, no account, works offline." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://gobrain.fighttech.vn/blog/flap-tap-to-fly-game/" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Flap: Tap to Fly, Thread the Gaps 🐦" />
+  <meta property="og:description" content="Tap to flap, thread the gaps, try not to throw your phone. A one-button arcade game built on PixiJS. Free in your browser, no account, works offline." />
+  <meta property="og:url" content="https://gobrain.fighttech.vn/blog/flap-tap-to-fly-game/" />
+  <meta property="og:site_name" content="Go Brain" />
+  <meta property="og:image" content="https://gobrain.fighttech.vn/play/thumbs/flappybird.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://gobrain.fighttech.vn/play/thumbs/flappybird.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="../../assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="../../assets/app-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem("gobrain.theme")||"system";var d=p==="dark"||(p!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");}catch(e){}})();</script>
+  <link rel="stylesheet" href="../../css/styles.css" />
+  <link rel="stylesheet" href="../../css/legal.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "Flap: Tap to Fly, Thread the Gaps",
+    "description": "Tap to flap, thread the gaps, try not to throw your phone. A one-button arcade game built on PixiJS. Free in your browser, no account, works offline.",
+    "author": {
+      "@type": "Organization",
+      "name": "FightTech"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Go Brain"
+    },
+    "datePublished": "2026-08-10",
+    "mainEntityOfPage": "https://gobrain.fighttech.vn/blog/flap-tap-to-fly-game/"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Does the game get faster?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. The speed, gravity and gap size are constant from the first obstacle to the hundredth. It feels harder later only because you have more to lose."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Any tips for a higher score?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Tap in a steady rhythm rather than reacting to each gap, keep the taps small and frequent, and aim slightly low — you can climb faster than you fall."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="../../" aria-label="Go Brain"><img class="logo" src="../../assets/app-icon.png" alt="" width="30" height="30" /><span>Go Brain</span></a>
+      <nav class="nav">
+        <div class="nav-links">
+          <a href="../">Blog</a><a href="../../play/">Play online</a><a href="../../sdk/">SDK</a><a href="../../support/">Support</a>
+        </div>
+        <div class="controls">
+          <div class="select-wrap">
+            <select id="themeSelect" class="theme" aria-label="Theme"><option value="system">◐ System</option><option value="light">☀ Light</option><option value="dark">☾ Dark</option></select>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-main">
+    <div class="container">
+      <div class="legal-wrap">
+        <a class="back-link" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> All articles</a>
+
+        <div class="legal-head">
+          <span class="eyebrow">Arcade</span>
+          <h1>Flap: Tap to Fly, Thread the Gaps 🐦</h1>
+          <p class="updated"><strong>Published:</strong> August 10, 2026 · 3 min read</p>
+          <p class="legal-lead">Flap is a one-button game, and the button does the same thing every time. Gravity is constant, the tap impulse is constant, and the gaps come at a constant rate. There is nothing random and nothing unfair, which is precisely what makes losing so annoying.</p>
+        </div>
+
+        <nav class="toc" aria-label="Table of contents">
+          <h2>Contents</h2>
+          <ol>
+            <li><a href="#rules">The rules</a></li>
+            <li><a href="#rhythm">It's rhythm, not reaction</a></li>
+            <li><a href="#ours">About our version</a></li>
+          </ol>
+        </nav>
+
+        <div class="legal-body">
+
+          <h2 id="rules">The rules</h2>
+          <p>Tap to flap upwards. Don't tap and you fall. Fly through the gap between each pair of obstacles. Touch anything and the run ends.</p>
+
+          <h2 id="rhythm">It's rhythm, not reaction</h2>
+          <p>Most people play this as a reaction game: see the gap, react, tap. That's why most people score four.</p>
+          <p>It's a <strong>rhythm</strong> game. The obstacles arrive at a fixed interval, and a steady tap tempo produces a steady sawtooth flight path. Once you find the tempo that keeps you roughly level, you're only making small adjustments for gap height rather than steering from scratch each time.</p>
+          <p>Two things follow from that. <strong>Small, frequent taps</strong> beat big corrections — a stream of light taps keeps you near the middle where you have room in both directions. And <strong>aim for the bottom of a high gap</strong>, because you can always rise faster than you can fall; being below your target is recoverable, being above it is not.</p>
+          <p>Also: your first ten deaths are the tutorial. Nobody is good at this in the first minute, and the difficulty never actually increases — you just get further before the same mistake happens.</p>
+
+          <h2 id="ours">About our version</h2>
+          <p>Built on PixiJS from the open-games collection, so it runs at a genuine 60fps even on older phones. Endless, instant restart, no ad between runs. Best score is kept on your device and posts to the shared leaderboard if you've set a name.</p>
+          <p>It runs in your browser, works offline once loaded, needs no account, and costs nothing.</p>
+
+
+          <h2 id="faq">Questions people actually ask</h2>
+          <p><strong>Does the game get faster?</strong><br />No. The speed, gravity and gap size are constant from the first obstacle to the hundredth. It feels harder later only because you have more to lose.</p>
+          <p><strong>Any tips for a higher score?</strong><br />Tap in a steady rhythm rather than reacting to each gap, keep the taps small and frequent, and aim slightly low — you can climb faster than you fall.</p>
+
+          <h2 id="more">Keep reading</h2>
+          <ul>
+            <li><a href="../arcade-games/">Arcade Games in Go Brain: Seven One-Thumb Classics 🎮</a> — Snake, a doodle-jumper, brick breaker, a stacker, a tile-merger, flappy and a bubble shooter. No rules to learn, just a score to beat.</li>
+            <li><a href="../bubbo-bubble-shooter/">Bubbo Bubbo: Bubble Shooter With 60 Levels 🫧</a> — Match three to pop — but the real scoring comes from cutting a cluster loose so everything under it falls at once.</li>
+            <li><a href="../snake-game-online/">Snake: Still the Best Difficulty Curve Ever Designed 🐍</a> — Snake gets harder because you got better. That single design idea has kept it alive for fifty years — and there's a strategy for surviving the late game.</li>
+          </ul>
+
+          <div class="legal-contact" id="play">
+            <h2>Play Flap now</h2>
+            <p>One button, 60fps, instant restart, no ads. Free, no account.</p>
+            <p style="margin-top:16px"><a class="btn btn-primary" href="../../play/?open=flappybird">▶ Play Flap</a></p>
+          </div>
+
+          <div class="legal-nav-links">
+            <a href="../">← All articles</a>
+            <a href="../../play/">Play online</a>
+            <a href="../../support/">Support</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="margin-top:0;border-top:none">
+        <span>© <span id="year">2026</span> FightTech. All rights reserved.</span>
+        <span><a href="../../privacy/">Privacy</a> · <a href="../../terms/">Terms</a> · <a href="../../support/">Support</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../../js/main.js"></script>
+  <script src="../../js/app-banner.js"></script>
+</body>
+</html>

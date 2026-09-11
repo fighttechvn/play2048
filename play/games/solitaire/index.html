@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Solitaire</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--red:#e03131;--back:#3b5bdb;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  #ttl{margin-right:auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .btn.accent{background:var(--back);border-color:var(--back);color:#fff}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--back);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="ttl">Solitaire</span><span class="pill" id="mv">0</span><span class="pill" id="tm">0:00</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="btns">
+    <button class="btn" id="undo" disabled>Undo</button>
+    <button class="btn accent" id="auto" style="display:none">Auto ✨</button>
+    <button class="btn" id="newdeal">New deal</button>
+  </div>
+  <div class="help" id="helpcard"><b>How to play.</b> Build the four foundations from Ace to King, one per suit. <b>Tap a card</b> and it flies to the best spot — foundation first, then tableau. Tap the <b>stock</b> to deal a card. In the tableau, stack downward alternating red and black. Undo rewinds any move.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Build the four foundations from Ace to King, one per suit. <b>Tap a card</b> and it flies to the best spot — foundation first, then tableau. Tap the <b>stock</b> to deal a card. In the tableau, stack downward alternating red and black. Undo rewinds any move.",
+    vi:"<b>Cách chơi.</b> Xây bốn nền từ Át đến K, mỗi chất một nền. <b>Chạm vào lá bài</b> để nó tự bay tới vị trí tốt nhất — ưu tiên nền, sau đó tới cột. Chạm vào <b>chồng bài úp</b> để rút một lá. Trong các cột, xếp giảm dần và xen kẽ màu đỏ – đen. Hoàn tác quay lại bất kỳ nước nào.",
+    ko:"<b>플레이 방법.</b> 네 개의 파운데이션을 에이스부터 킹까지 무늬별로 쌓으세요. <b>카드를 탭</b>하면 가장 좋은 자리로 자동 이동합니다 — 파운데이션 우선, 그다음 테이블입니다. <b>더미</b>를 탭하면 카드를 한 장 뽑습니다. 테이블에서는 빨강·검정을 번갈아 내림차순으로 쌓으세요. 되돌리기로 언제든 취소할 수 있습니다.",
+    zh:"<b>玩法。</b> 把四个基础牌堆从 A 叠到 K，每种花色一堆。<b>点击一张牌</b>即可自动移到最佳位置——优先基础堆，其次牌列。点击<b>牌库</b>翻一张牌。牌列中按红黑交替、从大到小叠放。撤销可回退任意一步。",
+    ja:"<b>遊び方。</b> 4つの組札をエースからキングまでスートごとに積み上げます。<b>カードをタップ</b>すると最適な場所へ自動で移動します — 組札が優先、次に場札です。<b>山札</b>をタップすると1枚めくれます。場札は赤黒交互に降順で重ねます。取り消しでいつでも戻せます。",
+    ar:"<b>طريقة اللعب.</b> ابنِ الأسس الأربعة من الآس إلى الملك، أساس لكل نوع. <b>انقر على ورقة</b> لتنتقل تلقائيًا إلى أفضل مكان — الأساس أولًا ثم الأعمدة. انقر على <b>المخزون</b> لسحب ورقة. في الأعمدة رتّب تنازليًا بألوان متناوبة. زر التراجع يعيد أي حركة."
+  };
+  var L=pick(),el=document.getElementById("helpcard");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2 id="winttl">You win! 🎉</h2><p id="winmsg"></p><button id="again">New deal</button></div></div>
+<script>
+const BEST_KEY="solitaire.best", WINS_KEY="solitaire.wins";
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+const UI={
+  en:{win:"You win! 🎉",again:"New deal",time:"Time",moves:"Moves",score:"Score",best:"Best",wins:"Wins",undo:"Undo",auto:"Auto ✨",newdeal:"New deal"},
+  vi:{win:"Bạn thắng rồi! 🎉",again:"Ván mới",time:"Thời gian",moves:"Nước đi",score:"Điểm",best:"Kỷ lục",wins:"Ván thắng",undo:"Hoàn tác",auto:"Tự động ✨",newdeal:"Ván mới"},
+  ko:{win:"승리! 🎉",again:"새 게임",time:"시간",moves:"이동",score:"점수",best:"최고 기록",wins:"승리 횟수",undo:"되돌리기",auto:"자동 ✨",newdeal:"새 게임"},
+  zh:{win:"你赢了！🎉",again:"新一局",time:"时间",moves:"步数",score:"分数",best:"最佳",wins:"胜局",undo:"撤销",auto:"自动 ✨",newdeal:"新一局"},
+  ja:{win:"勝ちました！🎉",again:"新しいゲーム",time:"タイム",moves:"手数",score:"スコア",best:"ベスト",wins:"勝利数",undo:"取り消す",auto:"自動 ✨",newdeal:"新しいゲーム"},
+  ar:{win:"لقد فزت! 🎉",again:"توزيعة جديدة",time:"الوقت",moves:"الحركات",score:"النقاط",best:"الأفضل",wins:"مرات الفوز",undo:"تراجع",auto:"تلقائي ✨",newdeal:"توزيعة جديدة"}
+};
+const M=UI[LANG]||UI.en;
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Solitaire is endless/score-based, so it POSTs a fixed `level: 1` with the
+// score — the server ranks score games by score first, then time. Reads the
+// shared player token (set by the hub, same origin). No token → silently skips.
+// Mirrors the GBLB block in games/zip/index.html; keep in sync.
+const GBLB=(function(){
+  var GAME='solitaire', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+// ── Pure Klondike rules (kept in sync with logic.mjs) ─────────────────────
+function mulberry32(seed){var a=seed>>>0;return function(){a|=0;a=(a+0x6D2B79F5)|0;var t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};}
+function isRed(s){return s===1||s===2;}
+function canStackTab(card,onto){return isRed(card.s)!==isRed(onto.s)&&card.r===onto.r-1;}
+function canFound(card,pile){if(!pile.length)return card.r===1;var top=pile[pile.length-1];return top.s===card.s&&card.r===top.r+1;}
+const SUIT=['♠','♥','♦','♣'];
+const RANK=['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+
+let T=[],S=[],Wst=[],F=[],ops=[];
+let moves=0, started=0, won=false, autoRunning=false;
+let lastTap={key:'',t:0};
+// layout metrics (CSS px)
+let W=0,cw=0,ch=0,gap=6,ox=0,topY=0,tabY=0,downOff=8,upOff=18,canH=0;
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+$('undo').textContent=M.undo; $('auto').textContent=M.auto; $('newdeal').textContent=M.newdeal;
+$('winttl').textContent=M.win; $('again').textContent=M.again;
+if(LANG==='ar'){document.querySelector('#wino div').dir='rtl';}
+
+function newDeal(){
+  var seed=(Date.now()^Math.floor(Math.random()*0x7fffffff))>>>0;
+  var rng=mulberry32(seed), d=[];
+  for(var s=0;s<4;s++)for(var r=1;r<=13;r++)d.push({s:s,r:r});
+  for(var i=d.length-1;i>0;i--){var j=Math.floor(rng()*(i+1));var t=d[i];d[i]=d[j];d[j]=t;}
+  var k=0; T=[];
+  for(var c=0;c<7;c++){var col=[];for(var q=0;q<=c;q++){var cd=d[k++];col.push({s:cd.s,r:cd.r,up:q===c});}T.push(col);}
+  S=[]; while(k<d.length){var c2=d[k++];S.push({s:c2.s,r:c2.r,up:false});}
+  Wst=[]; F=[[],[],[],[]]; ops=[]; moves=0; started=0; won=false; autoRunning=false;
+  $('wino').style.display='none';
+  layout(); upd(); draw();
+}
+function startIfNeeded(){ if(!started){ started=Date.now(); GBLB.start(); } }
+
+function findMove(src,fOnly){
+  var run=null, fromCol=-1, fromIdx=-1;
+  if(src.k==='w'){ if(!Wst.length)return null; run=[Wst[Wst.length-1]]; }
+  else if(src.k==='f'){ if(!F[src.i].length)return null; run=[F[src.i][F[src.i].length-1]]; }
+  else{
+    var col=T[src.c];
+    if(src.i<0||src.i>=col.length||!col[src.i].up)return null;
+    run=col.slice(src.i);
+    for(var j=1;j<run.length;j++)if(!canStackTab(run[j],run[j-1]))return null;
+    fromCol=src.c; fromIdx=src.i;
+  }
+  var card=run[0];
+  if(run.length===1&&src.k!=='f'&&canFound(card,F[card.s]))return{k:'f',i:card.s};
+  if(fOnly)return null;
+  for(var pass=0;pass<2;pass++)for(var c3=0;c3<7;c3++){
+    if(c3===fromCol)continue;
+    var col2=T[c3];
+    if(pass===0){ if(col2.length&&col2[col2.length-1].up&&canStackTab(card,col2[col2.length-1]))return{k:'t',c:c3}; }
+    else if(!col2.length&&card.r===13){ if(src.k==='t'&&fromIdx===0)continue; return{k:'t',c:c3}; }
+  }
+  return null;
+}
+function applyMove(src,mv){
+  var op={t:'m',fk:src.k,fc:src.c,fi:src.i,tk:mv.k,tc:mv.c,ti:mv.i,n:1,flip:false};
+  var run;
+  if(src.k==='w')run=[Wst.pop()];
+  else if(src.k==='f')run=[F[src.i].pop()];
+  else{
+    run=T[src.c].splice(src.i); op.n=run.length;
+    var col=T[src.c];
+    if(col.length&&!col[col.length-1].up){col[col.length-1].up=true;op.flip=true;}
+  }
+  if(mv.k==='f')F[mv.i].push(run[0]);
+  else for(var q=0;q<run.length;q++)T[mv.c].push(run[q]);
+  ops.push(op);
+}
+function undo(){
+  if(autoRunning||won)return;
+  var op=ops.pop(); if(!op){upd();return;}
+  if(op.t==='d'){var cd=Wst.pop();cd.up=false;S.push(cd);}
+  else if(op.t==='r'){while(S.length){var c2=S.pop();c2.up=true;Wst.push(c2);}}
+  else{
+    var run;
+    if(op.tk==='f')run=[F[op.ti].pop()];
+    else run=T[op.tc].splice(T[op.tc].length-op.n);
+    if(op.fk==='w'){run[0].up=true;Wst.push(run[0]);}
+    else if(op.fk==='f')F[op.fi].push(run[0]);
+    else{
+      var col=T[op.fc];
+      if(op.flip&&col.length)col[col.length-1].up=false;
+      for(var q=0;q<run.length;q++)col.push(run[q]);
+    }
+  }
+  upd(); draw();
+}
+function doDeal(){
+  if(S.length){var cd=S.pop();cd.up=true;Wst.push(cd);ops.push({t:'d'});moves++;}
+  else if(Wst.length){var n=Wst.length;while(Wst.length){var c2=Wst.pop();c2.up=false;S.push(c2);}ops.push({t:'r',n:n});}
+  else return;
+  startIfNeeded(); upd(); draw();
+}
+function tryMoveFrom(src,fOnly){
+  var mv=findMove(src,fOnly);
+  if(!mv)return;
+  applyMove(src,mv); moves++; startIfNeeded();
+  upd(); draw(); checkWin();
+}
+function checkWin(){
+  for(var i=0;i<4;i++)if(F[i].length!==13)return;
+  won=true; autoRunning=false;
+  var ms=started?(Date.now()-started):0;
+  var score=Math.max(1000,10000-moves*10);
+  GBLB.report(score);
+  var wins=0,best=0;
+  try{wins=(+localStorage.getItem(WINS_KEY)||0)+1;localStorage.setItem(WINS_KEY,wins);
+    best=+localStorage.getItem(BEST_KEY)||0;
+    if(!best||ms<best){best=ms;localStorage.setItem(BEST_KEY,best);}
+  }catch(e){}
+  $('winmsg').textContent=M.time+' '+fmt(ms)+' · '+M.moves+' '+moves+' · '+M.score+' '+score+(best?' — '+M.best+' '+fmt(best):'')+(wins?' · '+M.wins+' '+wins:'');
+  $('wino').style.display='grid';
+  upd();
+}
+function canAuto(){
+  if(won||S.length||Wst.length)return false;
+  var left=0;
+  for(var c=0;c<7;c++){var col=T[c];left+=col.length;for(var i=0;i<col.length;i++)if(!col[i].up)return false;}
+  return left>0;
+}
+function runAuto(){
+  if(autoRunning||!canAuto())return;
+  autoRunning=true; $('auto').style.display='none';
+  (function step(){
+    if(won){autoRunning=false;return;}
+    for(var c=0;c<7;c++){
+      var col=T[c];
+      if(col.length&&canFound(col[col.length-1],F[col[col.length-1].s])){
+        applyMove({k:'t',c:c,i:col.length-1},{k:'f',i:col[col.length-1].s});
+        moves++; upd(); draw(); checkWin();
+        if(!won)setTimeout(step,110);
+        else autoRunning=false;
+        return;
+      }
+    }
+    autoRunning=false; upd();
+  })();
+}
+
+// ── layout + drawing ──────────────────────────────────────────────────────
+function layout(){
+  var wrap=document.getElementById('wrap');
+  W=Math.min(wrap.clientWidth-60,520);
+  gap=Math.max(4,Math.floor(W*0.013));
+  cw=Math.floor((W-gap*8)/7); ch=Math.floor(cw*1.4);
+  ox=Math.floor((W-(cw*7+gap*6))/2);
+  topY=gap; tabY=topY+ch+gap*2;
+  downOff=Math.max(5,Math.floor(ch*0.15));
+  upOff=Math.max(14,Math.floor(ch*0.30));
+}
+function colX(c){return ox+c*(cw+gap);}
+function cardY(c,i){var y=tabY;for(var j=0;j<i;j++)y+=T[c][j].up?upOff:downOff;return y;}
+function neededH(){
+  var h=tabY+ch+gap;
+  for(var c=0;c<7;c++){
+    var col=T[c]; if(!col.length)continue;
+    var y=cardY(c,col.length-1)+ch+gap;
+    if(y>h)h=y;
+  }
+  return h;
+}
+function sizeCanvas(){
+  var h=neededH();
+  if(cv.width!==Math.round(W*devicePixelRatio)||canH!==h){
+    canH=h;
+    cv.width=Math.round(W*devicePixelRatio); cv.height=Math.round(h*devicePixelRatio);
+    cv.style.width=W+'px'; cv.style.height=h+'px';
+  }
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function drawSlot(x,y,glyph){
+  ctx.save();
+  rr(x,y,cw,ch,Math.max(4,cw*0.12));
+  ctx.fillStyle='rgba(0,0,0,0.035)'; ctx.fill();
+  ctx.setLineDash([4,3]); ctx.strokeStyle='#c9c6bf'; ctx.lineWidth=1.5; ctx.stroke(); ctx.setLineDash([]);
+  if(glyph){ctx.fillStyle='#d8d5cd';ctx.font=Math.round(cw*0.5)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(glyph,x+cw/2,y+ch/2+1);}
+  ctx.restore();
+}
+function drawBack(x,y){
+  rr(x,y,cw,ch,Math.max(4,cw*0.12));
+  ctx.fillStyle='#3b5bdb'; ctx.fill();
+  ctx.strokeStyle='#2f4bc0'; ctx.lineWidth=1; ctx.stroke();
+  var m=Math.max(3,Math.floor(cw*0.12));
+  rr(x+m,y+m,cw-2*m,ch-2*m,Math.max(2,cw*0.06));
+  ctx.strokeStyle='rgba(255,255,255,0.45)'; ctx.lineWidth=1.5; ctx.stroke();
+}
+function drawFace(x,y,card){
+  ctx.save();
+  ctx.shadowColor='rgba(0,0,0,0.13)'; ctx.shadowBlur=3; ctx.shadowOffsetY=1;
+  rr(x,y,cw,ch,Math.max(4,cw*0.12));
+  ctx.fillStyle='#fff'; ctx.fill();
+  ctx.restore();
+  rr(x,y,cw,ch,Math.max(4,cw*0.12));
+  ctx.strokeStyle='#c4c4c4'; ctx.lineWidth=1; ctx.stroke();
+  var col=isRed(card.s)?'#e03131':'#1a1a1a';
+  var fs=Math.max(11,Math.round(cw*0.30));
+  ctx.fillStyle=col; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.font='bold '+fs+'px -apple-system,sans-serif';
+  ctx.fillText(RANK[card.r],x+Math.max(3,cw*0.08),y+Math.max(2,cw*0.05));
+  ctx.font=Math.round(fs*0.9)+'px sans-serif';
+  ctx.fillText(SUIT[card.s],x+Math.max(3,cw*0.08),y+Math.max(2,cw*0.05)+fs);
+  ctx.font=Math.round(cw*0.52)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(SUIT[card.s],x+cw/2,y+ch*0.68);
+}
+function draw(){
+  sizeCanvas();
+  ctx.clearRect(0,0,W,canH);
+  // stock
+  if(S.length)drawBack(colX(0),topY); else drawSlot(colX(0),topY,'↻');
+  // waste (draw-1: top card only)
+  if(Wst.length)drawFace(colX(1),topY,Wst[Wst.length-1]); else drawSlot(colX(1),topY,'');
+  // foundations (per suit)
+  for(var i=0;i<4;i++){
+    var x=colX(3+i);
+    if(F[i].length)drawFace(x,topY,F[i][F[i].length-1]); else drawSlot(x,topY,SUIT[i]);
+  }
+  // tableau
+  for(var c=0;c<7;c++){
+    var col=T[c], x2=colX(c);
+    if(!col.length){drawSlot(x2,tabY,'');continue;}
+    for(var j=0;j<col.length;j++){
+      var y=cardY(c,j);
+      if(col[j].up)drawFace(x2,y,col[j]); else drawBack(x2,y);
+    }
+  }
+}
+
+// ── input: tap-to-move (double-tap = foundation only) ─────────────────────
+function onDown(ev){
+  ev.preventDefault();
+  if(autoRunning||won)return;
+  var rect=cv.getBoundingClientRect();
+  var x=ev.clientX-rect.left, y=ev.clientY-rect.top;
+  var now=Date.now(), key='';
+  if(y<tabY-gap){
+    var c=Math.floor((x-ox)/(cw+gap)); if(c<0||c>6)return;
+    if(c===0){doDeal();return;}
+    if(c===1){key='w';var dbl=(key===lastTap.key&&now-lastTap.t<380);lastTap={key:key,t:now};tryMoveFrom({k:'w'},dbl?true:false);return;}
+    if(c>=3){tryMoveFrom({k:'f',i:c-3});return;}
+    return;
+  }
+  var c2=Math.floor((x-ox)/(cw+gap)); if(c2<0)c2=0; if(c2>6)c2=6;
+  var col=T[c2]; if(!col.length)return;
+  var idx=-1;
+  for(var i2=col.length-1;i2>=0;i2--){var ty=cardY(c2,i2);if(y>=ty&&y<=ty+ch){idx=i2;break;}}
+  if(idx<0){ if(y>cardY(c2,col.length-1))idx=col.length-1; else return; }
+  if(!col[idx].up)return;
+  key='t'+c2+':'+idx;
+  var dbl2=(key===lastTap.key&&now-lastTap.t<380);
+  lastTap={key:key,t:now};
+  // double-tap: send straight to foundation; single tap: best move (foundation first anyway)
+  tryMoveFrom({k:'t',c:c2,i:idx},dbl2?true:false);
+}
+cv.addEventListener('pointerdown',onDown);
+// iOS in-app webviews ignore touch-action:none — a non-passive touchmove
+// preventDefault is the only reliable way to keep the board from scrolling.
+cv.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+
+function fmt(ms){var s=Math.floor(ms/1000);return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2);}
+function upd(){
+  $('undo').disabled=ops.length===0||autoRunning||won;
+  $('mv').textContent=moves;
+  $('auto').style.display=(canAuto()&&!autoRunning)?'':'none';
+}
+setInterval(function(){ if(started&&!won)$('tm').textContent=fmt(Date.now()-started); },500);
+
+$('undo').onclick=undo;
+$('auto').onclick=runAuto;
+$('newdeal').onclick=newDeal;
+$('again').onclick=newDeal;
+addEventListener('resize',function(){layout();draw();});
+
+newDeal();
+</script>
+</body>
+</html>

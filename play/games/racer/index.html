@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Night Lane</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--field:#eceae3;--accent:#2f6fb5;--accent2:#1d4b7e;--warn:#e03131;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 14px;font-weight:700;white-space:nowrap;font-size:14px}
+  #ttl{margin-right:auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win p{margin:0;color:#555;font-size:15px;line-height:1.5}
+  .win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--accent);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  .pad{display:grid;direction:ltr;grid-template-columns:1fr 1.2fr 1fr;gap:12px}
+  .pb{padding:0;border-radius:14px;border:1px solid var(--bd);background:#fff;font-size:30px;font-weight:700;cursor:pointer;color:var(--ink);touch-action:manipulation;min-height:76px}
+  .pb:active{background:#eef3f9}
+  .pb.nitro{background:var(--accent);color:#fff;border-color:var(--accent);font-size:18px;letter-spacing:.06em}
+  /* controls: big keys, or one swipe pad in their place (body.swipe) */
+  .swp{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:150px;padding:12px 16px;border-radius:18px;border:2px dashed var(--bd);background:var(--card);color:#8c8c8c;font-weight:700;font-size:14.5px;text-align:center;line-height:1.4;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .swp b{font-size:30px;opacity:.45;margin-bottom:6px}
+  .swp.on{background:#f3f1ea;border-color:#b9b9b9}
+  body.swipe .pad{display:none}
+  body.swipe .swp{display:flex}
+  .seg{display:flex;flex:0 0 auto;border:1px solid var(--bd);border-radius:999px;background:var(--btn);padding:3px}
+  .seg button{border:0;background:transparent;border-radius:999px;padding:0 13px;min-height:44px;font-weight:700;font-size:14px;color:#8a8a8a;cursor:pointer;white-space:nowrap}
+  .seg button.on{background:var(--field);color:var(--ink)}
+  @media (max-width:360px){.seg button span{display:none}}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="ttl">0 m</span><span class="pill" id="sc">0</span><span class="pill" id="bst">★ 0</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="pad">
+    <button class="pb" id="bl">&#9664;</button>
+    <button class="pb nitro" id="bn">NITRO</button>
+    <button class="pb" id="br">&#9654;</button>
+  </div>
+  <div class="swp" id="swp"><b>&#128070;</b><span id="swph"></span></div>
+  <div class="btns">
+    <button class="btn" id="restart">Restart</button>
+    <div class="seg" id="ctl"><button data-m="buttons">&#127918;<span></span></button><button data-m="swipe">&#128070;<span></span></button></div>
+  </div>
+  <div class="help" id="helpcard"></div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Tap <b>◀ ▶</b> (or swipe the road) to change lane. Squeezing past a car at speed is a <b>near miss</b>: it raises your multiplier and charges the <b>NITRO</b> bar. Nitro doubles your score but makes the car heavy and drinks fuel — and fuel is the real clock, so the green cans in the gaps are worth the risk. Oil spins your steering backwards. Three lives; the traffic gets faster and thicker every sector.",
+    vi:"<b>Cách chơi.</b> Chạm <b>◀ ▶</b> (hoặc vuốt trên đường) để đổi làn. Lách sát một xe ở tốc độ cao là một pha <b>suýt va</b>: nó tăng hệ số nhân điểm và nạp thanh <b>NITRO</b>. Nitro nhân đôi điểm nhưng khiến xe nặng tay và ngốn xăng — mà xăng mới là đồng hồ đếm ngược thật sự, nên những can xanh nằm giữa các khe rất đáng để liều. Vết dầu làm tay lái đảo ngược. Ba mạng; mỗi chặng xe cộ lại nhanh và dày hơn.",
+    ko:"<b>플레이 방법.</b> <b>◀ ▶</b>를 누르거나 도로를 밀어 차선을 바꾸세요. 빠른 속도로 차 옆을 스치듯 지나가면 <b>아슬아슬한 통과</b>가 되어 점수 배율이 오르고 <b>NITRO</b> 게이지가 찹니다. 니트로는 점수를 두 배로 만들지만 조향이 무거워지고 연료를 많이 먹습니다 — 진짜 제한 시간은 연료이므로 틈새의 초록 캔은 위험을 감수할 값어치가 있습니다. 기름은 조향을 반대로 만듭니다. 목숨은 셋, 구간마다 차량은 더 빠르고 빽빽해집니다.",
+    zh:"<b>玩法。</b> 点 <b>◀ ▶</b>（或在路面上滑动）换道。高速贴身掠过一辆车即为<b>擦身而过</b>：倍率上升，并为 <b>NITRO</b> 充能。氮气让分数翻倍，但转向变沉、油耗更大——油量才是真正的倒计时，所以夹缝里的绿色油罐值得冒险。油污会让转向反向。三条命；每一段路，车流都更快更密。",
+    ja:"<b>遊び方。</b> <b>◀ ▶</b> をタップ（または路面をスワイプ）して車線変更。高速で車のすぐ横を抜けると<b>ニアミス</b>となり、倍率が上がって <b>NITRO</b> ゲージが溜まります。ニトロは得点を倍にしますが、ハンドルが重くなり燃料を食います — 本当の制限時間は燃料なので、隙間の緑の缶はリスクに見合います。オイルはハンドルを逆にします。残機は3、区間ごとに交通は速く濃くなります。",
+    ar:"<b>طريقة اللعب.</b> انقر <b>◀ ▶</b> (أو مرّر على الطريق) لتغيير المسار. المرور بجانب سيارة بسرعة يُحتسب <b>تفاديًا وشيكًا</b>: يرفع مضاعف النقاط ويشحن شريط <b>NITRO</b>. النيترو يضاعف النقاط لكنه يثقّل المقود ويستهلك الوقود — والوقود هو المؤقّت الحقيقي، لذا فإن العلب الخضراء بين السيارات تستحق المخاطرة. بقع الزيت تعكس اتجاه المقود. ثلاث محاولات، وفي كل قطاع تزداد الحركة سرعة وازدحامًا."
+  };
+  var L=pick(),el=document.getElementById("helpcard");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2 id="overttl"></h2><p id="overmsg"></p><button id="again"></button></div></div>
+<script>
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+const UI={
+  en:{"start":"Tap to start","hint":"◀ ▶ to change lane · tap the road for nitro","paused":"Paused — tap to resume","over":"Wrecked","dry":"Out of fuel","again":"Drive again","restart":"Restart","score":"Score","best":"Best","dist":"Distance","sector":"SECTOR","fuel":"FUEL","nitroLbl":"NITRO","spin":"SPIN!"},
+  vi:{"start":"Chạm để bắt đầu","hint":"◀ ▶ để đổi làn · chạm mặt đường để dùng nitro","paused":"Tạm dừng — chạm để tiếp tục","over":"Tan xác","dry":"Hết xăng","again":"Chạy lại","restart":"Chơi lại","score":"Điểm","best":"Cao nhất","dist":"Quãng đường","sector":"CHẶNG","fuel":"XĂNG","nitroLbl":"NITRO","spin":"XOAY!"},
+  ko:{"start":"탭하여 시작","hint":"◀ ▶ 차선 변경 · 도로를 탭하면 니트로","paused":"일시정지 — 탭하여 계속","over":"충돌","dry":"연료 고갈","again":"다시 달리기","restart":"다시 시작","score":"점수","best":"최고","dist":"주행 거리","sector":"구간","fuel":"연료","nitroLbl":"니트로","spin":"스핀!"},
+  zh:{"start":"点按开始","hint":"◀ ▶ 换道 · 点击路面使用氮气","paused":"已暂停——点按继续","over":"撞毁","dry":"没油了","again":"再跑一次","restart":"重新开始","score":"分数","best":"最佳","dist":"里程","sector":"路段","fuel":"燃油","nitroLbl":"氮气","spin":"打滑！"},
+  ja:{"start":"タップでスタート","hint":"◀ ▶ で車線変更 · 路面タップでニトロ","paused":"一時停止中 — タップで再開","over":"クラッシュ","dry":"燃料切れ","again":"もう一度走る","restart":"リスタート","score":"スコア","best":"ベスト","dist":"走行距離","sector":"区間","fuel":"燃料","nitroLbl":"ニトロ","spin":"スピン！"},
+  ar:{"start":"انقر للبدء","hint":"◀ ▶ لتغيير المسار · انقر الطريق للنيترو","paused":"متوقف — انقر للمتابعة","over":"تحطّمت","dry":"نفد الوقود","again":"قُد مجددًا","restart":"إعادة","score":"النقاط","best":"الأفضل","dist":"المسافة","sector":"القطاع","fuel":"الوقود","nitroLbl":"نيترو","spin":"انزلاق!"}
+};
+const M=UI[LANG]||UI.en;
+const $=id=>document.getElementById(id);
+// ── Controls: big keys, or one swipe pad in their place. The choice lives under
+// one key shared by every arcade game, so it follows the player between games.
+const CTRL=(function(){
+  const KEY='gobrain.bg.controls';
+  const L={en:['Buttons','Swipe'],vi:['Nút','Vuốt'],ko:['버튼','스와이프'],zh:['按键','滑动'],ja:['ボタン','スワイプ'],ar:['أزرار','سحب']}[LANG]||['Buttons','Swipe'];
+  const H={"en":"Swipe ◀ ▶ to change lane · tap for nitro","vi":"Vuốt ◀ ▶ để đổi làn · chạm để tăng tốc","ko":"◀ ▶ 스와이프로 차선 변경 · 탭하면 니트로","zh":"左右滑动换道 · 点按氮气加速","ja":"◀ ▶ スワイプで車線変更 · タップでニトロ","ar":"مرّر ◀ ▶ لتغيير المسار · انقر للنيترو"};
+  let mode='buttons';
+  try{ if(localStorage.getItem(KEY)==='swipe') mode='swipe'; }catch(e){}
+  const bs=$('ctl').getElementsByTagName('button');
+  function paint(){
+    document.body.classList.toggle('swipe',mode==='swipe');
+    for(let i=0;i<bs.length;i++) bs[i].classList.toggle('on',bs[i].getAttribute('data-m')===mode);
+  }
+  for(let i=0;i<bs.length;i++){
+    bs[i].getElementsByTagName('span')[0].textContent=' '+L[i];
+    bs[i].setAttribute('aria-label',L[i]);
+    bs[i].addEventListener('click',function(){
+      mode=this.getAttribute('data-m');
+      try{ localStorage.setItem(KEY,mode); }catch(e){}
+      paint();
+    });
+  }
+  $('swph').textContent=H[LANG]||H.en;
+  paint();
+  return {swipe:function(){ return mode==='swipe'; }};
+})();
+if(LANG==='ar'){document.documentElement.dir='rtl';document.querySelector('#wino div').dir='rtl';}
+// ── Leaderboard reporter (Go Brain) — mirrors the GBLB block in games/zip. ──
+const GBLB=(function(){
+  var GAME='racer', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score,level){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,level:level||1,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+// ── Shared shell ───────────────────────────────────────────────────────────
+// Canvas fit, fixed-step loop, d-pad / swipe / keyboard input, pause. Every
+// bundle inlines this verbatim; the per-game body below supplies tick + draw.
+const READY=0,PLAYING=1,CLEAR=2,DEAD=3,PAUSED=4;
+const cv=$('cv'), ctx=cv.getContext('2d');
+let phase=READY, U=1, CW=0, CH=0, dpr=1, lastT=0, acc=0;
+const IN={dir:null,fire:false,tap:false,drag:null};
+
+function fit(uw,uh){
+  // clientWidth includes the card's padding; the canvas only ever gets the
+  // content box, so measuring the parent alone stretches the backing store
+  // wider than the element and squashes everything horizontally.
+  const p=cv.parentNode, cs=window.getComputedStyle(p);
+  const pad=(parseFloat(cs.paddingLeft)||0)+(parseFloat(cs.paddingRight)||0);
+  const cssW=Math.min(p.clientWidth-pad, 460);
+  dpr=Math.min(3, window.devicePixelRatio||1);
+  U=cssW/uw; CW=cssW; CH=cssW*uh/uw;
+  cv.width=Math.round(CW*dpr); cv.height=Math.round(CH*dpr);
+  cv.style.height=CH+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+function rr(x,y,w,h,r,c){ ctx.fillStyle=c; ctx.beginPath();
+  if(ctx.roundRect){ctx.roundRect(x,y,w,h,r);}else{
+    ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+    ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+    ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);}
+  ctx.closePath(); ctx.fill();
+}
+function overlayText(top,bottom){
+  ctx.fillStyle='rgba(20,20,20,.62)'; ctx.fillRect(0,0,CW,CH);
+  ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='700 '+Math.round(CW*0.058)+'px -apple-system,system-ui,sans-serif';
+  ctx.fillText(top, CW/2, CH/2-CW*0.03);
+  if(bottom){ ctx.font='500 '+Math.round(CW*0.038)+'px -apple-system,system-ui,sans-serif';
+    ctx.fillStyle='rgba(255,255,255,.8)'; ctx.fillText(bottom, CW/2, CH/2+CW*0.045); }
+  ctx.textAlign='start'; ctx.textBaseline='alphabetic';
+}
+function onStart(){}      // overridden by the body
+function onResume(){ lastT=0; }
+function tapStart(){
+  if(phase===READY){ onStart(); return true; }
+  if(phase===PAUSED){ phase=PLAYING; onResume(); return true; }
+  return false;
+}
+function bindPad(map){    // [[elementId, dir], …]
+  map.forEach(function(p){
+    const el=$(p[0]); if(!el)return;
+    el.addEventListener('pointerdown',function(e){e.preventDefault(); tapStart(); IN.dir=p[1]; IN.tapDir=p[1];});
+    ['pointerup','pointercancel','pointerleave'].forEach(function(k){
+      el.addEventListener(k,function(){ if(IN.dir===p[1]) IN.dir=null; });
+    });
+  });
+}
+function bindFire(id){
+  const el=$(id); if(!el)return;
+  el.addEventListener('pointerdown',function(e){e.preventDefault(); if(tapStart())return; IN.fire=true; IN.tap=true;});
+  ['pointerup','pointercancel','pointerleave'].forEach(function(k){ el.addEventListener(k,function(){IN.fire=false;}); });
+}
+// Canvas: drag to steer, tap to act — the whole game stays one-thumbed.
+function bindCanvas(dirs, opts){
+  opts=opts||{};
+  let x0=0,y0=0,t0=0,moved=0,on=false;
+  cv.addEventListener('pointerdown',function(e){
+    const r=cv.getBoundingClientRect();
+    x0=e.clientX; y0=e.clientY; t0=Date.now(); moved=0; on=true;
+    IN.drag={x:(e.clientX-r.left)/U, y:(e.clientY-r.top)/U, down:true};
+    if(cv.setPointerCapture)try{cv.setPointerCapture(e.pointerId);}catch(_){}
+    if(tapStart())return;
+    if(opts.tapDown){ IN.tap=true; IN.fire=true; }
+  });
+  cv.addEventListener('pointermove',function(e){
+    if(!on)return;
+    const r=cv.getBoundingClientRect();
+    IN.drag={x:(e.clientX-r.left)/U, y:(e.clientY-r.top)/U, down:true};
+    const dx=e.clientX-x0, dy=e.clientY-y0;
+    moved=Math.max(moved,Math.abs(dx),Math.abs(dy));
+    if(!dirs||moved<14)return;
+    IN.dir=Math.abs(dx)>Math.abs(dy)?(dx>0?dirs[1]:dirs[3]):(dy>0?dirs[2]:dirs[0]);
+  });
+  function end(){ if(!on)return; on=false;
+    if(moved<12&&Date.now()-t0<340&&!opts.tapDown){ IN.tap=true; }
+    IN.fire=false; if(dirs)IN.dir=null;
+    if(IN.drag) IN.drag.down=false;
+  }
+  cv.addEventListener('pointerup',end);
+  cv.addEventListener('pointercancel',function(){on=false; IN.fire=false; if(dirs)IN.dir=null; if(IN.drag)IN.drag.down=false;});
+  cv.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+}
+function bindKeys(dirs){
+  const K={ArrowUp:0,ArrowRight:1,ArrowDown:2,ArrowLeft:3,w:0,d:1,s:2,a:3,W:0,D:1,S:2,A:3};
+  document.addEventListener('keydown',function(e){
+    if(e.key==='p'||e.key==='P'){ if(phase===PLAYING)phase=PAUSED; else if(phase===PAUSED){phase=PLAYING;onResume();} e.preventDefault(); return; }
+    if(e.key===' '||e.key==='Enter'){ e.preventDefault(); if(tapStart())return; IN.fire=true; IN.tap=true; return; }
+    const i=K[e.key]; if(i===undefined)return;
+    e.preventDefault();
+    if(tapStart())return;
+    if(dirs) IN.dir=dirs[i];
+    IN.tapDir=dirs?dirs[i]:i;
+  });
+  document.addEventListener('keyup',function(e){
+    if(e.key===' '||e.key==='Enter'){ IN.fire=false; return; }
+    const i=K[e.key]; if(i===undefined||!dirs)return;
+    if(IN.dir===dirs[i]) IN.dir=null;
+  });
+  document.addEventListener('touchmove',function(e){if(phase===PLAYING)e.preventDefault();},{passive:false});
+  document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&phase===PLAYING){phase=PAUSED;lastT=0;} });
+}
+// Fixed-step driver: tick() runs at exactly `hz`, draw() once per frame.
+function run(tick, draw, hz){
+  const stepMs=1000/(hz||60);
+  (function frame(ts){
+    requestAnimationFrame(frame);
+    if(!lastT) lastT=ts;
+    const dt=Math.min(150, ts-lastT); lastT=ts;
+    if(phase===PLAYING){
+      acc+=dt; let guard=0;
+      while(acc>=stepMs && guard++<8){ acc-=stepMs; if(tick()===false) break; }
+    } else acc=0;
+    draw();
+  })(0);
+}
+addEventListener('resize',function(){ if(typeof relayout==='function') relayout(); });
+// ── Pure rules — inlined verbatim from logic.mjs (the tests import that file). ──
+// logic.mjs — Night Lane: the rules, with no canvas and no DOM in sight.
+// A five-lane highway that scrolls under a car you steer. Everything runs on a
+// fixed 60 Hz tick from an explicit RNG, so a seed replays exactly — which is
+// what lets gen-levels.mjs fingerprint the difficulty curve and the tests pin
+// the maths. index.html inlines this file verbatim.
+
+const LANES = 5;
+const LANE_W = 20;
+const WIDTH = LANES * LANE_W;   // 100 units
+const HEIGHT = 160;             // visible road, units
+const PLAYER_Y = 128;           // the car sits low; you read the road ahead
+const CAR_W = 13, CAR_H = 22, TRUCK_H = 38;
+
+const KINDS = {
+  car:    { h: CAR_H,  w: CAR_W, rel: 0.42, score: 0 },  // rel = fraction of your speed it drives at
+  truck:  { h: TRUCK_H, w: CAR_W + 1, rel: 0.30, score: 0 },
+  weaver: { h: CAR_H,  w: CAR_W, rel: 0.55, score: 0 },  // drifts across lanes
+  oil:    { h: 16,     w: 16,    rel: 0,    score: 0 },  // hazard: spins you out
+  fuel:   { h: 15,     w: 12,    rel: 0,    score: 120 },
+  nitro:  { h: 15,     w: 12,    rel: 0,    score: 60 },
+};
+
+const CONFIG = {
+  lives: 3,
+  baseSpeed: 0.72,          // units per tick at sector 1
+  speedPerSector: 0.085,
+  maxSpeed: 2.35,
+  sectorMetres: 900,        // one sector board every 900 m
+  metresPerUnit: 0.5,
+  steer: 0.92,              // lane units per tick while steering (a lane change ~0.35 s)
+  steerNitro: 0.62,         // nitro makes the car heavy — the trade for the speed
+  fuelMax: 1200,
+  fuelBurn: 0.42,           // per tick at base speed, scaled by actual speed
+  fuelBurnNitro: 1.5,
+  fuelCan: 420,
+  nitroMax: 100,
+  nitroPerMiss: 14,
+  nitroCan: 45,
+  nitroDrain: 0.55,         // per tick while lit
+  nitroSpeed: 1.55,
+  nitroScore: 2,
+  missWindow: 9,            // lateral units that count as a near miss
+  missScore: 25,
+  comboStep: 0.25,          // each near miss adds this to the multiplier
+  comboMax: 5,
+  comboDecay: 150,          // ticks of no near miss before the multiplier drops a step
+  spinTicks: 70,            // oil: steering inverted and loose
+  invulnTicks: 110,
+  crashFuel: 120,           // a crash costs fuel as well as a life
+  scorePerMetre: 1,
+  rowGap: 80,               // vertical spacing between spawned rows, units
+  rowGapJitter: 30,
+  gapMin: 1,                // a row always leaves at least this many lanes open
+};
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function laneX(lane) { return lane * LANE_W + LANE_W / 2; }
+function laneOf(x) { return Math.max(0, Math.min(LANES - 1, Math.round((x - LANE_W / 2) / LANE_W))); }
+
+/** Sector index (0-based) for a distance in metres. */
+function sectorAt(metres) { return Math.floor(metres / CONFIG.sectorMetres); }
+/** Road speed for a sector — a ramp that flattens out rather than running away. */
+function speedFor(sector) {
+  return Math.min(CONFIG.maxSpeed, CONFIG.baseSpeed + sector * CONFIG.speedPerSector);
+}
+/** How thick the traffic is in a sector: 0 (empty) … 1 (as bad as it gets). */
+function densityFor(sector) {
+  return Math.min(1, 0.18 + sector * 0.075);
+}
+
+function createGame(rand) {
+  const r = rand || Math.random;
+  return {
+    tick: 0,
+    x: laneX(2),
+    target: 2,
+    speed: CONFIG.baseSpeed,
+    metres: 0,
+    sector: 0,
+    lives: CONFIG.lives,
+    fuel: CONFIG.fuelMax,
+    nitro: 0,
+    nitroOn: false,
+    spin: 0,
+    invuln: 0,
+    combo: 1,
+    comboT: 0,
+    misses: 0,
+    crashes: 0,
+    cans: 0,
+    score: 0,
+    best: 0,
+    obstacles: [],
+    spawnIn: 0,
+    seedRand: r,
+    over: false,
+    reason: null,
+  };
+}
+
+/** Every lane a row occupies, so the spawner can guarantee a way through. */
+function rowLanes(rand, density) {
+  const r = rand;
+  const blocked = new Set();
+  const want = 1 + Math.floor(r() * (1 + density * 2.6));       // 1..3 blockers
+  const room = LANES - CONFIG.gapMin;
+  for (let i = 0; i < want && blocked.size < room; i++) blocked.add(Math.floor(r() * LANES));
+  return [...blocked];
+}
+
+/**
+ * Push one row of traffic in just above the top of the road. `st.spawnIn` is a
+ * distance counter, not a coordinate: the road scrolls under it, and whatever
+ * it has overshot by is carried into the row's y so spacing stays even at any
+ * speed.
+ */
+function spawnRow(st, rand) {
+  const r = rand || st.seedRand;
+  const density = densityFor(st.sector);
+  const lanes = rowLanes(r, density);
+  const y = -46 + st.spawnIn;
+  for (const lane of lanes) {
+    let kind = "car";
+    const roll = r();
+    if (roll < 0.13 + density * 0.10) kind = "truck";
+    else if (roll < 0.30 + density * 0.22) kind = "weaver";
+    const k = KINDS[kind];
+    st.obstacles.push({
+      kind, lane, x: laneX(lane), y: y - k.h / 2,
+      w: k.w, h: k.h, rel: k.rel,
+      drift: kind === "weaver" ? (r() < 0.5 ? -1 : 1) : 0,
+      driftT: 40 + Math.floor(r() * 70),
+      passed: false, missed: false,
+    });
+  }
+  // Pickups and oil ride in the gaps — the reason to weave rather than camp a lane.
+  const open = [];
+  for (let l = 0; l < LANES; l++) if (!lanes.includes(l)) open.push(l);
+  if (open.length) {
+    const put = (kind, chance, dy) => {
+      if (r() >= chance || !open.length) return;
+      const lane = open.splice(Math.floor(r() * open.length), 1)[0];
+      const k = KINDS[kind];
+      st.obstacles.push({ kind, lane, x: laneX(lane), y: y - k.h / 2 + dy, w: k.w, h: k.h, rel: 0, drift: 0, driftT: 0, passed: false, missed: false });
+    };
+    put("fuel", st.fuel < CONFIG.fuelMax * 0.45 ? 0.62 : 0.26, 0);
+    put("nitro", 0.14, -18);
+    put("oil", 0.10 + density * 0.22, 22);
+  }
+  st.spawnIn += (CONFIG.rowGap + Math.floor(r() * CONFIG.rowGapJitter)) * (1.16 - density * 0.30);
+}
+
+function hit(st, o) {
+  const dx = Math.abs(st.x - o.x), dy = Math.abs(PLAYER_Y - (o.y + o.h / 2));
+  return dx < (CAR_W + o.w) / 2 - 3.5 && dy < (CAR_H + o.h) / 2 - 3;
+}
+
+/** Steering: the target lane, clamped, honouring an oil spin. */
+function steer(st, dir) {
+  if (dir === -1 || dir === 1) {
+    const d = st.spin > 0 ? -dir : dir;
+    st.target = Math.max(0, Math.min(LANES - 1, st.target + d));
+    return st.target;
+  }
+  return st.target;
+}
+
+function crash(st) {
+  st.lives--;
+  st.crashes++;
+  st.combo = 1; st.comboT = 0;
+  st.nitroOn = false;
+  st.spin = 0;
+  st.fuel = Math.max(0, st.fuel - CONFIG.crashFuel);
+  st.invuln = CONFIG.invulnTicks;
+  // shove the wreckage out of the way so you don't re-collide on the next tick
+  st.obstacles = st.obstacles.filter((o) => Math.abs(PLAYER_Y - (o.y + o.h / 2)) > 34 || o.kind === "oil");
+  if (st.lives <= 0) { st.over = true; st.reason = "crash"; }
+  return { type: "crash", lives: st.lives };
+}
+
+function award(st, n) {
+  const mult = st.nitroOn ? CONFIG.nitroScore : 1;
+  st.score += Math.round(n * mult);
+}
+
+/**
+ * One 60 Hz tick.
+ * `input` = { dir: -1|0|1 (a *tap*, not a hold), nitro: bool }.
+ * Returns the events the shell turns into sound and confetti.
+ */
+function step(st, input, rand) {
+  const r = rand || st.seedRand;
+  const events = [];
+  if (st.over) return events;
+  st.tick++;
+  if (input && input.dir) steer(st, input.dir);
+
+  // ── nitro: you spend it, it does not spend itself ────────────────────────
+  if (input && input.nitro && !st.nitroOn && st.nitro >= 25) { st.nitroOn = true; events.push({ type: "nitro" }); }
+  if (st.nitroOn) {
+    st.nitro -= CONFIG.nitroDrain;
+    if (st.nitro <= 0) { st.nitro = 0; st.nitroOn = false; events.push({ type: "nitroOut" }); }
+  }
+
+  st.sector = sectorAt(st.metres);
+  const road = speedFor(st.sector);
+  st.speed = road * (st.nitroOn ? CONFIG.nitroSpeed : 1);
+
+  // ── steering ─────────────────────────────────────────────────────────────
+  const want = laneX(st.target);
+  const rate = (st.nitroOn ? CONFIG.steerNitro : CONFIG.steer) * (st.spin > 0 ? 1.9 : 1);
+  if (Math.abs(want - st.x) <= rate) st.x = want; else st.x += Math.sign(want - st.x) * rate;
+  if (st.spin > 0) {
+    st.spin--;
+    st.x += Math.sin(st.tick * 0.35) * 0.9;     // the car fishtails while spun out
+    st.x = Math.max(CAR_W / 2, Math.min(WIDTH - CAR_W / 2, st.x));
+  }
+
+  // ── fuel ─────────────────────────────────────────────────────────────────
+  st.fuel -= CONFIG.fuelBurn * (st.speed / CONFIG.baseSpeed) * (st.nitroOn ? CONFIG.fuelBurnNitro : 1);
+  if (st.fuel <= 0) { st.fuel = 0; st.over = true; st.reason = "fuel"; events.push({ type: "dry" }); return events; }
+
+  // ── distance and score ───────────────────────────────────────────────────
+  const before = st.metres;
+  st.metres += st.speed * CONFIG.metresPerUnit;
+  const gainedM = Math.floor(st.metres) - Math.floor(before);
+  if (gainedM > 0) award(st, gainedM * CONFIG.scorePerMetre);
+  if (sectorAt(st.metres) !== sectorAt(before)) events.push({ type: "sector", sector: sectorAt(st.metres) });
+
+  // ── traffic ──────────────────────────────────────────────────────────────
+  if (st.invuln > 0) st.invuln--;
+  for (const o of st.obstacles) {
+    o.y += st.speed * (1 - o.rel);
+    if (o.drift) {
+      if (--o.driftT <= 0) {
+        const next = o.lane + o.drift;
+        if (next < 0 || next >= LANES) o.drift = -o.drift;
+        else { o.lane = next; o.driftT = 44 + Math.floor(r() * 60); }
+      }
+      const tx = laneX(o.lane);
+      o.x += Math.sign(tx - o.x) * Math.min(0.30, Math.abs(tx - o.x));
+    }
+  }
+
+  for (const o of st.obstacles) {
+    if (o.passed) continue;
+    const collide = hit(st, o);
+    if (o.kind === "fuel" || o.kind === "nitro") {
+      if (collide) {
+        o.passed = true;
+        st.cans++;
+        if (o.kind === "fuel") st.fuel = Math.min(CONFIG.fuelMax, st.fuel + CONFIG.fuelCan);
+        else st.nitro = Math.min(CONFIG.nitroMax, st.nitro + CONFIG.nitroCan);
+        award(st, KINDS[o.kind].score);
+        events.push({ type: "pickup", kind: o.kind, x: o.x, y: o.y });
+      }
+      continue;
+    }
+    if (o.kind === "oil") {
+      if (collide && st.spin <= 0) { o.passed = true; st.spin = CONFIG.spinTicks; st.combo = 1; st.comboT = 0; events.push({ type: "oil", x: o.x, y: o.y }); }
+      continue;
+    }
+    if (collide) {
+      if (st.invuln > 0) continue;
+      o.passed = true;
+      events.push(crash(st));
+      events.push({ type: "boom", x: st.x, y: PLAYER_Y });
+      if (st.over) return events;
+      continue;
+    }
+    // near miss: it went by your door, close, and you are still driving
+    const top = o.y, bot = o.y + o.h;
+    if (!o.missed && top > PLAYER_Y + CAR_H / 2) {
+      o.missed = true;
+      const dx = Math.abs(st.x - o.x);
+      if (dx < CONFIG.missWindow + (CAR_W + o.w) / 2) {
+        st.misses++;
+        st.combo = Math.min(CONFIG.comboMax, st.combo + CONFIG.comboStep);
+        st.comboT = CONFIG.comboDecay;
+        st.nitro = Math.min(CONFIG.nitroMax, st.nitro + CONFIG.nitroPerMiss);
+        award(st, Math.round(CONFIG.missScore * st.combo));
+        events.push({ type: "miss", combo: st.combo, x: o.x, y: bot });
+      }
+    }
+  }
+  st.obstacles = st.obstacles.filter((o) => o.y < HEIGHT + 60 && !(o.passed && (o.kind === "fuel" || o.kind === "nitro")));
+
+  // combo cools off if you drive safe
+  if (st.comboT > 0) { if (--st.comboT === 0 && st.combo > 1) { st.combo = Math.max(1, st.combo - CONFIG.comboStep); st.comboT = CONFIG.comboDecay; } }
+
+  st.spawnIn -= st.speed;
+  let guard = 0;
+  while (st.spawnIn <= 0 && guard++ < 8) spawnRow(st, r);
+  st.best = Math.max(st.best, st.score);
+  return events;
+}
+
+/** What the HUD shows — kept here so the tests can assert on it too. */
+function summary(st) {
+  return {
+    metres: Math.floor(st.metres),
+    sector: st.sector + 1,
+    score: st.score,
+    lives: st.lives,
+    fuelPct: Math.round((st.fuel / CONFIG.fuelMax) * 100),
+    nitroPct: Math.round(st.nitro),
+    combo: Math.round(st.combo * 100) / 100,
+    misses: st.misses,
+    crashes: st.crashes,
+    over: st.over,
+    reason: st.reason,
+  };
+}
+// ── Night Lane: painting + the run ─────────────────────────────────────────
+const BKEY='gobrain.racer.best';
+let st=null, rand=Math.random, best=+(localStorage.getItem(BKEY)||0)||0;
+let pops=[], sparks=[], shake=0, board=null, boardT=0, stripe=0;
+
+function relayout(){ fit(WIDTH, HEIGHT); paint(); }
+function newRun(){
+  rand=mulberry32((Date.now()^0x9e3779b9)>>>0);
+  st=createGame(rand);
+  pops=[]; sparks=[]; shake=0; board=null; boardT=0;
+  phase=PLAYING; GBLB.start(); lastT=0; acc=0; hud();
+}
+onStart=newRun;
+function hud(){
+  if(!st)return;
+  const s=summary(st);
+  $('ttl').textContent=s.metres+' m';
+  $('sc').textContent=s.score.toLocaleString();
+  $('bst').textContent='★ '+Math.max(best,s.score).toLocaleString();
+}
+function finish(){
+  phase=DEAD;
+  const s=summary(st);
+  best=Math.max(best,s.score);
+  try{localStorage.setItem(BKEY,String(best));}catch(e){}
+  GBLB.report(s.score, s.sector);
+  $('overttl').textContent=s.reason==='fuel'?M.dry:M.over;
+  $('overmsg').textContent=M.dist+' '+s.metres+' m · '+M.score+' '+s.score.toLocaleString()+' · '+M.best+' '+best.toLocaleString();
+  $('again').textContent=M.again;
+  $('wino').style.display='grid';
+  hud();
+}
+
+// ── input: two lane buttons + a nitro button; the canvas takes swipes ───────
+let tapL=false,tapR=false,wantNitro=false;
+function tapBtn(id,fn){ const el=$(id); el.addEventListener('pointerdown',function(e){e.preventDefault(); if(tapStart())return; fn();}); }
+tapBtn('bl',function(){tapL=true;});
+tapBtn('br',function(){tapR=true;});
+tapBtn('bn',function(){wantNitro=true;});
+bindCanvas(null,{});
+// the same swipes work on the field and on the swipe pad (swipe controls)
+[cv,$('swp')].forEach(function(el){
+  const pad=el!==cv;
+  let x0=0,y0=0,fired=false,on=false;
+  el.addEventListener('pointerdown',function(e){
+    x0=e.clientX;y0=e.clientY;fired=false;on=true;
+    if(!pad)return;
+    e.preventDefault(); el.classList.add('on');
+    if(el.setPointerCapture)try{el.setPointerCapture(e.pointerId);}catch(_){}
+    if(tapStart()) fired=true;
+  });
+  el.addEventListener('pointermove',function(e){
+    if(!on||fired)return;
+    const dx=e.clientX-x0, dy=e.clientY-y0;
+    if(Math.abs(dx)>18&&Math.abs(dx)>Math.abs(dy)){ if(dx>0)tapR=true; else tapL=true; fired=true; x0=e.clientX; }
+    else if(dy<-26){ wantNitro=true; fired=true; }
+  });
+  el.addEventListener('pointerup',function(){ if(on&&!fired&&phase===PLAYING) wantNitro=true; on=false; el.classList.remove('on'); });
+  el.addEventListener('pointercancel',function(){ on=false; el.classList.remove('on'); });
+  if(pad) el.addEventListener('touchmove',function(e){ e.preventDefault(); },{passive:false});
+});
+document.addEventListener('keydown',function(e){
+  if(e.key==='p'||e.key==='P'){ if(phase===PLAYING)phase=PAUSED; else if(phase===PAUSED){phase=PLAYING;onResume();} e.preventDefault(); return; }
+  if(e.key===' '||e.key==='Enter'||e.key==='ArrowUp'||e.key==='w'){ e.preventDefault(); if(tapStart())return; wantNitro=true; return; }
+  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A'){ e.preventDefault(); if(tapStart())return; tapL=true; }
+  if(e.key==='ArrowRight'||e.key==='d'||e.key==='D'){ e.preventDefault(); if(tapStart())return; tapR=true; }
+});
+document.addEventListener('touchmove',function(e){if(phase===PLAYING)e.preventDefault();},{passive:false});
+document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&phase===PLAYING){phase=PAUSED;lastT=0;} });
+$('restart').textContent=M.restart;
+$('restart').onclick=newRun;
+$('again').onclick=newRun;
+
+// ── tick ───────────────────────────────────────────────────────────────────
+function tick(){
+  const dir=tapL?-1:tapR?1:0; tapL=false; tapR=false;
+  const evs=step(st,{dir:dir,nitro:wantNitro},rand);
+  wantNitro=false;
+  for(const e of evs){
+    if(e.type==='miss'){ pops.push({x:e.x,y:e.y,t:34,txt:'×'+(Math.round(e.combo*100)/100)}); }
+    else if(e.type==='pickup'){ pops.push({x:e.x,y:e.y,t:38,txt:e.kind==='fuel'?M.fuel:M.nitroLbl}); }
+    else if(e.type==='oil'){ shake=10; pops.push({x:e.x,y:e.y,t:34,txt:M.spin}); }
+    else if(e.type==='boom'){ shake=18; for(let i=0;i<14;i++) sparks.push({x:e.x,y:e.y,vx:(Math.random()-0.5)*3,vy:(Math.random()-0.5)*3,t:26}); }
+    else if(e.type==='sector'){ board=M.sector+' '+e.sector; boardT=110; }
+    else if(e.type==='nitro'){ board=M.nitroLbl; boardT=50; }
+  }
+  stripe=(stripe+st.speed)%24;
+  hud();
+  if(st.over){ finish(); return false; }
+  return true;
+}
+
+// ── painting ───────────────────────────────────────────────────────────────
+const ROAD='#26251f', EDGE='#3a3830', MARK='rgba(255,255,255,.55)';
+function px(v){ return v*U; }
+function carBody(x,y,w,h,col,dark,glow){
+  const X=px(x-w/2), Y=px(y-h/2), W=px(w), H=px(h);
+  if(glow){ ctx.fillStyle=glow; ctx.fillRect(X-px(1.5),Y-px(1.5),W+px(3),H+px(3)); }
+  rr(X,Y,W,H,px(2.6),col);
+  ctx.fillStyle=dark;
+  ctx.fillRect(X+px(1.4),Y+H*0.14,W-px(2.8),H*0.16);   // windscreen
+  ctx.fillRect(X+px(1.4),Y+H*0.66,W-px(2.8),H*0.14);   // rear window
+  ctx.fillStyle='rgba(0,0,0,.35)';
+  ctx.fillRect(X-px(1),Y+H*0.18,px(1.4),H*0.16);
+  ctx.fillRect(X+W-px(0.4),Y+H*0.18,px(1.4),H*0.16);
+  ctx.fillRect(X-px(1),Y+H*0.66,px(1.4),H*0.16);
+  ctx.fillRect(X+W-px(0.4),Y+H*0.66,px(1.4),H*0.16);
+}
+function drawRoad(){
+  ctx.fillStyle=ROAD; ctx.fillRect(0,0,CW,CH);
+  ctx.fillStyle=EDGE; ctx.fillRect(0,0,px(1.6),CH); ctx.fillRect(CW-px(1.6),0,px(1.6),CH);
+  ctx.fillStyle=MARK;
+  for(let l=1;l<LANES;l++){
+    const x=px(l*LANE_W)-px(0.4);
+    for(let y=-24+stripe;y<HEIGHT+24;y+=24) ctx.fillRect(x,px(y),px(0.8),px(13));
+  }
+  // shoulder rumble strips scroll too, so speed reads even on an empty road
+  for(let y=-16+((stripe*1.6)%16);y<HEIGHT+16;y+=16){
+    ctx.fillStyle=(Math.floor((y+stripe)/16)%2)?'#c94f2d':'#e8e4da';
+    ctx.fillRect(0,px(y),px(1.6),px(8)); ctx.fillRect(CW-px(1.6),px(y),px(1.6),px(8));
+  }
+}
+function drawObstacle(o){
+  if(o.kind==='oil'){
+    ctx.fillStyle='rgba(12,12,14,.92)'; ctx.beginPath();
+    ctx.ellipse(px(o.x),px(o.y+o.h/2),px(o.w/2),px(o.h/2.6),0,0,6.3); ctx.fill();
+    ctx.fillStyle='rgba(120,110,200,.35)'; ctx.beginPath();
+    ctx.ellipse(px(o.x-1),px(o.y+o.h/2-1),px(o.w/4),px(o.h/6),0,0,6.3); ctx.fill();
+    return;
+  }
+  if(o.kind==='fuel'||o.kind==='nitro'){
+    const col=o.kind==='fuel'?'#3fa34d':ACC;
+    const X=px(o.x-o.w/2),Y=px(o.y),W=px(o.w),H=px(o.h);
+    rr(X,Y,W,H,px(2),col);
+    ctx.fillStyle='rgba(255,255,255,.9)';
+    if(o.kind==='fuel'){ ctx.fillRect(X+W*0.28,Y+H*0.25,W*0.44,H*0.12); ctx.fillRect(X+W*0.42,Y+H*0.25,W*0.16,H*0.5); }
+    else { ctx.beginPath(); ctx.moveTo(X+W*0.62,Y+H*0.14); ctx.lineTo(X+W*0.3,Y+H*0.56); ctx.lineTo(X+W*0.5,Y+H*0.56);
+      ctx.lineTo(X+W*0.36,Y+H*0.9); ctx.lineTo(X+W*0.74,Y+H*0.42); ctx.lineTo(X+W*0.52,Y+H*0.42); ctx.closePath(); ctx.fill(); }
+    return;
+  }
+  const col=o.kind==='truck'?'#8d97a4':o.kind==='weaver'?'#d1495b':'#c9782d';
+  const dark=o.kind==='truck'?'#5d656f':o.kind==='weaver'?'#8f2f3d':'#8c4f16';
+  carBody(o.x,o.y+o.h/2,o.w,o.h,col,dark,null);
+  if(o.kind==='truck'){ ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(px(o.x-o.w/2+1.5),px(o.y+o.h*0.38),px(o.w-3),px(o.h*0.24)); }
+  if(o.kind==='weaver'&&o.drift){ ctx.fillStyle='rgba(255,190,60,'+(Math.floor(st.tick/8)%2?0.95:0.25)+')';
+    const sx=o.drift>0?o.x+o.w/2:o.x-o.w/2-1.4;
+    ctx.fillRect(px(sx),px(o.y+o.h*0.22),px(1.4),px(2.4)); }
+  // tail lights, so slow traffic reads as slow
+  ctx.fillStyle='rgba(255,70,60,.85)';
+  ctx.fillRect(px(o.x-o.w/2+1),px(o.y+o.h-2.2),px(2.4),px(1.6));
+  ctx.fillRect(px(o.x+o.w/2-3.4),px(o.y+o.h-2.2),px(2.4),px(1.6));
+}
+function drawPlayer(){
+  const blink=st.invuln>0&&Math.floor(st.tick/5)%2===0;
+  if(blink) return;
+  if(st.nitroOn){
+    const g=ctx.createLinearGradient(0,px(PLAYER_Y+CAR_H/2),0,px(PLAYER_Y+CAR_H/2+26));
+    g.addColorStop(0,'rgba(255,190,60,.85)'); g.addColorStop(1,'rgba(255,190,60,0)');
+    ctx.fillStyle=g; ctx.fillRect(px(st.x-4),px(PLAYER_Y+CAR_H/2),px(8),px(26));
+  }
+  ctx.save();
+  if(st.spin>0){ ctx.translate(px(st.x),px(PLAYER_Y)); ctx.rotate(Math.sin(st.tick*0.35)*0.30); ctx.translate(-px(st.x),-px(PLAYER_Y)); }
+  carBody(st.x,PLAYER_Y,CAR_W,CAR_H,ACC,ACC2,st.invuln>0?'rgba(255,255,255,.45)':null);
+  ctx.fillStyle='rgba(255,245,200,.9)';
+  ctx.fillRect(px(st.x-CAR_W/2+1),px(PLAYER_Y-CAR_H/2+0.6),px(2.4),px(1.6));
+  ctx.fillRect(px(st.x+CAR_W/2-3.4),px(PLAYER_Y-CAR_H/2+0.6),px(2.4),px(1.6));
+  ctx.restore();
+}
+function drawGauges(){
+  const s=summary(st);
+  const w=px(WIDTH)-px(8), x=px(4), y=px(4), h=px(3.4);
+  rr(x,y,w,h,h/2,'rgba(255,255,255,.16)');
+  const fuelCol=s.fuelPct<22?'#e03131':s.fuelPct<45?'#f59f00':'#3fa34d';
+  rr(x,y,Math.max(px(1),w*s.fuelPct/100),h,h/2,fuelCol);
+  rr(x,y+h+px(1.6),w,h,h/2,'rgba(255,255,255,.16)');
+  rr(x,y+h+px(1.6),Math.max(0,w*s.nitroPct/100),h,h/2,st.nitroOn?'#fff':ACC);
+  // lives
+  for(let i=0;i<CONFIG.lives;i++){
+    ctx.fillStyle=i<st.lives?'#fff':'rgba(255,255,255,.22)';
+    ctx.fillRect(px(4+i*5),px(14),px(3.4),px(3.4));
+  }
+  if(st.combo>1.001){
+    ctx.fillStyle=ACC; ctx.textAlign='right';
+    ctx.font='700 '+Math.round(px(9))+'px -apple-system,system-ui,sans-serif';
+    ctx.fillText('×'+(Math.round(st.combo*100)/100), px(WIDTH-4), px(20));
+    ctx.textAlign='start';
+  }
+}
+function paint(){
+  if(!st){ ctx.fillStyle=ROAD; ctx.fillRect(0,0,CW,CH); return; }
+  ctx.save();
+  if(shake>0){ shake--; ctx.translate((Math.random()-0.5)*shake*0.7,(Math.random()-0.5)*shake*0.7); }
+  drawRoad();
+  for(const o of st.obstacles) if(o.kind==='oil') drawObstacle(o);
+  for(const o of st.obstacles) if(o.kind!=='oil'&&!(o.passed&&(o.kind==='fuel'||o.kind==='nitro'))) drawObstacle(o);
+  drawPlayer();
+  for(const s of sparks){ s.x+=s.vx; s.y+=s.vy; s.t--;
+    ctx.fillStyle='rgba(255,'+(120+Math.floor(Math.random()*90))+',40,'+(s.t/26)+')';
+    ctx.fillRect(px(s.x),px(s.y),px(1.8),px(1.8)); }
+  sparks=sparks.filter(s=>s.t>0);
+  ctx.restore();
+  drawGauges();
+  ctx.textAlign='center';
+  for(const p of pops){ p.t--; p.y-=0.5;
+    ctx.fillStyle='rgba(255,255,255,'+Math.min(1,p.t/18)+')';
+    ctx.font='700 '+Math.round(px(7.5))+'px -apple-system,system-ui,sans-serif';
+    ctx.fillText(p.txt, Math.max(px(14),Math.min(CW-px(14),px(p.x))), px(p.y)); }
+  pops=pops.filter(p=>p.t>0);
+  if(boardT>0){ boardT--;
+    ctx.fillStyle='rgba(255,255,255,'+Math.min(1,boardT/28)+')';
+    ctx.font='800 '+Math.round(px(13))+'px -apple-system,system-ui,sans-serif';
+    ctx.fillText(board, CW/2, px(HEIGHT*0.34)); }
+  ctx.textAlign='start';
+  if(phase===READY) overlayText(M.start, M.hint);
+  else if(phase===PAUSED) overlayText(M.paused,'');
+}
+
+// ── boot ───────────────────────────────────────────────────────────────────
+const ACC=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()||'#2f6fb5';
+const ACC2=getComputedStyle(document.documentElement).getPropertyValue('--accent2').trim()||'#1d4b7e';
+$('ttl').textContent='0 m';
+$('sc').textContent='0';
+$('bst').textContent='★ '+best.toLocaleString();
+relayout();
+run(tick, paint, 60);
+// levels.json is the tuning curve; the rules are already inlined above, so a
+// failed fetch (file://) costs nothing but the sector table.
+fetch('./levels.json').then(function(r){return r.json();}).then(function(){}).catch(function(){});
+</script>
+</body>
+</html>

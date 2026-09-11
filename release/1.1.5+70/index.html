@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GoBrain 1.1.5 (70) — Deploy report</title>
+<style>
+  :root{--bg:#0E0E10;--card:#16161a;--line:#28282c;--fg:#f5f5f5;--mut:#9ca3af;
+    --accent:#C44900;--ok:#3ddc84;--warn:#f0b429;--info:#5b8def}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+  .wrap{max-width:860px;margin:0 auto;padding:40px 20px 64px}
+  h1{font-size:28px;margin:0 0 2px;letter-spacing:-.02em}h1 b{color:var(--accent)}
+  .sub{color:var(--mut);margin:0 0 24px}
+  h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);
+    margin:30px 0 12px;border-bottom:1px solid var(--line);padding-bottom:6px}
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;overflow:hidden}
+  th,td{text-align:left;padding:11px 14px;font-size:14px;border-bottom:1px solid var(--line)}
+  th{color:var(--mut);font-weight:600;background:#121216}
+  tr:last-child td{border-bottom:0}
+  .ok{color:var(--ok);font-weight:700}.warn{color:var(--warn);font-weight:700}
+  code{background:#121216;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px}
+  ul{margin:10px 0;padding-left:22px}li{margin:5px 0}
+  .pill{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:9999px;
+    background:#0f2a18;color:var(--ok);border:1px solid #14502b}
+  .meta{color:var(--mut);font-size:13px}
+  .back{display:inline-block;margin-bottom:18px;color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/release/">← All releases</a>
+  <h1>Go<b>Brain</b> 1.1.5 <span class="meta">(build 70)</span></h1>
+  <p class="sub">Deploy report · <span class="pill">deployed</span> · 2026-06-29</p>
+
+  <h2>Targets</h2>
+  <table>
+    <tr><th>Component</th><th>Target</th><th>Result</th></tr>
+    <tr><td>API / Server</td><td><code>gobrain.fighttech.vn/api/v1</code></td><td class="ok">✅ deployed — migration 009 (streaks) applied, container healthy</td></tr>
+    <tr><td>Web + Landing</td><td><code>gobrain.fighttech.vn</code> · <code>/play</code> · <code>/release</code></td><td class="ok">✅ deployed</td></tr>
+    <tr><td>iOS</td><td>TestFlight (App Store Connect)</td><td class="ok">✅ uploaded — 1.1.5 (70)</td></tr>
+    <tr><td>Android</td><td>Google Play — internal track (draft)</td><td class="ok">✅ uploaded — 1.1.5 (70)</td></tr>
+  </table>
+
+  <h2>What's new</h2>
+  <ul>
+    <li>New game — <b>Beat</b>: a fast, fun music tap game (by level or endless), with downloadable online music tracks.</li>
+    <li>Daily streaks now <b>sync across your devices</b> through your account (server-backed).</li>
+    <li>Fix: leaderboards and sign-in now work reliably on <b>Android</b>.</li>
+    <li>Native <b>Liquid Glass</b> tab bar loads on iOS 26; smoother bottom tab bar.</li>
+    <li>The name prompt now shows on the <b>home screen</b> (was on the play-game screen).</li>
+    <li>Newest games appear first.</li>
+  </ul>
+
+  <h2>Verification (E2E)</h2>
+  <ul>
+    <li><b>iOS Simulator</b> (iPhone 17 Pro) — fresh install, prod env: app boots, name dialog on <b>home</b>, newest-first ordering, Liquid Glass tabs.</li>
+    <li><b>Beat game</b> (new) — full on-device flow: card → how-to-play → practice → tile tap → <b>streak recorded</b> (🔥 flame chip via DB API).</li>
+    <li><b>Favorites</b> — heart-tap → tab badge → filtered list. <b>Settings</b> — theme/accent/language, notification permission, clear-data confirm.</li>
+    <li><b>Real Android device</b> (Vsmart Active) — fresh install, prod env: name dialog on <b>home</b> (vi locale).</li>
+    <li>Streak API round-trip verified against prod (<code>POST/GET /api/v1/streaks</code>): consecutive +1, same-day idempotent, gap reset.</li>
+    <li><b>Pending:</b> Android leaderboard/sign-in fix not re-verified on device (only Android 4.3 hardware available; app needs 6.0+).</li>
+    <li>Full screenshot report: <a href="e2e/">🧪 E2E report →</a></li>
+  </ul>
+
+  <h2>Included changes (git)</h2>
+  <ul>
+    <li><code>feat(streaks)</code> — persist daily streaks via the database API</li>
+    <li><code>fix(hub)</code> — prompt for player name on home, not at game launch</li>
+    <li><code>fix(api)</code> — Capacitor.isNativePlatform() API base (Android leaderboard/sign-in)</li>
+    <li><code>fix(hub)</code> — native Liquid Glass tab bar on iOS 26</li>
+    <li><code>feat(beat)</code> — music game, online levels, proto entities</li>
+    <li>Merge <code>origin/develop</code> (native Firebase analytics, namespace → vn.fighttech.go2048)</li>
+  </ul>
+
+  <p class="meta" style="margin-top:30px">GoBrain · <a href="/">gobrain.fighttech.vn</a> · <a href="/play/">Open the games</a></p>
+</div>
+</body>
+</html>

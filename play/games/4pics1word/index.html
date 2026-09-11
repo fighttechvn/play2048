@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app and third-party SDK embeds (they use native Firebase). -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true; s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag; gtag("js", new Date()); gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>4 Pics 1 Word</title>
+<style>
+  :root{
+    --bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--muted:#6b6b6b;--bd:#dcd8cf;
+    --accent:#3b5bdb;--accent-ink:#fff;--slot:#efece5;--slot-bd:#cdc8bd;
+    --ok:#2f9e44;--err:#e03131;--tile:#fff;--tile-bd:#d0cabd;--coin:#f59f00;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{--bg:#15161a;--card:#212228;--ink:#f2f2f4;--muted:#a0a0aa;--bd:#333540;
+      --accent:#5c7cfa;--slot:#2a2b33;--slot-bd:#3a3c47;--tile:#2c2e37;--tile-bd:#3d3f4b;}
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overscroll-behavior:none;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  #wrap{max-width:520px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;gap:12px;
+    padding:calc(62px + env(safe-area-inset-top,0px)) calc(14px + env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) calc(14px + env(safe-area-inset-left,0px))}
+  .top{display:flex;align-items:center;gap:8px;min-height:42px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:7px 13px;font-weight:700;font-size:13.5px;white-space:nowrap;cursor:pointer;user-select:none}
+  #lvl{margin:0 auto;cursor:default}
+  #coins{color:var(--coin)}
+  .icon{width:38px;height:38px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .pic{aspect-ratio:1/1;background:var(--card);border:1px solid var(--bd);border-radius:16px;
+    display:flex;align-items:center;justify-content:center;font-size:60px;line-height:1;overflow:hidden;
+    animation:pop .28s ease both}
+  @supports not (aspect-ratio:1/1){.pic{height:120px}}
+  .slots{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;min-height:50px}
+  .slot{width:42px;height:50px;border-radius:10px;background:var(--slot);border:2px solid var(--slot-bd);
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;cursor:pointer}
+  .slot.gap{margin-left:16px}
+  .slot.filled{background:var(--card);border-color:var(--accent);animation:pop .18s ease both}
+  .slot.lock{border-color:var(--ok);color:var(--ok)}
+  .slots.ok .slot{border-color:var(--ok);color:var(--ok);background:var(--card)}
+  .slots.bad{animation:shake .4s}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
+  @keyframes pop{0%{transform:scale(.6);opacity:0}100%{transform:scale(1);opacity:1}}
+  .hints{display:flex;gap:8px}
+  .hint{flex:1;padding:10px 6px;border-radius:12px;border:1px solid var(--bd);background:var(--card);color:var(--ink);
+    font-weight:700;font-size:13px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+  .hint small{color:var(--coin);font-weight:700;font-size:12px}
+  .hint:disabled{opacity:.4}
+  .pool{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;padding-bottom:2px}
+  .tile{width:42px;height:50px;border-radius:10px;background:var(--tile);border:1px solid var(--tile-bd);
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;cursor:pointer;
+    box-shadow:0 2px 0 rgba(0,0,0,.08)}
+  .tile:active{transform:translateY(1px)}
+  .tile.used{visibility:hidden}
+  .tile.gone{opacity:0;pointer-events:none}
+  .help{color:var(--muted);font-size:12.5px;line-height:1.5;text-align:center}
+  .evbanner{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 12px;border-radius:12px;
+    font-weight:700;font-size:13.5px;color:#fff;background:var(--accent);box-shadow:0 2px 8px rgba(0,0,0,.12)}
+  .evbanner .m{font-size:18px}
+  .event-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border:1px solid var(--bd);border-radius:12px;margin-top:8px;text-align:left}
+  .event-item .ei-name{font-weight:700;font-size:14px}
+  .event-item .ei-buy{border:0;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-weight:800;font-size:13px;padding:8px 14px;cursor:pointer;white-space:nowrap;width:auto;margin:0}
+  .event-item .ei-old{color:var(--muted);text-decoration:line-through;font-size:12px;margin-right:4px}
+  /* overlays */
+  .ov{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.55);z-index:9;padding:20px}
+  @supports not (inset:0){.ov{top:0;right:0;bottom:0;left:0}}
+  .ov.on{display:grid}
+  .box{background:var(--card);border-radius:20px;padding:24px 28px;text-align:center;max-width:320px;width:100%}
+  .box h2{margin:0 0 4px;font-size:25px}
+  .word{font-weight:800;letter-spacing:2px;font-size:22px;margin:6px 0 2px}
+  .reward{color:var(--coin);font-weight:700;margin:8px 0 0}
+  .box button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-weight:800;font-size:16px;cursor:pointer;width:100%}
+  .box button.sec{background:var(--slot);color:var(--ink)}
+  .menu-list{display:flex;flex-direction:column;gap:8px;margin-top:12px;max-height:60vh;overflow:auto}
+  .menu-item{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border:1px solid var(--bd);border-radius:12px;cursor:pointer;font-weight:700}
+  .menu-item .n{color:var(--muted);font-weight:600;font-size:12px}
+  .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+    background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;font-weight:700;font-size:14px;
+    opacity:0;transition:opacity .2s;z-index:12;pointer-events:none;max-width:80%;text-align:center}
+  .toast.on{opacity:.95}
+  #fx{position:fixed;inset:0;pointer-events:none;z-index:11;overflow:hidden}
+  @supports not (inset:0){#fx{top:0;right:0;bottom:0;left:0}}
+  .confetti{position:absolute;width:9px;height:9px;border-radius:2px;will-change:transform,opacity}
+  .coinfly{position:fixed;font-size:22px;z-index:13;pointer-events:none;will-change:transform,opacity}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top">
+    <span class="pill icon" id="menuBtn" aria-label="menu">☰</span>
+    <span class="pill" id="lvl">4 Pics 1 Word</span>
+    <span class="pill icon" id="muteBtn" aria-label="sound">🔊</span>
+    <span class="pill" id="coins">🪙 0</span>
+  </div>
+  <div class="evbanner" id="evBanner" style="display:none"></div>
+  <div class="grid" id="grid"></div>
+  <div class="slots" id="slots"></div>
+  <div class="hints">
+    <button class="hint" id="hReveal"><span id="hRevealL">Reveal</span><small>🪙25</small></button>
+    <button class="hint" id="hRemove"><span id="hRemoveL">Remove</span><small>🪙40</small></button>
+    <button class="hint" id="hSkip"><span id="hSkipL">Skip</span><small>🪙120</small></button>
+  </div>
+  <div class="pool" id="pool"></div>
+  <div class="help" id="help"></div>
+</div>
+
+<div class="ov" id="win"><div class="box">
+  <h2 id="winTitle">Correct!</h2>
+  <div class="word" id="winWord"></div>
+  <div class="reward" id="winReward"></div>
+  <button id="next">Next</button>
+</div></div>
+
+<div class="ov" id="store"><div class="box">
+  <h2 id="storeTitle">Get coins</h2>
+  <div class="reward" id="storeBal"></div>
+  <div id="eventItems"></div>
+  <button id="btnAd" style="display:none">📺 <span id="btnAdL">Watch ad +30</span></button>
+  <button id="btnBuy" style="display:none">🪙 <span id="btnBuyL">Buy 1200 coins</span></button>
+  <button id="btnDaily" class="sec" style="display:none"><span id="btnDailyL">Claim daily +20</span></button>
+  <button class="sec" id="storeClose"><span id="storeCloseL">Close</span></button>
+</div></div>
+
+<div class="ov" id="menu"><div class="box">
+  <h2 id="menuTitle">Play</h2>
+  <div class="menu-list" id="menuList"></div>
+  <button class="sec" id="menuClose" style="margin-top:12px"><span id="menuCloseL">Close</span></button>
+</div></div>
+
+<div class="toast" id="toast"></div>
+<div id="fx"></div>
+
+<script>
+/* ══ config / locale ══════════════════════════════════════════════════════ */
+var COST = { reveal: 25, remove: 40, skip: 120 };
+var START_COINS = 100, REMOVE_N = 3, DAILY_BONUS = 20, AD_COINS = 30, BUY_SKU = "coins_1200", BUY_COINS = 1200;
+var K_COINS = "4pics1word.coins", K_MUTE = "4pics1word.muted", K_DAILY = "4pics1word.dailyClaim";
+function kLvl(mode){ return "4pics1word.level." + mode; }
+
+function qp(name){ try{ return new URLSearchParams(location.search).get(name); }catch(e){ return null; } }
+function pickLang(){
+  var raw = qp("lang") || localStorage.getItem("gobrain.locale") || localStorage.getItem("CapacitorStorage.gobrain.locale") || navigator.language || "en";
+  var c = String(raw).toLowerCase().split("-")[0];
+  return ["en","vi","ko","zh"].indexOf(c) >= 0 ? c : "en";
+}
+var LANG = pickLang();
+
+var STR = {
+  en:{ title:"4 Pics 1 Word", lvl:"Level", reveal:"Reveal", remove:"Remove", skip:"Skip",
+       help:"Tap the letters to spell the word all 4 pictures have in common.",
+       win:"Correct!", next:"Next", reward:"+{n} coins", low:"Not enough coins", done:"You finished them all! 🎉",
+       play:"Play", adventure:"Adventure", daily:"Daily puzzle", close:"Close",
+       store:"Get coins", balance:"You have {n} coins", watchAd:"Watch ad +{n}", buy:"Buy {n} coins",
+       claimDaily:"Claim daily +{n}", claimed:"Come back tomorrow!", dailyGot:"Daily bonus! +{n} coins", solved:"Solved! Come back tomorrow." },
+  vi:{ title:"4 Hình 1 Từ", lvl:"Câu", reveal:"Gợi ý", remove:"Bớt chữ", skip:"Bỏ qua",
+       help:"Chạm các chữ để ghép từ mà cả 4 hình cùng gợi ý.",
+       win:"Chính xác!", next:"Tiếp", reward:"+{n} xu", low:"Không đủ xu", done:"Bạn đã hoàn thành hết! 🎉",
+       play:"Chơi", adventure:"Phiêu lưu", daily:"Câu đố hằng ngày", close:"Đóng",
+       store:"Nhận xu", balance:"Bạn có {n} xu", watchAd:"Xem quảng cáo +{n}", buy:"Mua {n} xu",
+       claimDaily:"Nhận thưởng ngày +{n}", claimed:"Quay lại vào ngày mai!", dailyGot:"Thưởng ngày! +{n} xu", solved:"Đã giải! Quay lại ngày mai." },
+  ko:{ title:"사진 4장 단어 1개", lvl:"레벨", reveal:"힌트", remove:"글자 제거", skip:"건너뛰기",
+       help:"사진 4장이 공통으로 가리키는 단어를 글자를 눌러 완성하세요.",
+       win:"정답!", next:"다음", reward:"+{n} 코인", low:"코인이 부족합니다", done:"모두 완료했어요! 🎉",
+       play:"플레이", adventure:"모험", daily:"오늘의 퍼즐", close:"닫기",
+       store:"코인 받기", balance:"코인 {n}개", watchAd:"광고 보기 +{n}", buy:"코인 {n}개 구매",
+       claimDaily:"출석 보상 +{n}", claimed:"내일 다시 오세요!", dailyGot:"출석 보상! +{n} 코인", solved:"완료! 내일 다시 오세요." },
+  zh:{ title:"四图猜一词", lvl:"关卡", reveal:"提示", remove:"去掉多余", skip:"跳过",
+       help:"点击字符，拼出四张图片共同指向的词。",
+       win:"正确！", next:"下一关", reward:"+{n} 金币", low:"金币不足", done:"你已全部完成！🎉",
+       play:"开始", adventure:"闯关", daily:"每日一题", close:"关闭",
+       store:"获取金币", balance:"你有 {n} 金币", watchAd:"看广告 +{n}", buy:"购买 {n} 金币",
+       claimDaily:"领取每日 +{n}", claimed:"明天再来！", dailyGot:"每日奖励！+{n} 金币", solved:"已解答！明天再来。" }
+};
+var M = STR[LANG] || STR.en;
+function fmt(s, n){ return s.replace("{n}", n); }
+
+/* ══ Platform — one game, three hosts (see packages/fourpics-sdk/BRIDGE.md) ═══
+   web/gobrain → postMessage(__gb) analytics + fetch /scores
+   native iOS  → window.webkit.messageHandlers.fourpics
+   native And. → window.FourPicsAndroid  */
+var Platform = (function(){
+  var GAME = "4pics1word";
+  var cfg = { locale:null, theme:null, token:null, apiBase:null, apiKey:null, flags:{ads:false,iap:false}, entitlements:{noAds:false} };
+  var listeners = {};
+  var host = (function(){
+    try{ if(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fourpics) return "ios"; }catch(e){}
+    try{ if(window.FourPicsAndroid) return "android"; }catch(e){}
+    return "web";
+  })();
+  var native = host === "ios" || host === "android";
+  function toNative(msg){
+    try{
+      if(host === "ios") window.webkit.messageHandlers.fourpics.postMessage(msg);
+      else if(host === "android") window.FourPicsAndroid.postMessage(JSON.stringify(msg));
+    }catch(e){}
+  }
+  // host → web entry point (evaluated by the native host)
+  window.__fourpics = { onMessage:null, receive:function(o){ if(typeof o === "string"){ try{ o = JSON.parse(o); }catch(e){ return; } } if(window.__fourpics.onMessage) window.__fourpics.onMessage(o); } };
+  window.__fourpics.onMessage = function(o){
+    if(!o || !o.type) return;
+    if(o.type === "init"){ if(o.config){ for(var k in o.config){ cfg[k] = o.config[k]; } } fire("init", cfg); }
+    else if(o.type === "reward") fire("reward", o);
+    else if(o.type === "purchaseResult") fire("purchaseResult", o);
+    else if(o.type === "state") fire("state", o.blob);
+    else if(o.type === "pause") fire("pause");
+    else if(o.type === "resume") fire("resume");
+  };
+  function on(name, fn){ (listeners[name] = listeners[name] || []).push(fn); }
+  function fire(name, a){ var l = listeners[name] || []; for(var i=0;i<l.length;i++){ try{ l[i](a); }catch(e){} } }
+  function apiBase(){ if(cfg.apiBase) return cfg.apiBase.replace(/\/$/,""); try{ var o = localStorage.getItem("gobrain.api.base"); if(o) return o.replace(/\/$/,""); }catch(e){}
+    var nat = (function(){ try{ var C = window.Capacitor || (window.parent && window.parent.Capacitor); if(C && typeof C.isNativePlatform === "function") return C.isNativePlatform(); }catch(e){} return /^capacitor:|^ionic:/.test(location.protocol); })();
+    return nat ? "https://gobrain.fighttech.vn/api/v1" : "/api/v1"; }
+  function token(){ if(cfg.token) return cfg.token; try{ return localStorage.getItem("CapacitorStorage.gobrain.player.token") || localStorage.getItem("gobrain.player.token"); }catch(e){ return null; } }
+  function apiKey(){ if(cfg.apiKey) return cfg.apiKey; try{ return localStorage.getItem("gobrain.api.key") || "gobrain-dev-client-key"; }catch(e){ return "gobrain-dev-client-key"; } }
+  return {
+    host: host, native: native, cfg: cfg, on: on, apiBase: apiBase, apiKey: apiKey, ready: function(){ if(native) toNative({type:"ready"}); },
+    emit: function(name, params){ params = params || {}; params.game_id = GAME;
+      if(native) toNative({type:"event", name:name, params:params});
+      else { try{ if(window.parent && window.parent !== window) window.parent.postMessage({__gb:1, name:name, params:params}, "*"); }catch(e){} } },
+    submitScore: function(level, durationMs, score){
+      if(native){ toNative({type:"score", level:level, durationMs:durationMs, score:(score===undefined?null:score)}); return; }
+      var tok = token(); if(!tok) return;
+      try{ fetch(apiBase()+"/scores", {method:"POST", headers:{"content-type":"application/json","x-api-key":apiKey(),"authorization":"Bearer "+tok},
+        body:JSON.stringify(score===undefined?{gameId:GAME,level:level,durationMs:durationMs}:{gameId:GAME,level:level,durationMs:durationMs,score:score})})["catch"](function(){}); }catch(e){} },
+    requestReward: function(p){ if(native) toNative({type:"rewardRequest", placement:p||"coins"}); },
+    purchase: function(sku){ if(native) toNative({type:"purchase", sku:sku}); },
+    haptic: function(style){ if(native) toNative({type:"haptic", style:style||"light"}); },
+    adsOn: function(){ return native && cfg.flags && cfg.flags.ads; },
+    iapOn: function(){ return native && cfg.flags && cfg.flags.iap; }
+  };
+})();
+
+/* ══ sound (synthesised, no assets) ═══════════════════════════════════════ */
+var AC = null, muted = localStorage.getItem(K_MUTE) === "1";
+function ac(){ if(!AC){ try{ AC = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){ AC = null; } } return AC; }
+function beep(freq, dur, type, vol){ if(muted) return; var c = ac(); if(!c) return; if(c.state === "suspended"){ try{ c.resume(); }catch(e){} }
+  var o = c.createOscillator(), g = c.createGain(), t = c.currentTime;
+  o.type = type || "sine"; o.frequency.value = freq; o.connect(g); g.connect(c.destination);
+  g.gain.setValueAtTime(vol || 0.05, t); g.gain.exponentialRampToValueAtTime(0.0001, t + (dur || 0.12));
+  o.start(t); o.stop(t + (dur || 0.12)); }
+var SFX = {
+  tap:function(){ beep(430, 0.05, "triangle", 0.035); },
+  place:function(){ beep(580, 0.06, "triangle", 0.045); },
+  wrong:function(){ beep(170, 0.22, "sawtooth", 0.05); },
+  hint:function(){ beep(720, 0.10, "sine", 0.05); },
+  coin:function(){ beep(880, 0.07, "square", 0.035); setTimeout(function(){ beep(1180, 0.09, "square", 0.035); }, 70); },
+  win:function(){ [523,659,784,1047].forEach(function(f,i){ setTimeout(function(){ beep(f, 0.12, "triangle", 0.05); }, i*90); }); }
+};
+
+/* ══ state ════════════════════════════════════════════════════════════════ */
+var DATA = null, DECK = [], idx = 0, P = null, MODE = "adventure", PACKS = {}, PACKLIST = [];
+var ANS = [], BREAKS = {}, pool = [], slots = [], usedHintOnLevel = false, t0 = 0;
+var $ = function(id){ return document.getElementById(id); };
+
+function coins(){ return parseInt(localStorage.getItem(K_COINS) || String(START_COINS), 10) || 0; }
+function setCoins(n){ localStorage.setItem(K_COINS, String(Math.max(0, n))); renderCoins(); }
+function addCoins(n){ setCoins(coins() + n); }
+function renderCoins(){ $("coins").textContent = "🪙 " + coins(); }
+
+function byDiff(a, b){ return a.difficulty - b.difficulty || (a.id < b.id ? -1 : 1); }
+function dayIndex(){ var d = new Date(); return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000); }
+function todayKey(){ var d = new Date(); return d.getFullYear() + "-" + (d.getMonth()+1) + "-" + d.getDate(); }
+
+function tokenize(answer){
+  var arr = Array.from(answer.normalize("NFC")), toks = [], breaks = {};
+  for(var i=0;i<arr.length;i++){ if(arr[i] === " "){ if(toks.length) breaks[toks.length] = 1; continue; } toks.push(arr[i]); }
+  return { toks:toks, breaks:breaks };
+}
+function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
+
+/* ══ boot ═════════════════════════════════════════════════════════════════ */
+$("help").textContent = M.help;
+$("hRevealL").textContent = M.reveal; $("hRemoveL").textContent = M.remove; $("hSkipL").textContent = M.skip;
+$("winTitle").textContent = M.win; $("next").textContent = M.next;
+$("storeCloseL").textContent = M.close; $("menuCloseL").textContent = M.close;
+$("menuTitle").textContent = M.play; $("storeTitle").textContent = M.store;
+$("muteBtn").textContent = muted ? "🔇" : "🔊";
+if(LANG === "ar") document.documentElement.dir = "rtl";
+renderCoins();
+
+Platform.on("init", function(c){
+  if(c.locale && ["en","vi","ko","zh"].indexOf(c.locale) >= 0 && c.locale !== LANG){ location.search = "?lang=" + c.locale; return; }
+  if(c.theme){ MODE = "theme:" + c.theme; }
+  if(DATA){ buildDeck(); idx = loadIdx(); load(idx); }
+});
+Platform.on("reward", function(o){ if(o && o.ok){ grantCoins(o.amount || AD_COINS); } });
+Platform.on("purchaseResult", function(o){ if(o && o.ok){ grantCoins(BUY_COINS); } });
+
+/* ══ live events / campaigns (events-admin) ═══════════════════════════════
+   Source order: live API (if a base is configured) → bundled events.json (offline).
+   ?event=<id> forces one for preview/QA. Applies art skin + banner + doubleCoins +
+   event-shop items. */
+var EVENT = null;
+function eventsBase(){ try{ var o = localStorage.getItem("gobrain.events.base"); if(o) return o.replace(/\/$/,""); }catch(e){} var q = qp("events"); return q ? q.replace(/\/$/,"") : ""; }
+function evText(o){ return o ? (o[LANG] || o.en || "") : ""; }
+function resolveEvent(cb){
+  var forced = qp("event"), override = eventsBase();
+  function fromBundle(){
+    fetch("./events.json").then(function(r){ return r.json(); }).then(function(d){
+      var list = d.events || [], ev = null;
+      if(forced){ ev = list.filter(function(e){ return e.id === forced; })[0] || null; }
+      else { var today = new Date().toISOString().slice(0,10);
+        ev = list.filter(function(e){ return e.game === "4pics1word" && e.enabled && e.start <= today && today <= e.end; })
+                 .sort(function(a,b){ return (b.priority||0) - (a.priority||0); })[0] || null; }
+      cb(ev);
+    })["catch"](function(){ cb(null); });
+  }
+  if(forced){ fromBundle(); return; } // ?event=<id> previews from the bundle
+  // Live from the shared GoBrain API (GET {apiBase}/events/active, x-api-key gated);
+  // ?events=<base> overrides the base. Any failure → bundled offline fallback.
+  var base = override || Platform.apiBase();
+  fetch(base + "/events/active?game=4pics1word", { headers: { "x-api-key": Platform.apiKey() } })
+    .then(function(r){ return r.json(); }).then(function(d){ cb(d.primary || null); })["catch"](fromBundle);
+}
+function applyEvent(ev){
+  EVENT = ev; if(!ev) return;
+  var art = ev.art || {};
+  if(art.accent) document.documentElement.style.setProperty("--accent", art.accent);
+  if(art.bg) document.documentElement.style.setProperty("--bg", art.bg);
+  var b = $("evBanner"), txt = evText(art.banner);
+  if(txt){ b.style.display = "flex"; b.style.background = art.accent || ""; b.innerHTML = "<span class='m'>" + (art.motif || "🎉") + "</span><span>" + txt + "</span>"; }
+  Platform.emit("event_active", { event_id: ev.id });
+}
+function eventDoubleCoins(){ return !!(EVENT && EVENT.features && EVENT.features.doubleCoins); }
+
+fetch("./content.json").then(function(r){ return r.json(); }).then(function(d){
+  DATA = d;
+  buildDeck();
+  idx = loadIdx();
+  maybeDailyBonus();
+  load(idx);
+  Platform.ready();
+  Platform.emit("game_start", {});
+  resolveEvent(applyEvent);
+  // holiday puzzle packs (optional; played during their event)
+  fetch("./events-packs.json").then(function(r){ return r.json(); }).then(function(pd){
+    PACKLIST = pd.packs || [];
+    PACKLIST.forEach(function(p){ PACKS[p.id] = p; });
+  })["catch"](function(){});
+});
+
+function loadIdx(){ var n = parseInt(localStorage.getItem(kLvl(MODE)) || "0", 10) || 0; return Math.min(Math.max(0, n), Math.max(0, DECK.length - 1)); }
+function saveIdx(){ localStorage.setItem(kLvl(MODE), String(idx)); }
+
+function buildDeck(){
+  if(MODE.indexOf("pack:") === 0){ // holiday event pack
+    var pk = PACKS[MODE.slice(5)];
+    DECK = (pk && pk.puzzles ? pk.puzzles.filter(function(p){ return !!p.answers[LANG]; }) : []).slice().sort(byDiff);
+    if(DECK.length) return; // else fall through to adventure
+  }
+  var all = DATA.puzzles.filter(function(p){ return !!p.answers[LANG]; });
+  if(!all.length) all = DATA.puzzles.filter(function(p){ return !!p.answers.en; });
+  if(MODE === "daily"){ DECK = [ all.slice().sort(byDiff)[ dayIndex() % all.length ] ]; return; }
+  if(MODE.indexOf("theme:") === 0){ var th = MODE.slice(6); DECK = all.filter(function(p){ return p.theme === th; }).sort(byDiff); return; }
+  DECK = all.slice().sort(byDiff); // adventure
+}
+
+function maybeDailyBonus(){
+  // web has no ads/IAP, so give a daily coin drip as the safety-valve source
+  if(Platform.adsOn()) return;
+  if(localStorage.getItem(K_DAILY) === todayKey()) return;
+  localStorage.setItem(K_DAILY, todayKey());
+  addCoins(DAILY_BONUS);
+  setTimeout(function(){ toast(fmt(M.dailyGot, DAILY_BONUS)); SFX.coin(); }, 500);
+}
+
+function load(i){
+  P = DECK[i];
+  if(!P){ toast(M.done); return; }
+  var tk = tokenize(P.answers[LANG]); ANS = tk.toks; BREAKS = tk.breaks;
+  usedHintOnLevel = false; t0 = Date.now();
+  buildPool();
+  slots = ANS.map(function(){ return { pi:-1, lock:false }; });
+  renderAll();
+  var name = P.answers[LANG];
+  $("lvl").textContent = MODE === "daily" ? (M.daily) : (M.title + " · " + M.lvl + " " + (i + 1));
+  Platform.emit("level_start", { level: i + 1 });
+}
+
+function buildPool(){
+  var bank = (DATA.tokenBank && DATA.tokenBank[LANG]) ? DATA.tokenBank[LANG] : [];
+  var distract = bank.filter(function(t){ return ANS.indexOf(t) < 0; });
+  var size = Math.max(7, Math.min(14, ANS.length + (P.poolExtra || 4)));
+  var need = Math.max(0, size - ANS.length);
+  var picks = shuffle(distract.slice()).slice(0, need);
+  var FALL = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+  while(picks.length < need){ picks.push(FALL[Math.floor(Math.random()*FALL.length)]); }
+  pool = ANS.map(function(t){ return { t:t, used:false, gone:false, ans:true }; })
+    .concat(picks.map(function(t){ return { t:t, used:false, gone:false, ans:false }; }));
+  shuffle(pool);
+}
+
+/* ══ render ═══════════════════════════════════════════════════════════════ */
+function renderAll(){ renderGrid(); renderSlots(); renderPool(); renderHints(); }
+function renderGrid(){
+  var g = $("grid"); g.innerHTML = "";
+  var imgs = P.emojis || [];
+  for(var i=0;i<4;i++){
+    var d = document.createElement("div"); d.className = "pic"; d.style.animationDelay = (i*0.05) + "s";
+    d.textContent = imgs[i] || "❔"; g.appendChild(d);
+  }
+}
+function renderSlots(){
+  var s = $("slots"); s.className = "slots"; s.innerHTML = "";
+  for(var i=0;i<slots.length;i++){
+    var el = document.createElement("div");
+    el.className = "slot" + (BREAKS[i] ? " gap" : "") + (slots[i].pi >= 0 ? " filled" : "") + (slots[i].lock ? " lock" : "");
+    el.textContent = slots[i].pi >= 0 ? pool[slots[i].pi].t : "";
+    (function(k){ el.onclick = function(){ returnSlot(k); }; })(i);
+    s.appendChild(el);
+  }
+}
+function renderPool(){
+  var p = $("pool"); p.innerHTML = "";
+  for(var i=0;i<pool.length;i++){
+    var el = document.createElement("div");
+    el.className = "tile" + (pool[i].used ? " used" : "") + (pool[i].gone ? " gone" : "");
+    el.textContent = pool[i].t;
+    (function(k){ el.onclick = function(){ pickTile(k); }; })(i);
+    p.appendChild(el);
+  }
+}
+function renderHints(){
+  var c = coins();
+  $("hReveal").disabled = firstOpenSlot() < 0 || c < COST.reveal;
+  $("hRemove").disabled = removableTiles().length === 0 || c < COST.remove;
+  $("hSkip").disabled = DECK.length <= 1 || c < COST.skip;
+}
+
+/* ══ interactions ═════════════════════════════════════════════════════════ */
+function firstOpenSlot(){ for(var i=0;i<slots.length;i++){ if(slots[i].pi < 0) return i; } return -1; }
+function removableTiles(){ var r=[]; for(var i=0;i<pool.length;i++){ if(!pool[i].ans && !pool[i].used && !pool[i].gone) r.push(i); } return r; }
+function pickTile(k){
+  if(pool[k].used || pool[k].gone) return;
+  var s = firstOpenSlot(); if(s < 0) return;
+  slots[s].pi = k; slots[s].lock = false; pool[k].used = true;
+  SFX.place(); Platform.haptic("light");
+  renderSlots(); renderPool(); renderHints();
+  if(firstOpenSlot() < 0) check();
+}
+function returnSlot(k){
+  if(slots[k].pi < 0 || slots[k].lock) return;
+  pool[slots[k].pi].used = false; slots[k].pi = -1;
+  SFX.tap(); $("slots").className = "slots";
+  renderSlots(); renderPool(); renderHints();
+}
+function guess(){ return slots.map(function(s){ return s.pi >= 0 ? pool[s.pi].t : ""; }); }
+function correct(){ var g = guess(); for(var i=0;i<ANS.length;i++){ if(g[i] !== ANS[i]) return false; } return true; }
+function check(){
+  if(correct()){ win(); }
+  else {
+    SFX.wrong(); Platform.haptic("error"); Platform.emit("level_fail", { level: idx + 1 });
+    var s = $("slots"); s.className = "slots bad";
+    setTimeout(function(){
+      for(var i=0;i<slots.length;i++){ if(!slots[i].lock && slots[i].pi >= 0){ pool[slots[i].pi].used = false; slots[i].pi = -1; } }
+      renderSlots(); renderPool(); renderHints();
+    }, 420);
+  }
+}
+function win(){
+  $("slots").className = "slots ok"; SFX.win(); Platform.haptic("success");
+  var ms = t0 ? (Date.now() - t0) : 0;
+  Platform.emit("level_complete", { level: idx + 1, duration_ms: ms });
+  Platform.submitScore(idx + 1, ms);
+  var reward = 8 + Math.round((P.difficulty || 0) * 8) + (usedHintOnLevel ? 0 : 5);
+  if(eventDoubleCoins()) reward *= 2; // event modifier
+  grantCoins(reward);
+  confetti();
+  $("winWord").textContent = P.answers[LANG];
+  $("winReward").textContent = fmt(M.reward, reward);
+  $("next").textContent = (MODE === "daily") ? M.close : M.next;
+  $("win").className = "ov on";
+}
+
+/* ══ hints ════════════════════════════════════════════════════════════════ */
+$("hReveal").onclick = function(){
+  var s = firstOpenSlot(); if(s < 0) return;
+  if(coins() < COST.reveal){ openStore(); return; }
+  var want = ANS[s], pi = -1;
+  for(var i=0;i<pool.length;i++){ if(!pool[i].used && !pool[i].gone && pool[i].t === want){ pi = i; break; } }
+  if(pi < 0) return;
+  setCoins(coins() - COST.reveal); usedHintOnLevel = true; SFX.hint();
+  Platform.emit("hint_used", { kind: "reveal", level: idx + 1 });
+  slots[s].pi = pi; slots[s].lock = true; pool[pi].used = true;
+  renderSlots(); renderPool(); renderHints();
+  if(firstOpenSlot() < 0) check();
+};
+$("hRemove").onclick = function(){
+  var rem = removableTiles(); if(!rem.length) return;
+  if(coins() < COST.remove){ openStore(); return; }
+  setCoins(coins() - COST.remove); usedHintOnLevel = true; SFX.hint();
+  Platform.emit("hint_used", { kind: "remove", level: idx + 1 });
+  shuffle(rem); rem.slice(0, REMOVE_N).forEach(function(i){ pool[i].gone = true; });
+  renderPool(); renderHints();
+};
+$("hSkip").onclick = function(){
+  if(DECK.length <= 1) return;
+  if(coins() < COST.skip){ openStore(); return; }
+  setCoins(coins() - COST.skip); Platform.emit("hint_used", { kind: "skip", level: idx + 1 }); advance();
+};
+$("next").onclick = function(){ $("win").className = "ov"; advance(); };
+
+function advance(){
+  if(MODE === "daily"){ $("win").className = "ov"; toast(M.solved); return; }
+  if(idx + 1 >= DECK.length){ $("win").className = "ov"; toast(M.done); return; }
+  idx += 1; saveIdx(); load(idx);
+}
+
+/* ══ coins / store (rewarded ad + IAP via Platform) ══════════════════════════ */
+function grantCoins(n){ addCoins(n); SFX.coin(); coinFly(); }
+function renderEventItems(){
+  var box = $("eventItems"); box.innerHTML = "";
+  if(!EVENT || !EVENT.items || !EVENT.items.length) return;
+  var owned = getOwned();
+  EVENT.items.forEach(function(it){
+    var row = document.createElement("div"); row.className = "event-item";
+    var name = evText(it.name) || it.id;
+    var priceTxt, disabled = false;
+    if(owned.indexOf(it.id) >= 0){ priceTxt = "✓"; disabled = true; }
+    else if(it.currency === "usd"){ priceTxt = "$" + it.price; }
+    else if(it.price === 0){ priceTxt = "🎁"; }
+    else { priceTxt = "🪙" + Math.round(it.price * (1 - (it.discount||0))); }
+    var old = (it.discount && it.currency === "coin" && it.price>0) ? ("<span class='ei-old'>🪙"+it.price+"</span>") : "";
+    row.innerHTML = "<div><div class='ei-name'>" + name + "</div><div class='n' style='color:var(--muted);font-size:12px'>" + (it.type||"") + "</div></div>" +
+      "<button class='ei-buy'" + (disabled?" disabled style='opacity:.5'":"") + ">" + old + priceTxt + "</button>";
+    var btn = row.querySelector(".ei-buy");
+    if(!disabled) btn.onclick = function(){ buyEventItem(it); };
+    box.appendChild(row);
+  });
+}
+function getOwned(){ try{ return JSON.parse(localStorage.getItem("4pics1word.owned") || "[]"); }catch(e){ return []; } }
+function addOwned(id){ var o = getOwned(); if(o.indexOf(id) < 0){ o.push(id); localStorage.setItem("4pics1word.owned", JSON.stringify(o)); } }
+function buyEventItem(it){
+  if(it.currency === "usd"){ Platform.purchase(it.sku || it.id); $("store").className = "ov"; return; }
+  var price = Math.round((it.price||0) * (1 - (it.discount||0)));
+  if(coins() < price){ toast(M.low); return; }
+  if(price > 0) setCoins(coins() - price);
+  if(it.type === "coins" && it.amount){ grantCoins(it.amount); } // coin-for-coin (rare) — still credit
+  else { addOwned(it.id); SFX.coin(); }
+  Platform.emit("purchase", { item_id: it.id, event_id: EVENT ? EVENT.id : null });
+  toast("✓ " + (evText(it.name) || it.id));
+  renderEventItems(); renderHints();
+}
+function openStore(){
+  $("storeBal").textContent = fmt(M.balance, coins());
+  renderEventItems();
+  var ad = $("btnAd"), buy = $("btnBuy"), daily = $("btnDaily");
+  ad.style.display = Platform.adsOn() ? "block" : "none";
+  buy.style.display = Platform.iapOn() ? "block" : "none";
+  $("btnAdL").textContent = fmt(M.watchAd, AD_COINS);
+  $("btnBuyL").textContent = fmt(M.buy, BUY_COINS);
+  // web fallback: offer a daily claim if unclaimed, else just explain
+  var canDaily = !Platform.adsOn() && localStorage.getItem(K_DAILY) !== todayKey();
+  daily.style.display = canDaily ? "block" : "none";
+  $("btnDailyL").textContent = fmt(M.claimDaily, DAILY_BONUS);
+  $("store").className = "ov on";
+}
+$("btnAd").onclick = function(){ Platform.requestReward("coins"); $("store").className = "ov"; };
+$("btnBuy").onclick = function(){ Platform.purchase(BUY_SKU); $("store").className = "ov"; };
+$("btnDaily").onclick = function(){ localStorage.setItem(K_DAILY, todayKey()); grantCoins(DAILY_BONUS); $("store").className = "ov"; renderHints(); };
+$("storeClose").onclick = function(){ $("store").className = "ov"; };
+$("coins").onclick = openStore;
+
+/* ══ menu (mode / theme picker) ══════════════════════════════════════════════ */
+$("menuBtn").onclick = function(){
+  var list = $("menuList"); list.innerHTML = "";
+  addMenuItem(list, M.adventure, "adventure");
+  addMenuItem(list, M.daily, "daily");
+  // active event's featured packs first (🎉), then every holiday pack
+  var featured = (EVENT && EVENT.themePacks) ? EVENT.themePacks : [];
+  featured.forEach(function(pid){ var pk = PACKS[pid]; if(pk){ addMenuItem(list, "🎉 " + (evText(pk.title) || pid), "pack:" + pid, pk.puzzles.filter(function(p){ return p.answers[LANG]; }).length); } });
+  PACKLIST.forEach(function(pk){
+    if(featured.indexOf(pk.id) >= 0) return;
+    var n = pk.puzzles.filter(function(p){ return p.answers[LANG]; }).length;
+    if(n) addMenuItem(list, "🗓️ " + (evText(pk.title) || pk.id), "pack:" + pk.id, n);
+  });
+  (DATA.themes || []).forEach(function(t){
+    var title = (t.title && (t.title[LANG] || t.title.en)) || t.id;
+    var count = DATA.puzzles.filter(function(p){ return p.theme === t.id && p.answers[LANG]; }).length;
+    if(count) addMenuItem(list, title, "theme:" + t.id, count);
+  });
+  $("menu").className = "ov on";
+};
+function addMenuItem(list, label, mode, n){
+  var el = document.createElement("div"); el.className = "menu-item";
+  el.innerHTML = "<span>" + label + "</span>" + (n ? ("<span class='n'>" + n + "</span>") : "");
+  el.onclick = function(){ $("menu").className = "ov"; switchMode(mode); };
+  list.appendChild(el);
+}
+function switchMode(mode){ MODE = mode; buildDeck(); idx = loadIdx(); load(idx); }
+$("menuClose").onclick = function(){ $("menu").className = "ov"; };
+
+/* ══ mute ═════════════════════════════════════════════════════════════════ */
+$("muteBtn").onclick = function(){ muted = !muted; localStorage.setItem(K_MUTE, muted ? "1" : "0"); $("muteBtn").textContent = muted ? "🔇" : "🔊"; if(!muted) SFX.tap(); };
+
+/* ══ effects ══════════════════════════════════════════════════════════════ */
+var CONF = ["#f59f00","#2f9e44","#e03131","#3b5bdb","#f06595","#15aabf"];
+function confetti(){
+  var fx = $("fx");
+  for(var i=0;i<26;i++){
+    (function(){
+      var s = document.createElement("div"); s.className = "confetti";
+      s.style.background = CONF[Math.floor(Math.random()*CONF.length)];
+      var x = 20 + Math.random()*60;
+      s.style.left = x + "%"; s.style.top = "38%";
+      fx.appendChild(s);
+      var dx = (Math.random()*2-1)*160, dy = 220 + Math.random()*220, rot = Math.random()*720;
+      var start = null;
+      function step(ts){ if(!start) start = ts; var t = (ts - start)/1100; if(t >= 1){ if(s.parentNode) s.parentNode.removeChild(s); return; }
+        s.style.transform = "translate(" + (dx*t) + "px," + (dy*t) + "px) rotate(" + (rot*t) + "deg)"; s.style.opacity = String(1 - t);
+        requestAnimationFrame(step); }
+      requestAnimationFrame(step);
+    })();
+  }
+}
+function coinFly(){
+  var target = $("coins").getBoundingClientRect();
+  var el = document.createElement("div"); el.className = "coinfly"; el.textContent = "🪙";
+  var sx = window.innerWidth/2, sy = window.innerHeight*0.42;
+  el.style.left = sx + "px"; el.style.top = sy + "px"; document.body.appendChild(el);
+  var tx = target.left + target.width/2, ty = target.top + target.height/2, start = null;
+  function step(ts){ if(!start) start = ts; var t = (ts - start)/650; if(t >= 1){ if(el.parentNode) el.parentNode.removeChild(el); return; }
+    var e = 1 - Math.pow(1-t, 2);
+    el.style.transform = "translate(" + ((tx-sx)*e) + "px," + ((ty-sy)*e) + "px) scale(" + (1-0.4*t) + ")"; el.style.opacity = String(1 - t*0.3);
+    requestAnimationFrame(step); }
+  requestAnimationFrame(step);
+}
+
+/* first user gesture unlocks audio */
+window.addEventListener("pointerdown", function(){ var c = ac(); if(c && c.state === "suspended"){ try{ c.resume(); }catch(e){} } }, { once:true });
+window.addEventListener("touchstart", function(){ var c = ac(); if(c && c.state === "suspended"){ try{ c.resume(); }catch(e){} } }, { once:true });
+
+/* ══ toast ════════════════════════════════════════════════════════════════ */
+var toastTimer = 0;
+function toast(msg){ var t = $("toast"); t.textContent = msg; t.className = "toast on"; clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.className = "toast"; }, 1800); }
+
+/* keyboard support on web */
+window.addEventListener("keydown", function(e){
+  if($("win").className.indexOf("on") >= 0){ if(e.key === "Enter") $("next").click(); return; }
+  if(e.key === "Backspace"){ for(var i=slots.length-1;i>=0;i--){ if(slots[i].pi >= 0 && !slots[i].lock){ returnSlot(i); break; } } return; }
+  var ch = (e.key || "").toUpperCase();
+  if(ch.length === 1){ for(var j=0;j<pool.length;j++){ if(!pool[j].used && !pool[j].gone && pool[j].t.toUpperCase() === ch){ pickTile(j); break; } } }
+});
+</script>
+</body>
+</html>

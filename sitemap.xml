@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- https://fighttechvn.github.io/play2048 is replaced at deploy time with the per-host origin so each
+     domain serves a same-host (valid) sitemap:
+       gobrain → https://gobrain.fighttech.vn            (scripts/deploy-gobrain.sh)
+       pages   → https://fighttechvn.github.io/play2048  (deploy-web.sh / deploy-pages.yml)
+     Canonical tags still point to gobrain (primary) — see landing/*/index.html. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://fighttechvn.github.io/play2048/</loc><priority>1.0</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/download/</loc><priority>0.9</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/play/</loc><priority>0.9</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/twist/</loc><priority>0.9</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/all-games/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/logic-puzzle-games/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/word-games/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/brain-training-games/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/arcade-games/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/casual-puzzle-card-games/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/brandable-games-for-marketers/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/sudoku-online-free/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/kakuro-online-free/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/killer-sudoku-cages/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/crowns-queens-puzzle/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/nonogram-picross-online/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/minesweeper-no-guess/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/tango-suns-moons-puzzle/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/zip-one-line-path-puzzle/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/shikaku-patch-puzzle/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/domino-fit-tiling-puzzle/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/wend-word-path-puzzle/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/five-letters-wordle-style/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/4-pics-1-word-game/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/brain-twist-lateral-puzzles/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/schulte-table-scan-25/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/stroop-test-game/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/echo-memory-sequence-game/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/reaction-time-test-game/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/math-sprint-mental-math/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/snake-game-online/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/sky-jump-endless-jumper/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/bounce-brick-breaker/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/stacker-tower-game/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/merge-drop-tile-merge-game/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/flap-tap-to-fly-game/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/bubbo-bubble-shooter/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/water-sort-puzzle-pour/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/block-fit-puzzle/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/klondike-solitaire-online/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/what-is-a-lateral-thinking-puzzle/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/meet-twisty-brain-twist-characters/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/how-we-design-a-tricky-level/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/seasonal-brain-teasers-puzzles-for-every-holiday/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/brain-twist-vs-the-classics-genre-guide/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/mend-mindful-symmetry/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/blog/why-sudoku-web-games/</loc><priority>0.7</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/privacy/</loc><priority>0.6</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/terms/</loc><priority>0.6</priority></url>
+  <url><loc>https://fighttechvn.github.io/play2048/support/</loc><priority>0.6</priority></url>
+</urlset>

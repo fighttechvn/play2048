@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-VCLVPVRXMV');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#faf8ef" />
+  <title>Play Snake Online Free — Classic Arcade Game, No Sign-Up</title>
+  <meta name="description" content="The classic Snake game, free in your browser. Swipe or use arrow keys, eat to grow, don't hit yourself. Plus the coiling strategy that gets you past 50." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://gobrain.fighttech.vn/blog/snake-game-online/" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Snake: Still the Best Difficulty Curve Ever Designed 🐍" />
+  <meta property="og:description" content="The classic Snake game, free in your browser. Swipe or use arrow keys, eat to grow, don't hit yourself. Plus the coiling strategy that gets you past 50." />
+  <meta property="og:url" content="https://gobrain.fighttech.vn/blog/snake-game-online/" />
+  <meta property="og:site_name" content="Go Brain" />
+  <meta property="og:image" content="https://gobrain.fighttech.vn/play/thumbs/snake.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://gobrain.fighttech.vn/play/thumbs/snake.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="../../assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="../../assets/app-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem("gobrain.theme")||"system";var d=p==="dark"||(p!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");}catch(e){}})();</script>
+  <link rel="stylesheet" href="../../css/styles.css" />
+  <link rel="stylesheet" href="../../css/legal.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "Snake: Still the Best Difficulty Curve Ever Designed",
+    "description": "The classic Snake game, free in your browser. Swipe or use arrow keys, eat to grow, don't hit yourself. Plus the coiling strategy that gets you past 50.",
+    "author": {
+      "@type": "Organization",
+      "name": "FightTech"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Go Brain"
+    },
+    "datePublished": "2026-08-10",
+    "mainEntityOfPage": "https://gobrain.fighttech.vn/blog/snake-game-online/"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How do you get a high score in Snake?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Stay near the walls so the open space stays in one connected piece, follow your own tail when you have no safe move, and take longer routes to an apple whenever the short one would trap you."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can Snake be played on a keyboard?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes — arrow keys or WASD on desktop, swipes on touch."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="../../" aria-label="Go Brain"><img class="logo" src="../../assets/app-icon.png" alt="" width="30" height="30" /><span>Go Brain</span></a>
+      <nav class="nav">
+        <div class="nav-links">
+          <a href="../">Blog</a><a href="../../play/">Play online</a><a href="../../sdk/">SDK</a><a href="../../support/">Support</a>
+        </div>
+        <div class="controls">
+          <div class="select-wrap">
+            <select id="themeSelect" class="theme" aria-label="Theme"><option value="system">◐ System</option><option value="light">☀ Light</option><option value="dark">☾ Dark</option></select>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-main">
+    <div class="container">
+      <div class="legal-wrap">
+        <a class="back-link" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> All articles</a>
+
+        <div class="legal-head">
+          <span class="eyebrow">Arcade</span>
+          <h1>Snake: Still the Best Difficulty Curve Ever Designed 🐍</h1>
+          <p class="updated"><strong>Published:</strong> August 10, 2026 · 4 min read</p>
+          <p class="legal-lead">Snake has been on arcade cabinets since 1976 and on nearly every phone since 1997. It survives because of one idea most games never manage: the difficulty comes entirely from your own success. Every apple you eat makes the board smaller.</p>
+        </div>
+
+        <nav class="toc" aria-label="Table of contents">
+          <h2>Contents</h2>
+          <ol>
+            <li><a href="#rules">The rules</a></li>
+            <li><a href="#coiling">Coiling: how to survive the late game</a></li>
+            <li><a href="#why">Why the design still works</a></li>
+            <li><a href="#ours">About our version</a></li>
+          </ol>
+        </nav>
+
+        <div class="legal-body">
+
+          <h2 id="rules">The rules</h2>
+          <p>You control a snake moving continuously around a grid. Steer with swipes or arrow keys. Eat the apple to grow one segment and score. Hit a wall or your own body and it's over.</p>
+
+          <h2 id="coiling">Coiling: how to survive the late game</h2>
+          <p>Early on you can chase apples directly. Past about thirty segments, direct routes start trapping you — you reach the apple and discover your own tail has sealed the exit.</p>
+          <p>The fix is to stop thinking about the apple and start thinking about <strong>the shape of the space you're leaving behind</strong>.</p>
+          <p><strong>Hug the edges.</strong> A snake coiled around the perimeter leaves one large connected open region in the middle. A snake wandering through the middle cuts that region in two, and half of it becomes unreachable.</p>
+          <p><strong>Follow your own tail.</strong> If you're stuck for a safe move, trailing your own tail is always survivable — the tail moves away as you advance, so the cell is free by the time you reach it. It buys time until the next apple spawns somewhere reachable.</p>
+          <p><strong>Take the long way.</strong> When an apple is two cells away but taking it seals you in, take the twelve-cell route instead. There's no time pressure in Snake; the only thing that kills you is geometry.</p>
+          <p>Serious players go further and follow a Hamiltonian cycle — a fixed route through every cell that can never self-intersect — which is unbeatable but takes the fun out of it.</p>
+
+          <h2 id="why">Why the design still works</h2>
+          <p>No lives, no upgrades, no ramp designed by anyone. The game has one variable, your length, and it's the same thing as your score. That means the challenge is always exactly calibrated to how well you've been playing, which is a property most games spend enormous effort faking.</p>
+
+          <h2 id="ours">About our version</h2>
+          <p>A 17×17 grid, endless, with swipe controls on touch and arrow keys on desktop. Your best length is kept on your device, and there's a shared leaderboard if you've set a name.</p>
+          <p>It runs in your browser, works offline once loaded, needs no account, and costs nothing.</p>
+
+
+          <h2 id="faq">Questions people actually ask</h2>
+          <p><strong>How do you get a high score in Snake?</strong><br />Stay near the walls so the open space stays in one connected piece, follow your own tail when you have no safe move, and take longer routes to an apple whenever the short one would trap you.</p>
+          <p><strong>Can Snake be played on a keyboard?</strong><br />Yes — arrow keys or WASD on desktop, swipes on touch.</p>
+
+          <h2 id="more">Keep reading</h2>
+          <ul>
+            <li><a href="../sky-jump-endless-jumper/">Sky Jump: Bounce Up an Endless Tower ☁️</a> — Up is the only direction. Three platform types, no ceiling, and the surprisingly deliberate skill of not rushing.</li>
+            <li><a href="../arcade-games/">Arcade Games in Go Brain: Seven One-Thumb Classics 🎮</a> — Snake, a doodle-jumper, brick breaker, a stacker, a tile-merger, flappy and a bubble shooter. No rules to learn, just a score to beat.</li>
+            <li><a href="../bounce-brick-breaker/">Bounce: Aim One Shot, Watch Fifteen Ricochets 🎯</a> — One aim per turn, then physics does the rest. The good shots aren't the accurate ones — they're the ones that trap a ball where it can't escape.</li>
+          </ul>
+
+          <div class="legal-contact" id="play">
+            <h2>Play Snake now</h2>
+            <p>17×17 grid, endless, swipe or arrow keys, no ads between runs. Free, no account.</p>
+            <p style="margin-top:16px"><a class="btn btn-primary" href="../../play/?open=snake">▶ Play Snake</a></p>
+          </div>
+
+          <div class="legal-nav-links">
+            <a href="../">← All articles</a>
+            <a href="../../play/">Play online</a>
+            <a href="../../support/">Support</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="margin-top:0;border-top:none">
+        <span>© <span id="year">2026</span> FightTech. All rights reserved.</span>
+        <span><a href="../../privacy/">Privacy</a> · <a href="../../terms/">Terms</a> · <a href="../../support/">Support</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../../js/main.js"></script>
+  <script src="../../js/app-banner.js"></script>
+</body>
+</html>

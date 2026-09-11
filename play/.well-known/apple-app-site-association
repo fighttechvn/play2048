@@ -1,0 +1,12 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      { "appID": "86PC33ZDHF.vn.fighttech.go2048", "paths": ["/g/*"] },
+      {
+        "appIDs": ["86PC33ZDHF.vn.fighttech.go2048"],
+        "components": [{ "/": "/g/*", "comment": "game detail share links" }]
+      }
+    ]
+  }
+}

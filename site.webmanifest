@@ -1,0 +1,13 @@
+{
+  "name": "Go Brain",
+  "short_name": "Go Brain",
+  "description": "A free hub of brain games — 2048, Zip and Patch. Offline, no ads, no tracking.",
+  "start_url": "./play/",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f1115",
+  "theme_color": "#0f1115",
+  "icons": [
+    { "src": "assets/app-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

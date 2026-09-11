@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-VCLVPVRXMV');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#faf8ef" />
+  <title>Shikaku Puzzle Online Free — Divide the Grid Into Rectangles</title>
+  <meta name="description" content="Cut the grid into rectangles so each holds one number equal to its area. Learn the prime-number and forced-shape tricks, play 99 free levels, no sign-up." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://gobrain.fighttech.vn/blog/shikaku-patch-puzzle/" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Patch: Shikaku, the Rectangle-Cutting Puzzle ▭" />
+  <meta property="og:description" content="Cut the grid into rectangles so each holds one number equal to its area. Learn the prime-number and forced-shape tricks, play 99 free levels, no sign-up." />
+  <meta property="og:url" content="https://gobrain.fighttech.vn/blog/shikaku-patch-puzzle/" />
+  <meta property="og:site_name" content="Go Brain" />
+  <meta property="og:image" content="https://gobrain.fighttech.vn/play/thumbs/patch.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://gobrain.fighttech.vn/play/thumbs/patch.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="../../assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="../../assets/app-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem("gobrain.theme")||"system";var d=p==="dark"||(p!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");}catch(e){}})();</script>
+  <link rel="stylesheet" href="../../css/styles.css" />
+  <link rel="stylesheet" href="../../css/legal.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "Patch: Shikaku, the Rectangle-Cutting Puzzle ▭",
+    "description": "Cut the grid into rectangles so each holds one number equal to its area. Learn the prime-number and forced-shape tricks, play 99 free levels, no sign-up.",
+    "author": {
+      "@type": "Organization",
+      "name": "FightTech"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Go Brain"
+    },
+    "datePublished": "2026-08-10",
+    "mainEntityOfPage": "https://gobrain.fighttech.vn/blog/shikaku-patch-puzzle/"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Can a rectangle contain two numbers?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Exactly one number per rectangle — that constraint is what makes nearby numbers squeeze each other into place."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Do squares count as rectangles?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. A 9 can be a 3×3 square, and a 4 can be 2×2 as well as 1×4 or 4×1."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Where do I start on a Shikaku?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "With the primes and with the grid's corners. Primes have only two possible shapes, and corner cells usually have exactly one number that can reach them."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="../../" aria-label="Go Brain"><img class="logo" src="../../assets/app-icon.png" alt="" width="30" height="30" /><span>Go Brain</span></a>
+      <nav class="nav">
+        <div class="nav-links">
+          <a href="../">Blog</a><a href="../../play/">Play online</a><a href="../../sdk/">SDK</a><a href="../../support/">Support</a>
+        </div>
+        <div class="controls">
+          <div class="select-wrap">
+            <select id="themeSelect" class="theme" aria-label="Theme"><option value="system">◐ System</option><option value="light">☀ Light</option><option value="dark">☾ Dark</option></select>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-main">
+    <div class="container">
+      <div class="legal-wrap">
+        <a class="back-link" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> All articles</a>
+
+        <div class="legal-head">
+          <span class="eyebrow">Brain Games</span>
+          <h1>Patch: Shikaku, the Rectangle-Cutting Puzzle ▭</h1>
+          <p class="updated"><strong>Published:</strong> August 10, 2026 · 5 min read</p>
+          <p class="legal-lead">Shikaku — we call it Patch — gives you a grid with numbers scattered in it and asks you to cut the whole thing into rectangles, one number per rectangle, each number equal to the area of its rectangle. It is one of the most elegant puzzle rules ever written, and it has a lovely opening move.</p>
+        </div>
+
+        <nav class="toc" aria-label="Table of contents">
+          <h2>Contents</h2>
+          <ol>
+            <li><a href="#rules">The rules</a></li>
+            <li><a href="#primes">Start with the primes</a></li>
+            <li><a href="#squeeze">Squeezing and the corner rule</a></li>
+            <li><a href="#ours">About our version</a></li>
+          </ol>
+        </nav>
+
+        <div class="legal-body">
+
+          <h2 id="rules">The rules</h2>
+          <p>Divide the entire grid into rectangles so that:</p>
+          <ul>
+            <li>every rectangle contains <strong>exactly one number</strong>,</li>
+            <li>that number equals the rectangle's <strong>area</strong> (width × height), and</li>
+            <li>every cell belongs to exactly one rectangle — no gaps, no overlaps.</li>
+          </ul>
+
+          <h2 id="primes">Start with the primes</h2>
+          <p>A number's factor pairs are its possible shapes. 12 could be 1×12, 2×6, 3×4, 4×3, 6×2 or 12×1 — six shapes, each placeable in several positions. Awful.</p>
+          <p>But a <strong>prime</strong> like 7 can only be 1×7 or 7×1: a straight strip. And in a grid narrower than seven cells in one direction, even that collapses to a single orientation. Primes — 2, 3, 5, 7, 11, 13 — are where the board opens.</p>
+          <p>A 2 is the best clue in the game: two cells, four possible placements, and usually a wall or a neighbouring number kills three of them.</p>
+
+          <h2 id="squeeze">Squeezing and the corner rule</h2>
+          <p><strong>The corner rule.</strong> Every corner cell of the grid must belong to some rectangle, and only a number that can reach it qualifies. Often exactly one can, which places a rectangle outright.</p>
+          <p><strong>Squeezing.</strong> Two numbers near each other constrain one another, because no rectangle may contain a second number. If a 6 sits three cells from a 4 on the same row, neither can be the 1×6 or 1×4 strip that would swallow the other. Whenever you're stuck, look at pairs of numbers rather than at single ones.</p>
+          <p><strong>Orphan cells.</strong> A cell that no remaining number can possibly reach means one of your placed rectangles is wrong. Checking for these catches errors early, before you've built ten rectangles on a bad foundation.</p>
+
+          <h2 id="ours">About our version</h2>
+          <p>99 levels growing from small grids to large ones. Drag to draw a rectangle, tap it to remove it, unlimited undo. Each level is generated by cutting a grid into rectangles and then deriving the clues, and verified to have a single solution.</p>
+          <p>It runs in your browser, works offline once loaded, needs no account, and costs nothing.</p>
+
+
+          <h2 id="faq">Questions people actually ask</h2>
+          <p><strong>Can a rectangle contain two numbers?</strong><br />No. Exactly one number per rectangle — that constraint is what makes nearby numbers squeeze each other into place.</p>
+          <p><strong>Do squares count as rectangles?</strong><br />Yes. A 9 can be a 3×3 square, and a 4 can be 2×2 as well as 1×4 or 4×1.</p>
+          <p><strong>Where do I start on a Shikaku?</strong><br />With the primes and with the grid's corners. Primes have only two possible shapes, and corner cells usually have exactly one number that can reach them.</p>
+
+          <h2 id="more">Keep reading</h2>
+          <ul>
+            <li><a href="../domino-fit-tiling-puzzle/">Domino Fit: Tiling Puzzles and the Parity Trick 🁢</a> — Cover the board in dominoes with no gaps. There's a colouring argument that rules out half the board's dead ends before you place a single tile.</li>
+            <li><a href="../nonogram-picross-online/">Nonogram: How to Solve Picross Puzzles 🖼️</a> — Number clues along the edges, a picture hiding in the middle. Learn the overlap technique and you can start any board with confidence.</li>
+            <li><a href="../logic-puzzle-games/">Logic Puzzle Games: A Guide to the 12 in Go Brain 🧠</a> — Sudoku, Kakuro, Nonogram, Crowns and eight more. What separates a real deduction puzzle from a guessing game, and which to start with.</li>
+          </ul>
+
+          <div class="legal-contact" id="play">
+            <h2>Play Patch now</h2>
+            <p>99 Shikaku levels, drag to cut, verified single solutions. Free, no account.</p>
+            <p style="margin-top:16px"><a class="btn btn-primary" href="../../play/?open=patch">▶ Play Patch</a></p>
+          </div>
+
+          <div class="legal-nav-links">
+            <a href="../">← All articles</a>
+            <a href="../../play/">Play online</a>
+            <a href="../../support/">Support</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="margin-top:0;border-top:none">
+        <span>© <span id="year">2026</span> FightTech. All rights reserved.</span>
+        <span><a href="../../privacy/">Privacy</a> · <a href="../../terms/">Terms</a> · <a href="../../support/">Support</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../../js/main.js"></script>
+  <script src="../../js/app-banner.js"></script>
+</body>
+</html>

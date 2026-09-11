@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Arc Light</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--field:#eceae3;--accent:#e8663d;--accent2:#a8371a;--warn:#e03131;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 14px;font-weight:700;white-space:nowrap;font-size:14px}
+  #ttl{margin-right:auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win p{margin:0;color:#555;font-size:15px;line-height:1.5}
+  .win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--accent);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  .pad{display:grid;direction:ltr;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:-4px;width:100%;max-width:380px;margin-left:auto;margin-right:auto}
+  .pb{padding:0;border-radius:14px;border:1px solid var(--bd);background:#fff;font-size:28px;font-weight:700;cursor:pointer;color:var(--ink);touch-action:manipulation;min-height:68px}
+  .pb:active{background:#fdece6}
+  /* placed by hand: grid auto-flow keeps running *after* an explicitly placed
+     cell, so pinning only the up key would push left into column 3. */
+  #bu{grid-column:2;grid-row:1}
+  #bfire{grid-column:3;grid-row:1;background:var(--accent);color:#fff;border-color:var(--accent2)}
+  #bl{grid-column:1;grid-row:2}
+  #bd{grid-column:2;grid-row:2}
+  #br{grid-column:3;grid-row:2}
+  /* controls: big keys, or one swipe pad in their place (body.swipe) */
+  .swp{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:150px;padding:12px 16px;border-radius:18px;border:2px dashed var(--bd);background:var(--card);color:#8c8c8c;font-weight:700;font-size:14.5px;text-align:center;line-height:1.4;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .swp b{font-size:30px;opacity:.45;margin-bottom:6px}
+  .swp.on{background:#f3f1ea;border-color:#b9b9b9}
+  body.swipe .pad{display:none}
+  body.swipe .swp{display:flex}
+  .seg{display:flex;flex:0 0 auto;border:1px solid var(--bd);border-radius:999px;background:var(--btn);padding:3px}
+  .seg button{border:0;background:transparent;border-radius:999px;padding:0 13px;min-height:44px;font-weight:700;font-size:14px;color:#8a8a8a;cursor:pointer;white-space:nowrap}
+  .seg button.on{background:var(--field);color:var(--ink)}
+  @media (max-width:360px){.seg button span{display:none}}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="ttl">Arc Light</span><span class="pill" id="sc">0</span><span class="pill" id="bst">★ 0</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="pad">
+    <button class="pb" id="bu">&#9650;</button>
+    <button class="pb" id="bfire">&#10006;</button>
+    <button class="pb" id="bl">&#9664;</button>
+    <button class="pb" id="bd">&#9660;</button>
+    <button class="pb" id="br">&#9654;</button>
+  </div>
+  <div class="swp" id="swp"><b>&#128070;</b><span id="swph"></span></div>
+  <div class="btns">
+    <button class="btn" id="restart">Restart</button>
+    <div class="seg" id="ctl"><button data-m="buttons">&#127918;<span></span></button><button data-m="swipe">&#128070;<span></span></button></div>
+  </div>
+  <div class="help" id="helpcard"></div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Tap the sky and the nearest loaded silo throws a fireball at that spot — the arrows move a crosshair and <b>✕</b> fires it. Nothing is shot down directly: warheads die inside the fireball, so lead them and let one blast catch a whole salvo. Every extra kill in the same fireball is worth more than the last, so the chain is the score. Three silos, limited shells, six cities. Gold warheads split into three, pink ones flinch away from your blasts, bombers and satellites keep dropping more. Clear all twenty waves; a wave ends when the sky is empty, and every unfired shell and standing city pays a bonus.",
+    vi:"<b>Cách chơi.</b> Chạm vào bầu trời, giàn phóng gần nhất còn đạn sẽ bắn một quả cầu lửa đến đúng chỗ đó — phím mũi tên di chuyển tâm ngắm, <b>✕</b> để bắn. Không có gì bị bắn trúng trực tiếp: đầu đạn chỉ chết khi nằm trong quả cầu lửa, nên hãy ngắm đón đầu để một cú nổ ăn trọn cả loạt. Mỗi mục tiêu diệt thêm trong cùng một quả cầu lửa được nhiều điểm hơn lần trước — chuỗi nổ chính là điểm số. Ba giàn phóng, đạn có hạn, sáu thành phố. Đầu đạn vàng tách làm ba, đầu đạn hồng né vụ nổ của bạn, máy bay và vệ tinh thì thả thêm. Vượt trọn 20 đợt; đợt kết thúc khi bầu trời sạch bóng, mỗi viên đạn chưa dùng và mỗi thành phố còn đứng đều được thưởng.",
+    ko:"<b>플레이 방법.</b> 하늘을 탭하면 가장 가까운 장전된 발사대가 그 지점으로 화염구를 쏩니다 — 방향키로 조준선을 옮기고 <b>✕</b>로 발사합니다. 직접 명중은 없습니다. 탄두는 화염구 안에서만 파괴되므로 앞을 예측해 쏘고 한 번의 폭발로 편대 전체를 삼키세요. 같은 화염구 안에서 추가로 잡을수록 점수가 커집니다 — 연쇄가 곧 점수입니다. 발사대 3기, 제한된 탄약, 도시 6곳. 금색 탄두는 셋으로 갈라지고, 분홍 탄두는 폭발을 피해 움직이며, 폭격기와 위성은 계속 투하합니다. 20웨이브를 모두 막으세요. 하늘이 비면 웨이브가 끝나고, 남은 탄약과 살아남은 도시가 보너스로 계산됩니다.",
+    zh:"<b>玩法。</b> 点按天空，最近的、还有弹药的发射井会朝那一点抛出一团火球——方向键移动准星，<b>✕</b> 发射。没有直接命中：弹头只会死在火球里，所以要提前量，让一次爆炸吞下整批。同一团火球里每多炸一个，得分都比上一个高——连锁就是分数。三座发射井、有限弹药、六座城市。金色弹头会一分为三，粉色弹头会躲开你的爆炸，轰炸机和卫星还会不断投放。守住全部二十波；天空清空即过波，未发射的弹药和幸存的城市都有奖励。",
+    ja:"<b>遊び方。</b> 空をタップすると、いちばん近い装弾済みのサイロがその地点に火球を打ち上げます — 矢印キーで照準を動かし <b>✕</b> で発射。直撃はありません。弾頭は火球の中でしか壊せないので、置き撃ちで一斉射をまとめて飲み込みましょう。同じ火球で追加撃墜するたび点数は上がります — 連鎖こそがスコアです。サイロ3基、弾数制限、都市6つ。金の弾頭は3つに分裂し、桃色の弾頭は爆発を避け、爆撃機と衛星はさらに投下します。全20ウェーブを守り抜いてください。空が空になればウェーブ終了、残弾と無傷の都市はボーナスになります。",
+    ar:"<b>طريقة اللعب.</b> انقر على السماء فتُطلق أقرب منصة مذخّرة كرة نار إلى تلك النقطة — تحرّك الأسهم نقطة التصويب و<b>✕</b> تُطلق. لا يوجد إصابة مباشرة: الرؤوس الحربية تموت داخل كرة النار، فصوّب أمامها ودع انفجارًا واحدًا يبتلع رشقة كاملة. كل هدف إضافي داخل كرة النار نفسها يساوي أكثر من سابقه — السلسلة هي النقاط. ثلاث منصات، ذخيرة محدودة، ست مدن. الرؤوس الذهبية تنقسم إلى ثلاثة، والوردية تنزاح بعيدًا عن انفجاراتك، والقاذفات والأقمار تواصل الإسقاط. اصمد عشرين موجة؛ تنتهي الموجة حين تخلو السماء، وكل قذيفة لم تُطلق وكل مدينة باقية تمنحك مكافأة."
+  };
+  var L=pick(),el=document.getElementById("helpcard");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2 id="overttl"></h2><p id="overmsg"></p><button id="again"></button></div></div>
+<script>
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+const UI={
+  en:{"wave":"Wave","start":"Tap to start","hint":"Tap the sky to intercept","paused":"Paused — tap to resume","over":"Cities lost","victory":"All twenty waves held!","again":"Play again","restart":"Restart","score":"Score","best":"Best","cleared":"WAVE CLEAR","rebuilt":"CITY REBUILT"},
+  vi:{"wave":"Đợt","start":"Chạm để bắt đầu","hint":"Chạm bầu trời để đánh chặn","paused":"Tạm dừng — chạm để tiếp tục","over":"Mất hết thành phố","victory":"Giữ vững cả 20 đợt!","again":"Chơi lại","restart":"Chơi lại","score":"Điểm","best":"Cao nhất","cleared":"HẾT ĐỢT","rebuilt":"XÂY LẠI THÀNH PHỐ"},
+  ko:{"wave":"웨이브","start":"탭하여 시작","hint":"하늘을 탭해 요격","paused":"일시정지 — 탭하여 계속","over":"도시 전멸","victory":"20웨이브 완전 방어!","again":"다시 하기","restart":"다시 시작","score":"점수","best":"최고","cleared":"웨이브 클리어","rebuilt":"도시 재건"},
+  zh:{"wave":"第","start":"点按开始","hint":"点按天空拦截","paused":"已暂停——点按继续","over":"城市全毁","victory":"二十波全部守住！","again":"再玩一次","restart":"重新开始","score":"分数","best":"最高","cleared":"过波","rebuilt":"城市重建"},
+  ja:{"wave":"ウェーブ","start":"タップでスタート","hint":"空をタップで迎撃","paused":"一時停止中 — タップで再開","over":"都市が全滅","victory":"全20ウェーブ防衛！","again":"もう一度","restart":"リスタート","score":"スコア","best":"ベスト","cleared":"ウェーブクリア","rebuilt":"都市を再建"},
+  ar:{"wave":"الموجة","start":"انقر للبدء","hint":"انقر على السماء للاعتراض","paused":"متوقف — انقر للمتابعة","over":"سقطت كل المدن","victory":"صمدت عشرين موجة!","again":"العب مجددًا","restart":"إعادة","score":"النقاط","best":"الأفضل","cleared":"اكتملت الموجة","rebuilt":"أُعيد بناء مدينة"}
+};
+const M=UI[LANG]||UI.en;
+const $=id=>document.getElementById(id);
+// ── Controls: big keys, or one swipe pad in their place. The choice lives under
+// one key shared by every arcade game, so it follows the player between games.
+const CTRL=(function(){
+  const KEY='gobrain.bg.controls';
+  const L={en:['Buttons','Swipe'],vi:['Nút','Vuốt'],ko:['버튼','스와이프'],zh:['按键','滑动'],ja:['ボタン','スワイプ'],ar:['أزرار','سحب']}[LANG]||['Buttons','Swipe'];
+  const H={"en":"Drag to aim · tap to fire","vi":"Kéo để ngắm · chạm để bắn","ko":"드래그로 조준 · 탭으로 발사","zh":"拖动瞄准 · 点按发射","ja":"ドラッグで照準 · タップで発射","ar":"اسحب للتصويب · انقر للإطلاق"};
+  let mode='buttons';
+  try{ if(localStorage.getItem(KEY)==='swipe') mode='swipe'; }catch(e){}
+  const bs=$('ctl').getElementsByTagName('button');
+  function paint(){
+    document.body.classList.toggle('swipe',mode==='swipe');
+    for(let i=0;i<bs.length;i++) bs[i].classList.toggle('on',bs[i].getAttribute('data-m')===mode);
+  }
+  for(let i=0;i<bs.length;i++){
+    bs[i].getElementsByTagName('span')[0].textContent=' '+L[i];
+    bs[i].setAttribute('aria-label',L[i]);
+    bs[i].addEventListener('click',function(){
+      mode=this.getAttribute('data-m');
+      try{ localStorage.setItem(KEY,mode); }catch(e){}
+      paint();
+    });
+  }
+  $('swph').textContent=H[LANG]||H.en;
+  paint();
+  return {swipe:function(){ return mode==='swipe'; }};
+})();
+if(LANG==='ar'){document.documentElement.dir='rtl';document.querySelector('#wino div').dir='rtl';}
+// ── Leaderboard reporter (Go Brain) — mirrors the GBLB block in games/zip. ──
+const GBLB=(function(){
+  var GAME='missile', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(level){ var ms=t0?(Date.now()-t0):0; emit('level_complete',{level:level,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:level,durationMs:ms})}).catch(function(){}); }catch(e){} }
+  };
+})();
+// ── Shared shell ───────────────────────────────────────────────────────────
+// Canvas fit, fixed-step loop, d-pad / swipe / keyboard input, pause. Every
+// bundle inlines this verbatim; the per-game body below supplies tick + draw.
+const READY=0,PLAYING=1,CLEAR=2,DEAD=3,PAUSED=4;
+const cv=$('cv'), ctx=cv.getContext('2d');
+let phase=READY, U=1, CW=0, CH=0, dpr=1, lastT=0, acc=0;
+const IN={dir:null,fire:false,tap:false,drag:null};
+
+function fit(uw,uh){
+  // clientWidth includes the card's padding; the canvas only ever gets the
+  // content box, so measuring the parent alone stretches the backing store
+  // wider than the element and squashes everything horizontally.
+  const p=cv.parentNode, cs=window.getComputedStyle(p);
+  const pad=(parseFloat(cs.paddingLeft)||0)+(parseFloat(cs.paddingRight)||0);
+  const cssW=Math.min(p.clientWidth-pad, 460);
+  dpr=Math.min(3, window.devicePixelRatio||1);
+  U=cssW/uw; CW=cssW; CH=cssW*uh/uw;
+  cv.width=Math.round(CW*dpr); cv.height=Math.round(CH*dpr);
+  cv.style.height=CH+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+function rr(x,y,w,h,r,c){ ctx.fillStyle=c; ctx.beginPath();
+  if(ctx.roundRect){ctx.roundRect(x,y,w,h,r);}else{
+    ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+    ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+    ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);}
+  ctx.closePath(); ctx.fill();
+}
+function overlayText(top,bottom){
+  ctx.fillStyle='rgba(20,20,20,.62)'; ctx.fillRect(0,0,CW,CH);
+  ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='700 '+Math.round(CW*0.058)+'px -apple-system,system-ui,sans-serif';
+  ctx.fillText(top, CW/2, CH/2-CW*0.03);
+  if(bottom){ ctx.font='500 '+Math.round(CW*0.038)+'px -apple-system,system-ui,sans-serif';
+    ctx.fillStyle='rgba(255,255,255,.8)'; ctx.fillText(bottom, CW/2, CH/2+CW*0.045); }
+  ctx.textAlign='start'; ctx.textBaseline='alphabetic';
+}
+function onStart(){}      // overridden by the body
+function onResume(){ lastT=0; }
+function tapStart(){
+  if(phase===READY){ onStart(); return true; }
+  if(phase===PAUSED){ phase=PLAYING; onResume(); return true; }
+  return false;
+}
+function bindPad(map){    // [[elementId, dir], …]
+  map.forEach(function(p){
+    const el=$(p[0]); if(!el)return;
+    el.addEventListener('pointerdown',function(e){e.preventDefault(); tapStart(); IN.dir=p[1]; IN.tapDir=p[1];});
+    ['pointerup','pointercancel','pointerleave'].forEach(function(k){
+      el.addEventListener(k,function(){ if(IN.dir===p[1]) IN.dir=null; });
+    });
+  });
+}
+function bindFire(id){
+  const el=$(id); if(!el)return;
+  el.addEventListener('pointerdown',function(e){e.preventDefault(); if(tapStart())return; IN.fire=true; IN.tap=true;});
+  ['pointerup','pointercancel','pointerleave'].forEach(function(k){ el.addEventListener(k,function(){IN.fire=false;}); });
+}
+// Canvas: drag to steer, tap to act — the whole game stays one-thumbed.
+function bindCanvas(dirs, opts){
+  opts=opts||{};
+  let x0=0,y0=0,t0=0,moved=0,on=false;
+  cv.addEventListener('pointerdown',function(e){
+    const r=cv.getBoundingClientRect();
+    x0=e.clientX; y0=e.clientY; t0=Date.now(); moved=0; on=true;
+    IN.drag={x:(e.clientX-r.left)/U, y:(e.clientY-r.top)/U, down:true};
+    if(cv.setPointerCapture)try{cv.setPointerCapture(e.pointerId);}catch(_){}
+    if(tapStart())return;
+    if(opts.tapDown){ IN.tap=true; IN.fire=true; }
+  });
+  cv.addEventListener('pointermove',function(e){
+    if(!on)return;
+    const r=cv.getBoundingClientRect();
+    IN.drag={x:(e.clientX-r.left)/U, y:(e.clientY-r.top)/U, down:true};
+    const dx=e.clientX-x0, dy=e.clientY-y0;
+    moved=Math.max(moved,Math.abs(dx),Math.abs(dy));
+    if(!dirs||moved<14)return;
+    IN.dir=Math.abs(dx)>Math.abs(dy)?(dx>0?dirs[1]:dirs[3]):(dy>0?dirs[2]:dirs[0]);
+  });
+  function end(){ if(!on)return; on=false;
+    if(moved<12&&Date.now()-t0<340&&!opts.tapDown){ IN.tap=true; }
+    IN.fire=false; if(dirs)IN.dir=null;
+    if(IN.drag) IN.drag.down=false;
+  }
+  cv.addEventListener('pointerup',end);
+  cv.addEventListener('pointercancel',function(){on=false; IN.fire=false; if(dirs)IN.dir=null; if(IN.drag)IN.drag.down=false;});
+  cv.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+}
+// Swipe pad — stands in for the keys when the player picks swipe controls.
+// Every 14px of travel reads as a fresh flick, so one gesture can chain turns;
+// the last direction is held until the finger lifts. A quick tap is the action.
+//   o.dirs [up,right,down,left] · o.drag (finger x → field x) · o.move(dx,dy)
+//   (relative, in field units) · o.tapFire · o.holdFire (fire while touching)
+function bindSwipe(o){
+  const el=$('swp'); if(!el)return;
+  let x0=0,y0=0,t0=0,moved=0,on=false,pid=null;
+  function drag(e){
+    const r=el.getBoundingClientRect(), c=cv.getBoundingClientRect();
+    IN.drag={x:(e.clientX-r.left)/r.width*c.width/U, y:(e.clientY-r.top)/r.height*c.height/U, down:true};
+  }
+  el.addEventListener('pointerdown',function(e){
+    e.preventDefault(); if(on)return;
+    x0=e.clientX; y0=e.clientY; t0=Date.now(); moved=0; on=true; pid=e.pointerId;
+    el.classList.add('on');
+    if(el.setPointerCapture)try{el.setPointerCapture(e.pointerId);}catch(_){}
+    if(tapStart()){ moved=99; return; }
+    if(o.drag) drag(e);
+    if(o.holdFire) IN.fire=true;
+  });
+  el.addEventListener('pointermove',function(e){
+    if(!on||e.pointerId!==pid)return;
+    if(o.drag) drag(e);
+    const dx=e.clientX-x0, dy=e.clientY-y0;
+    if(o.move){
+      moved+=Math.abs(dx)+Math.abs(dy); x0=e.clientX; y0=e.clientY;
+      if(phase===PLAYING) o.move(dx*1.4/U, dy*1.4/U);
+      return;
+    }
+    if(Math.abs(dx)<14&&Math.abs(dy)<14)return;
+    moved+=14; x0=e.clientX; y0=e.clientY;
+    if(!o.dirs)return;
+    const d=Math.abs(dx)>Math.abs(dy)?(dx>0?o.dirs[1]:o.dirs[3]):(dy>0?o.dirs[2]:o.dirs[0]);
+    if(d!==IN.dir) IN.tapDir=d;
+    IN.dir=d;
+  });
+  function end(e,cancel){
+    if(!on||e.pointerId!==pid)return; on=false;
+    el.classList.remove('on');
+    if(!cancel&&o.tapFire&&moved<12&&Date.now()-t0<340){ IN.tap=true; IN.fire=true; }
+    if(o.holdFire) IN.fire=false;
+    if(o.drag&&IN.drag) IN.drag.down=false;
+    if(o.dirs) IN.dir=null;
+  }
+  el.addEventListener('pointerup',function(e){ end(e,false); });
+  el.addEventListener('pointercancel',function(e){ end(e,true); });
+  el.addEventListener('touchmove',function(e){ e.preventDefault(); },{passive:false});
+}
+function bindKeys(dirs){
+  const K={ArrowUp:0,ArrowRight:1,ArrowDown:2,ArrowLeft:3,w:0,d:1,s:2,a:3,W:0,D:1,S:2,A:3};
+  document.addEventListener('keydown',function(e){
+    if(e.key==='p'||e.key==='P'){ if(phase===PLAYING)phase=PAUSED; else if(phase===PAUSED){phase=PLAYING;onResume();} e.preventDefault(); return; }
+    if(e.key===' '||e.key==='Enter'){ e.preventDefault(); if(tapStart())return; IN.fire=true; IN.tap=true; return; }
+    const i=K[e.key]; if(i===undefined)return;
+    e.preventDefault();
+    if(tapStart())return;
+    if(dirs) IN.dir=dirs[i];
+    IN.tapDir=dirs?dirs[i]:i;
+  });
+  document.addEventListener('keyup',function(e){
+    if(e.key===' '||e.key==='Enter'){ IN.fire=false; return; }
+    const i=K[e.key]; if(i===undefined||!dirs)return;
+    if(IN.dir===dirs[i]) IN.dir=null;
+  });
+  document.addEventListener('touchmove',function(e){if(phase===PLAYING)e.preventDefault();},{passive:false});
+  document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&phase===PLAYING){phase=PAUSED;lastT=0;} });
+}
+// Fixed-step driver: tick() runs at exactly `hz`, draw() once per frame.
+function run(tick, draw, hz){
+  const stepMs=1000/(hz||60);
+  (function frame(ts){
+    requestAnimationFrame(frame);
+    if(!lastT) lastT=ts;
+    const dt=Math.min(150, ts-lastT); lastT=ts;
+    if(phase===PLAYING){
+      acc+=dt; let guard=0;
+      while(acc>=stepMs && guard++<8){ acc-=stepMs; if(tick()===false) break; }
+    } else acc=0;
+    draw();
+  })(0);
+}
+addEventListener('resize',function(){ if(typeof relayout==='function') relayout(); });
+// ── Pure rules — inlined verbatim from logic.mjs (the tests import that file). ──
+// logic.mjs — Arc Light: the rules, with no canvas and no DOM in sight.
+// Three batteries, six cities, and a sky that keeps trying to reach them. Every
+// tick is fixed-step and driven by an explicit RNG, so a seed replays exactly —
+// which is what lets gen-levels.mjs fingerprint the curve and the tests pin the
+// maths. index.html inlines this file verbatim.
+//
+// The whole game is one idea: a blast is a *volume in time*, not a hit. An
+// interceptor is slow and its fireball is brief, so you are never shooting at
+// where a warhead is — you are shooting at where several of them will be, at
+// once. Everything else (MIRVs that split, bombers that keep laying, smart
+// warheads that flinch away from a fireball) exists to complicate that one aim.
+
+const WIDTH = 100;
+const HEIGHT = 120;
+const GROUND = 108;                 // ground line; everything below is skyline
+const SILO_Y = GROUND - 3;          // interceptors leave from here
+
+const CITY_X = [16, 26, 36, 60, 70, 80];
+const CITY_W = 7;
+/** How far past its own footprint a hit still counts. The city pad is under
+ *  half the pitch, so one warhead can never take two cities; the silo pad is
+ *  wider (a silo is a hole in the ground, not a building) but still clears
+ *  every city, so a hit on a battery never costs a city as well. */
+const CITY_PAD = 1;
+const SILO_PAD = 4;
+/** Left, centre, right. The centre silo shoots faster and carries less — that
+ *  asymmetry is the only standing decision the player makes about *where* from. */
+const SILOS = [
+  { x: 6,  speed: 1.35, ammoMul: 1 },
+  { x: 49, speed: 2.30, ammoMul: 0.7 },
+  { x: 94, speed: 1.35, ammoMul: 1 },
+];
+
+const CONFIG = {
+  waves: 20,
+  blastR: 9,                // how wide a fireball opens
+  blastGrow: 22,            // ticks to open
+  blastHold: 10,            // ticks at full size
+  blastFade: 16,            // ticks to close (still lethal while it closes)
+  fireCooldown: 6,          // ticks between launches from one silo
+  killScore: 25,
+  bomberScore: 100,
+  satScore: 125,
+  chainStep: 25,            // each extra kill in one fireball is worth this much more
+  cityBonus: 100,           // per surviving city at the end of a wave
+  ammoBonus: 5,             // per unused interceptor
+  bonusCityAt: 5000,        // one city rebuilt per this many points
+  mirvSplitY: 42,           // MIRVs open here…
+  mirvKids: 3,
+  smartDodge: 16,           // a smart warhead starts sliding away inside this radius
+  smartSlide: 0.5,          // …at this much sideways speed
+  bomberY: [16, 30],        // the band bombers cross in
+  satY: [8, 14],
+  waveGap: 90,              // ticks of quiet after a wave is cleared
+  launchGap: 34,            // base ticks between salvo launches
+};
+
+/** deterministic PRNG — same seed, same wave, every time */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const ease = (t) => t * t * (3 - 2 * t);                 // smoothstep
+const WAVES = CONFIG.waves;
+
+/**
+ * The curve. One knob leads at a time:
+ *   1. `count`  — how much is in the air at once (waves 1-5)
+ *   2. `speed`  — how long you have to think (throughout)
+ *   3. `mirvs`  — one warhead becomes four (from wave 4)
+ *   4. `bombers`/`sats` — pressure that keeps arriving (waves 7 / 11)
+ *   5. `smarts` — warheads that will not stand still to be hit (wave 13)
+ * `ammo` falls as the count rises: the wave gets longer and the answer gets
+ * shorter, which is what turns "shoot everything" into "shoot the cluster".
+ * Every fifth wave is the sawtooth — slower, fatter magazines, fewer tricks.
+ */
+function paramsForLevel(i) {                      // i is 0-based
+  const n = i + 1;
+  const lin = i / (WAVES - 1);
+  // Smoothstep alone spends five waves at the starting values — a tutorial the
+  // player has already finished by wave two. Blending a straight line back in
+  // keeps every early wave visibly bigger than the last while the top end still
+  // flattens into a plateau rather than a spike.
+  const t = 0.55 * lin + 0.45 * ease(lin);
+  // Every fifth wave is the sawtooth — but never the last one. A final wave
+  // that hands the player a breather is not a finale.
+  const relief = n % 5 === 0 && n !== WAVES ? 0.8 : 1;
+  return {
+    n,
+    count: Math.max(4, Math.round((5 + 16 * t) * relief)),
+    speed: Math.round((0.20 + 0.27 * t) * relief * 1000) / 1000,
+    salvo: Math.min(4, 1 + Math.floor(t * 3.4)),         // warheads per launch
+    gap: Math.round(CONFIG.launchGap - 16 * t),
+    // A relief wave has to relieve the magazine too: `ammo` falls in integer
+    // steps, and one of those steps landing on a sawtooth wave would otherwise
+    // make the breather the hardest wave in its neighbourhood.
+    ammo: Math.round(10 - 3 * t) + (relief < 1 ? 2 : 0),                        // per full-size silo
+    mirvs: t < 0.09 ? 0 : Math.max(1, Math.round(t * 3.6 * relief)),
+    bombers: t < 0.4 ? 0 : Math.round(0.6 + t * 1.8),
+    sats: t < 0.62 ? 0 : Math.round(t * 2),
+    smarts: t < 0.79 ? 0 : Math.round(t * 2.6 * relief),
+    mult: Math.min(6, 1 + Math.floor(i / 4)),            // wave multiplier, capped
+  };
+}
+
+// ── the world ──────────────────────────────────────────────────────────────
+
+function makeSilos(p) {
+  return SILOS.map((s) => ({ x: s.x, speed: s.speed, ammo: Math.max(3, Math.round(p.ammo * s.ammoMul)), alive: true, cool: 0 }));
+}
+
+/**
+ * Build the wave's whole schedule up front — every launch, its type and its
+ * aim point — so a wave is a fixed script the RNG wrote once. Nothing during
+ * the wave consults the RNG again, which is what makes a replay a replay.
+ */
+function schedule(p, rand) {
+  const kinds = [];
+  for (let i = 0; i < p.mirvs; i++) kinds.push("mirv");
+  for (let i = 0; i < p.smarts; i++) kinds.push("smart");
+  while (kinds.length < p.count) kinds.push("plain");
+  // shuffle, but never lead with a MIRV: the first thing a wave shows you
+  // should be the thing you already know how to answer.
+  for (let i = kinds.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    const tmp = kinds[i]; kinds[i] = kinds[j]; kinds[j] = tmp;
+  }
+  const firstPlain = kinds.indexOf("plain");
+  if (firstPlain > 0) { kinds[firstPlain] = kinds[0]; kinds[0] = "plain"; }
+
+  // A salvo shares a band of sky and aims at neighbouring targets, so its
+  // members stay near each other on the way down. That is deliberate: it is
+  // what makes one well-led fireball able to take three warheads, and a
+  // magazine that only ever trades one-for-one is a magazine you run out of.
+  const out = [];
+  let at = 30, band = 0, aim = 0;
+  for (let i = 0; i < kinds.length; i++) {
+    if (i % p.salvo === 0) { band = 12 + rand() * (WIDTH - 24); aim = Math.floor(rand() * 1e6); }
+    const spread = 5 + p.salvo * 2.5;
+    out.push({ at, kind: kinds[i], x0: Math.max(3, Math.min(WIDTH - 3, band + (rand() - 0.5) * spread)), aim: aim + (i % p.salvo) });
+    if ((i + 1) % p.salvo === 0) at += p.gap + Math.floor(rand() * 12);
+    else at += 3 + Math.floor(rand() * 5);               // a salvo arrives together
+  }
+  const air = [];
+  for (let i = 0; i < p.bombers; i++)
+    air.push({ at: 90 + Math.floor(rand() * 260), kind: "bomber", dir: rand() < 0.5 ? 1 : -1, y: CONFIG.bomberY[0] + rand() * (CONFIG.bomberY[1] - CONFIG.bomberY[0]), drop: 0 });
+  for (let i = 0; i < p.sats; i++)
+    air.push({ at: 140 + Math.floor(rand() * 300), kind: "sat", dir: rand() < 0.5 ? 1 : -1, y: CONFIG.satY[0] + rand() * (CONFIG.satY[1] - CONFIG.satY[0]), drop: 0 });
+  return { ground: out, air, last: (out.length ? out[out.length - 1].at : 0) };
+}
+
+/** Ground targets a warhead can be aimed at: the cities, then the silos. */
+function targets(w) {
+  const list = [];
+  for (let i = 0; i < CITY_X.length; i++) if (w.cities[i]) list.push({ kind: "city", i, x: CITY_X[i] + CITY_W / 2 });
+  for (let i = 0; i < w.silos.length; i++) if (w.silos[i].alive) list.push({ kind: "silo", i, x: w.silos[i].x });
+  return list;
+}
+
+function createWorld(level, rand, carry) {
+  const w = {
+    level,
+    tick: 0,
+    plan: schedule(level, rand),
+    fired: 0,
+    airFired: 0,
+    warheads: [],
+    bombers: [],
+    shots: [],
+    blasts: [],
+    silos: makeSilos(level),
+    cities: carry && carry.cities ? carry.cities.slice() : [true, true, true, true, true, true],
+    score: carry ? carry.score : 0,
+    nextCity: carry ? carry.nextCity : CONFIG.bonusCityAt,
+    shotsFired: 0,
+    kills: 0,
+    bestChain: 0,
+    lost: 0,                    // cities lost this wave
+    clearAt: 0,
+    won: false,
+    over: false,
+    reason: null,
+  };
+  return w;
+}
+
+// ── firing ─────────────────────────────────────────────────────────────────
+
+/** Which silo answers a tap at (x, y)? The one that gets there first, ammo
+ *  permitting — a dead or empty silo is simply not in the running. */
+function pickSilo(w, x, y) {
+  let best = -1, bestT = Infinity;
+  for (let i = 0; i < w.silos.length; i++) {
+    const s = w.silos[i];
+    if (!s.alive || s.ammo <= 0 || s.cool > 0) continue;
+    const d = Math.hypot(x - s.x, y - SILO_Y);
+    const t = d / s.speed;
+    if (t < bestT) { bestT = t; best = i; }
+  }
+  return best;
+}
+
+function fire(w, x, y, events) {
+  if (y >= SILO_Y - 2 || y < 0 || x < 0 || x > WIDTH) return false;
+  const i = pickSilo(w, x, y);
+  if (i < 0) { if (events) events.push({ type: "dry" }); return false; }
+  const s = w.silos[i];
+  s.ammo--; s.cool = CONFIG.fireCooldown;
+  w.shotsFired++;
+  const d = Math.hypot(x - s.x, y - SILO_Y) || 1;
+  w.shots.push({ x: s.x, y: SILO_Y, x0: s.x, y0: SILO_Y, tx: x, ty: y, vx: ((x - s.x) / d) * s.speed, vy: ((y - SILO_Y) / d) * s.speed, silo: i });
+  if (events) events.push({ type: "fire", silo: i, x, y });
+  return true;
+}
+
+function boom(w, x, y, events) {
+  w.blasts.push({ x, y, t: 0, r: 0, chain: 0 });
+  if (events) events.push({ type: "boom", x, y });
+}
+
+/** Radius of a fireball at age `t` — open, hold, close. Zero once it is done. */
+function blastRadius(t) {
+  const { blastR, blastGrow, blastHold, blastFade } = CONFIG;
+  if (t < blastGrow) return blastR * (t / blastGrow);
+  if (t < blastGrow + blastHold) return blastR;
+  const f = t - blastGrow - blastHold;
+  if (f < blastFade) return blastR * (1 - f / blastFade);
+  return 0;
+}
+const BLAST_LIFE = CONFIG.blastGrow + CONFIG.blastHold + CONFIG.blastFade;
+
+// ── the tick ───────────────────────────────────────────────────────────────
+
+function launch(w, spec) {
+  const tg = targets(w);
+  const to = tg.length ? tg[spec.aim % tg.length] : { x: WIDTH / 2 };
+  spawnWarhead(w, spec.kind, spec.x0, 0, to.x);
+}
+function spawnWarhead(w, kind, x, y, aimX) {
+  const dy = GROUND - y;
+  const dx = aimX - x;
+  const d = Math.hypot(dx, dy) || 1;
+  const sp = w.level.speed * (kind === "smart" ? 1.1 : 1);
+  w.warheads.push({ kind, x, y, x0: x, y0: y, aim: aimX, vx: (dx / d) * sp, vy: (dy / d) * sp, split: kind === "mirv" });
+}
+
+function killCity(w, i, events) {
+  if (!w.cities[i]) return;
+  w.cities[i] = false; w.lost++;
+  events.push({ type: "city", i });
+}
+
+function addScore(w, n, events) {
+  w.score += n;
+  while (w.score >= w.nextCity) {
+    w.nextCity += CONFIG.bonusCityAt;
+    const gone = [];
+    for (let i = 0; i < w.cities.length; i++) if (!w.cities[i]) gone.push(i);
+    if (gone.length) { w.cities[gone[Math.floor(gone.length / 2)]] = true; events.push({ type: "rebuild", i: gone[Math.floor(gone.length / 2)] }); }
+  }
+}
+
+/** Anything caught by a live fireball dies, and dying inside one is worth more
+ *  each time it happens in the same fireball — the chain is the whole game. */
+function sweep(w, b, events) {
+  const r = b.r;
+  for (let i = w.warheads.length - 1; i >= 0; i--) {
+    const m = w.warheads[i];
+    if (Math.hypot(m.x - b.x, m.y - b.y) > r) continue;
+    w.warheads.splice(i, 1);
+    b.chain++; w.kills++;
+    if (b.chain > w.bestChain) w.bestChain = b.chain;
+    addScore(w, (CONFIG.killScore + (b.chain - 1) * CONFIG.chainStep) * w.level.mult, events);
+    events.push({ type: "kill", x: m.x, y: m.y, chain: b.chain });
+    boom(w, m.x, m.y, events);                            // and it takes its neighbours
+  }
+  for (let i = w.bombers.length - 1; i >= 0; i--) {
+    const a = w.bombers[i];
+    if (Math.hypot(a.x - b.x, a.y - b.y) > r + 2) continue;
+    w.bombers.splice(i, 1);
+    b.chain++; w.kills++;
+    if (b.chain > w.bestChain) w.bestChain = b.chain;
+    addScore(w, (a.kind === "sat" ? CONFIG.satScore : CONFIG.bomberScore) * w.level.mult, events);
+    events.push({ type: "kill", x: a.x, y: a.y, chain: b.chain, air: a.kind });
+    boom(w, a.x, a.y, events);
+  }
+  for (let i = w.shots.length - 1; i >= 0; i--) {         // your own missiles are safe
+    void i;
+  }
+}
+
+function step(w, input, rand) {
+  const events = [];
+  if (w.over) return events;
+  w.tick++;
+  for (const s of w.silos) if (s.cool > 0) s.cool--;
+
+  if (input && input.fire) fire(w, input.x, input.y, events);
+
+  // launches from the script
+  while (w.fired < w.plan.ground.length && w.plan.ground[w.fired].at <= w.tick) launch(w, w.plan.ground[w.fired++]);
+  while (w.airFired < w.plan.air.length && w.plan.air[w.airFired].at <= w.tick) {
+    const a = w.plan.air[w.airFired++];
+    w.bombers.push({ kind: a.kind, x: a.dir > 0 ? -6 : WIDTH + 6, y: a.y, dir: a.dir, drop: 40, speed: a.kind === "sat" ? 0.42 : 0.30 });
+  }
+
+  // our missiles
+  for (let i = w.shots.length - 1; i >= 0; i--) {
+    const s = w.shots[i];
+    s.x += s.vx; s.y += s.vy;
+    const gone = (s.vy < 0 ? s.y <= s.ty : s.y >= s.ty) || Math.hypot(s.x - s.tx, s.y - s.ty) < Math.max(1, Math.hypot(s.vx, s.vy));
+    if (gone) { w.shots.splice(i, 1); boom(w, s.tx, s.ty, events); }
+  }
+
+  // fireballs, then what they caught
+  for (let i = w.blasts.length - 1; i >= 0; i--) {
+    const b = w.blasts[i];
+    b.t++; b.r = blastRadius(b.t);
+    if (b.t > BLAST_LIFE) { w.blasts.splice(i, 1); continue; }
+    sweep(w, b, events);
+  }
+
+  // warheads
+  for (let i = w.warheads.length - 1; i >= 0; i--) {
+    const m = w.warheads[i];
+    if (m.kind === "smart") {
+      // flinch: slide away from the nearest fireball rather than fly into it
+      let near = null, nd = CONFIG.smartDodge;
+      for (const b of w.blasts) { const d = Math.hypot(m.x - b.x, m.y - b.y); if (d < nd) { nd = d; near = b; } }
+      if (near) m.x += (m.x >= near.x ? 1 : -1) * CONFIG.smartSlide;
+      if (m.x < 2) m.x = 2; if (m.x > WIDTH - 2) m.x = WIDTH - 2;
+    }
+    m.x += m.vx; m.y += m.vy;
+    if (m.split && m.y >= CONFIG.mirvSplitY) {
+      w.warheads.splice(i, 1);
+      const tg = targets(w);
+      for (let k = 0; k < CONFIG.mirvKids; k++) {
+        const to = tg.length ? tg[(k * 2 + Math.floor(m.x)) % tg.length].x : WIDTH / 2;
+        spawnWarhead(w, "plain", m.x, m.y, to);
+      }
+      events.push({ type: "split", x: m.x, y: m.y });
+      continue;
+    }
+    if (m.y >= GROUND) {
+      w.warheads.splice(i, 1);
+      boom(w, m.x, GROUND, events);
+      for (let c = 0; c < CITY_X.length; c++)
+        if (w.cities[c] && m.x >= CITY_X[c] - CITY_PAD && m.x <= CITY_X[c] + CITY_W + CITY_PAD) killCity(w, c, events);
+      for (const s of w.silos) if (s.alive && Math.abs(m.x - s.x) <= SILO_PAD) { s.alive = false; s.ammo = 0; events.push({ type: "silo", x: s.x }); }
+      events.push({ type: "impact", x: m.x });
+    }
+  }
+
+  // bombers and satellites
+  for (let i = w.bombers.length - 1; i >= 0; i--) {
+    const a = w.bombers[i];
+    a.x += a.dir * a.speed;
+    if (--a.drop <= 0) {
+      a.drop = a.kind === "sat" ? 150 : 96;
+      const tg = targets(w);
+      if (tg.length && a.x > 0 && a.x < WIDTH)
+        spawnWarhead(w, a.kind === "sat" ? "mirv" : "plain", a.x, a.y + 2, tg[(w.tick + i) % tg.length].x);
+    }
+    if (a.x < -10 || a.x > WIDTH + 10) w.bombers.splice(i, 1);
+  }
+
+  // the wave ends when the script is spent and the sky is empty
+  if (!w.won && w.fired >= w.plan.ground.length && w.airFired >= w.plan.air.length &&
+      w.warheads.length === 0 && w.bombers.length === 0 && w.shots.length === 0 && w.blasts.length === 0) {
+    if (w.cities.some(Boolean)) {
+      w.won = true; w.clearAt = w.tick;
+      let bonus = 0;
+      for (const s of w.silos) bonus += s.ammo * CONFIG.ammoBonus * w.level.mult;
+      for (const c of w.cities) if (c) bonus += CONFIG.cityBonus * w.level.mult;
+      w.bonus = bonus;
+      addScore(w, bonus, events);
+      w.over = true; w.reason = "clear";
+      events.push({ type: "clear", bonus });
+    }
+  }
+  if (!w.over && !w.cities.some(Boolean)) {
+    w.over = true; w.reason = "wiped";
+    events.push({ type: "wiped" });
+  }
+  void rand;
+  return events;
+}
+
+function summary(w) {
+  return {
+    wave: w.level.n,
+    won: w.won,
+    ticks: w.tick,
+    score: w.score,
+    cities: w.cities.filter(Boolean).length,
+    silos: w.silos.filter((s) => s.alive).length,
+    ammo: w.silos.reduce((a, s) => a + s.ammo, 0),
+    shots: w.shotsFired,
+    kills: w.kills,
+    bestChain: w.bestChain,
+    lost: w.lost,
+    bonus: w.bonus || 0,
+    over: w.over,
+    reason: w.reason,
+  };
+}
+// ── Arc Light: the campaign, the input, the picture ────────────────────────
+const BKEY='gobrain.missile.best';
+let w=null, rand=Math.random, lvlIdx=0, best=+(localStorage.getItem(BKEY)||0)||0;
+let sparks=[], banner=null, bannerT=0, inter=0, shake=0, flash=0, stars=[];
+// The crosshair belongs to the keyboard. It stays hidden until an arrow key is
+// pressed: on a phone the tap *is* the aim, and a floating reticle is clutter.
+let aim={x:WIDTH/2,y:GROUND*0.55}, aimOn=false;
+let pend=null, guardT=0;
+
+function relayout(){ fit(WIDTH,HEIGHT); paint(); }
+
+function seedStars(){
+  stars=[]; const r=mulberry32(31);
+  for(let i=0;i<46;i++) stars.push({x:r()*WIDTH,y:r()*(GROUND-16),s:r()<0.25?1.1:0.6,a:0.22+r()*0.5});
+}
+function startWave(i,carry){
+  lvlIdx=i;
+  w=createWorld(paramsForLevel(i),rand,carry);
+  sparks=[]; shake=0; flash=0; inter=0; pend=null;
+  banner=M.wave+' '+(i+1); bannerT=80;
+  GBLB.start(); lastT=0; acc=0; hud();
+}
+function newRun(){
+  rand=mulberry32((Date.now()^0x9e3779b9)>>>0);
+  $('wino').style.display='none';
+  guardT=Date.now()+200;              // the tap that starts a run is not a shot
+  phase=PLAYING;
+  startWave(0,null);
+}
+onStart=newRun;
+
+function hud(){
+  if(!w)return;
+  const s=summary(w);
+  $('ttl').textContent=M.wave+' '+s.wave+'/'+WAVES;
+  $('sc').textContent=s.score.toLocaleString();
+  $('bst').textContent='★ '+Math.max(best,s.score).toLocaleString();
+}
+function finish(won){
+  phase=DEAD;
+  const s=summary(w);
+  best=Math.max(best,s.score);
+  try{localStorage.setItem(BKEY,String(best));}catch(e){}
+  $('overttl').textContent=won?M.victory:M.over;
+  $('overmsg').textContent=M.wave+' '+s.wave+' · '+M.score+' '+s.score.toLocaleString()+' · '+M.best+' '+best.toLocaleString();
+  $('again').textContent=M.again;
+  $('wino').style.display='grid';
+  hud();
+}
+function nextWave(){
+  if(lvlIdx+1>=WAVES){ finish(true); return; }
+  startWave(lvlIdx+1,{cities:w.cities,score:w.score,nextCity:w.nextCity});
+}
+
+// ── input ──────────────────────────────────────────────────────────────────
+// bindCanvas gives us the start/resume tap and keeps the field from scrolling;
+// the shot itself is read from our own listener so a keyboard fire can never
+// be mistaken for the last place a finger happened to land.
+bindCanvas(null,{});
+bindKeys(['up','right','down','left']);
+bindPad([['bu','up'],['bl','left'],['bd','down'],['br','right']]);
+bindFire('bfire');
+// swipe pad: a trackpad for the sight — drag nudges it, a tap fires where it rests
+bindSwipe({tapFire:true,move:function(dx,dy){
+  aimOn=true;
+  aim.x=Math.max(2,Math.min(WIDTH-2,aim.x+dx));
+  aim.y=Math.max(3,Math.min(GROUND-8,aim.y+dy));
+}});
+cv.addEventListener('pointerdown',function(e){
+  if(phase!==PLAYING||Date.now()<guardT) return;
+  const r=cv.getBoundingClientRect();
+  pend={x:(e.clientX-r.left)/U, y:(e.clientY-r.top)/U};
+  aimOn=false;
+});
+$('restart').textContent=M.restart;
+$('restart').onclick=newRun;
+$('again').onclick=newRun;
+
+/** Whatever the player asked for this tick, as step()'s input. */
+function pullShot(){
+  IN.tap=false;
+  if(pend){ const p=pend; pend=null; return {fire:true,x:p.x,y:p.y}; }
+  if(IN.dir){
+    aimOn=true;
+    const sp=1.15;
+    if(IN.dir==='left') aim.x-=sp; else if(IN.dir==='right') aim.x+=sp;
+    else if(IN.dir==='up') aim.y-=sp; else if(IN.dir==='down') aim.y+=sp;
+    aim.x=Math.max(2,Math.min(WIDTH-2,aim.x));
+    aim.y=Math.max(3,Math.min(GROUND-8,aim.y));
+  }
+  if(IN.fire){
+    IN.fire=false;
+    // the first press also reveals the sight — it fires from where it rests,
+    // which is exactly where the sight is about to be drawn.
+    aimOn=true;
+    return {fire:true,x:aim.x,y:aim.y};
+  }
+  return {fire:false};
+}
+
+// ── tick ───────────────────────────────────────────────────────────────────
+function tick(){
+  if(inter>0){ if(--inter===0) nextWave(); return true; }
+  const evs=step(w,pullShot(),rand);
+  for(const e of evs){
+    if(e.type==='kill'){
+      const c=e.air?'#c9b6ff':'#ffd166';
+      for(let i=0;i<7;i++) sparks.push({x:e.x,y:e.y,vx:(Math.random()-0.5)*1.6,vy:(Math.random()-0.5)*1.6,t:18,c:c});
+      if(e.chain>=3){ banner='×'+e.chain; bannerT=42; }
+    }else if(e.type==='city'){
+      shake=Math.max(shake,8); flash=Math.max(flash,12);
+      for(let i=0;i<16;i++) sparks.push({x:CITY_X[e.i]+CITY_W/2,y:GROUND-1,vx:(Math.random()-0.5)*2.4,vy:-Math.random()*2.2,t:28,c:'#ff5252'});
+    }else if(e.type==='silo'){ shake=Math.max(shake,6); }
+    else if(e.type==='rebuild'){ banner=M.rebuilt; bannerT=70; }
+    else if(e.type==='dry'){ flash=Math.max(flash,4); }
+  }
+  if(shake>0) shake-=0.5;
+  if(flash>0) flash--;
+  for(let i=sparks.length-1;i>=0;i--){ const s=sparks[i]; s.x+=s.vx; s.y+=s.vy; s.vy+=0.05; if(--s.t<=0) sparks.splice(i,1); }
+  if(w.over){
+    if(w.won){ GBLB.report(lvlIdx+1); banner=M.cleared; bannerT=80; inter=90; hud(); return true; }
+    finish(false); return false;
+  }
+  hud();
+  return true;
+}
+
+// ── painting ───────────────────────────────────────────────────────────────
+const px=(u)=>u*(CW/WIDTH);
+function seg(x1,y1,x2,y2,col,wid){
+  ctx.strokeStyle=col; ctx.lineWidth=px(wid||0.6); ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(px(x1),px(y1)); ctx.lineTo(px(x2),px(y2)); ctx.stroke();
+}
+function disc(x,y,r,col,a){
+  ctx.globalAlpha=a===undefined?1:a; ctx.fillStyle=col;
+  ctx.beginPath(); ctx.arc(px(x),px(y),Math.max(0.4,px(r)),0,6.2832); ctx.fill(); ctx.globalAlpha=1;
+}
+function drawSky(){
+  const g=ctx.createLinearGradient(0,0,0,px(GROUND));
+  g.addColorStop(0,'#070b1c'); g.addColorStop(0.62,'#101a3a'); g.addColorStop(1,'#1d2450');
+  ctx.fillStyle=g; ctx.fillRect(0,0,CW,px(GROUND));
+  for(const s of stars) disc(s.x,s.y,s.s*0.45,'#ffffff',s.a);
+  if(flash>0){ ctx.fillStyle='rgba(255,90,70,'+(flash/34)+')'; ctx.fillRect(0,0,CW,px(GROUND)); }
+}
+function drawGround(){
+  const g=ctx.createLinearGradient(0,px(GROUND),0,CH);
+  g.addColorStop(0,'#2b3423'); g.addColorStop(1,'#161c12');
+  ctx.fillStyle=g; ctx.fillRect(0,px(GROUND),CW,CH-px(GROUND));
+  // low mounds, so the strip under the skyline reads as ground and not as a bar
+  ctx.fillStyle='#222a1b';
+  for(let i=0;i<5;i++){
+    const cx=10+i*20;
+    ctx.beginPath(); ctx.arc(px(cx),px(GROUND+7),px(9),Math.PI,0); ctx.fill();
+  }
+  seg(0,GROUND,WIDTH,GROUND,'#54663c',1);
+}
+/** A city is a small skyline; a dead one is that skyline knocked flat. */
+function drawCities(){
+  const hs=[3.2,5.6,4.2,6.4,3.6];
+  for(let i=0;i<CITY_X.length;i++){
+    const x=CITY_X[i], alive=w.cities[i];
+    for(let b=0;b<5;b++){
+      // a ruin is the same footprint knocked down, not an empty patch — it has
+      // to stay readable against the mounds behind it
+      const bx=x+b*(CITY_W/5)+0.2, bw=CITY_W/5-0.5, h=alive?hs[b]:(b%2?1.9:1.1);
+      ctx.fillStyle=alive?(b%2?'#63d0ff':'#3aa0d8'):(b%2?'#6b6257':'#514a42');
+      ctx.fillRect(px(bx),px(GROUND-h),px(bw),px(h));
+      if(alive&&b%2===0){ ctx.fillStyle='rgba(255,255,255,.55)'; ctx.fillRect(px(bx+0.25),px(GROUND-h+0.6),px(0.45),px(0.5)); }
+    }
+  }
+}
+/** Each silo wears its magazine — the resource you are actually spending. */
+function drawSilos(){
+  for(const s of w.silos){
+    ctx.fillStyle=s.alive?'#8f9d6c':'#4b4b4b';
+    ctx.beginPath();
+    ctx.moveTo(px(s.x-4.4),px(GROUND)); ctx.lineTo(px(s.x-2.3),px(GROUND-4.2));
+    ctx.lineTo(px(s.x+2.3),px(GROUND-4.2)); ctx.lineTo(px(s.x+4.4),px(GROUND));
+    ctx.closePath(); ctx.fill();
+    if(!s.alive){ seg(s.x-3,GROUND-3.4,s.x+3,GROUND-0.4,'#2c2c2c',0.8); continue; }
+    if(s.cool>0){ ctx.fillStyle='rgba(126,240,200,.5)'; ctx.fillRect(px(s.x-2.3),px(GROUND-4.6),px(4.6*(1-s.cool/CONFIG.fireCooldown)),px(0.5)); }
+    const n=Math.min(12,s.ammo);
+    for(let i=0;i<n;i++){
+      ctx.fillStyle=s.ammo<=3?'#ff6b6b':'#ffd166';
+      ctx.fillRect(px(s.x-2.6+(i%4)*1.5),px(GROUND-6.2-Math.floor(i/4)*1.5),px(1),px(1.1));
+    }
+  }
+}
+function drawWarheads(){
+  for(const m of w.warheads){
+    const hot=m.kind==='smart'?'#ff5ea8':m.kind==='mirv'?'#ffc857':'#ff6b4a';
+    ctx.globalAlpha=0.55; seg(m.x0,m.y0,m.x,m.y,hot,0.4); ctx.globalAlpha=1;
+    if(m.kind!=='plain') disc(m.x,m.y,1.8,hot,0.32);
+    disc(m.x,m.y,m.kind==='plain'?0.8:1.05,'#fff3e0');
+  }
+}
+function drawShots(){
+  for(const s of w.shots){
+    seg(s.x0,s.y0,s.x,s.y,'#7ef0c8',0.4);
+    disc(s.x,s.y,0.75,'#eafff7');
+    ctx.globalAlpha=0.5;
+    seg(s.tx-1.5,s.ty,s.tx+1.5,s.ty,'#7ef0c8',0.35);
+    seg(s.tx,s.ty-1.5,s.tx,s.ty+1.5,'#7ef0c8',0.35);
+    ctx.globalAlpha=1;
+  }
+}
+function drawBlasts(){
+  for(const b of w.blasts){
+    if(b.r<=0.05) continue;
+    const j=0.88+Math.random()*0.14;
+    disc(b.x,b.y,b.r*j,'#ffd166',0.85);
+    disc(b.x,b.y,b.r*j*0.7,'#ff7b3d',0.95);
+    disc(b.x,b.y,b.r*j*0.36,'#fff7dc',0.95);
+  }
+}
+function drawAir(){
+  for(const a of w.bombers){
+    if(a.kind==='sat'){
+      ctx.fillStyle='#7d6bd0';
+      ctx.fillRect(px(a.x-4.4),px(a.y-0.7),px(2.6),px(1.4));
+      ctx.fillRect(px(a.x+1.8),px(a.y-0.7),px(2.6),px(1.4));
+      ctx.fillStyle='#c9b6ff';
+      ctx.fillRect(px(a.x-1.4),px(a.y-1.2),px(2.8),px(2.4));
+    }else{
+      const d=a.dir;
+      ctx.fillStyle='#b8603a';                       // tail fin, behind the hull
+      ctx.beginPath();
+      ctx.moveTo(px(a.x-3.4*d),px(a.y+0.6)); ctx.lineTo(px(a.x-4.4*d),px(a.y-2.4));
+      ctx.lineTo(px(a.x-2.2*d),px(a.y-0.4));
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#ff9f68';
+      ctx.beginPath();
+      ctx.moveTo(px(a.x+4.2*d),px(a.y+0.2)); ctx.lineTo(px(a.x+1.4*d),px(a.y-1.8));
+      ctx.lineTo(px(a.x-3.6*d),px(a.y-1.5)); ctx.lineTo(px(a.x-3.6*d),px(a.y+1.6));
+      ctx.lineTo(px(a.x+1.4*d),px(a.y+1.4));
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#7a3c22';                       // wing, catching the belly
+      ctx.fillRect(px(a.x-2.4*d-(d>0?0:2.4)),px(a.y+0.9),px(2.4),px(1.4));
+      disc(a.x+2.1*d,a.y-0.3,0.5,'#1d2450');
+    }
+  }
+}
+function drawAim(){
+  if(!aimOn||phase!==PLAYING) return;
+  ctx.globalAlpha=0.85;
+  seg(aim.x-2.6,aim.y,aim.x-0.9,aim.y,'#7ef0c8',0.45);
+  seg(aim.x+0.9,aim.y,aim.x+2.6,aim.y,'#7ef0c8',0.45);
+  seg(aim.x,aim.y-2.6,aim.x,aim.y-0.9,'#7ef0c8',0.45);
+  seg(aim.x,aim.y+0.9,aim.x,aim.y+2.6,'#7ef0c8',0.45);
+  ctx.globalAlpha=1;
+}
+function drawHud(){
+  ctx.font='700 '+Math.round(px(4.6))+'px -apple-system,system-ui,sans-serif';
+  ctx.textBaseline='top';
+  ctx.fillStyle='rgba(255,255,255,.75)';
+  ctx.fillText('×'+w.level.mult,px(2.5),px(2.5));
+  for(let i=0;i<CITY_X.length;i++){
+    ctx.fillStyle=w.cities[i]?'#63d0ff':'rgba(255,255,255,.16)';
+    ctx.fillRect(CW-px(3+(CITY_X.length-i)*3),px(3),px(2),px(2.8));
+  }
+  ctx.textBaseline='alphabetic';
+}
+function paint(){
+  if(!w){ ctx.fillStyle='#101a3a'; ctx.fillRect(0,0,CW,CH); return; }
+  ctx.save();
+  if(shake>0) ctx.translate((Math.random()-0.5)*px(shake*0.35),(Math.random()-0.5)*px(shake*0.35));
+  drawSky(); drawGround(); drawCities(); drawSilos();
+  drawWarheads(); drawShots(); drawAir(); drawBlasts(); drawAim();
+  for(const s of sparks) disc(s.x,s.y,0.55,s.c,Math.max(0,s.t/28));
+  drawHud();
+  ctx.restore();
+  if(bannerT>0){
+    bannerT--;
+    ctx.globalAlpha=Math.min(1,bannerT/26);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='700 '+Math.round(CW*0.072)+'px -apple-system,system-ui,sans-serif';
+    ctx.strokeStyle='rgba(0,0,0,.6)'; ctx.lineWidth=px(0.9);
+    ctx.strokeText(banner,CW/2,CH*0.34);
+    ctx.fillStyle='#fff'; ctx.fillText(banner,CW/2,CH*0.34);
+    ctx.globalAlpha=1; ctx.textAlign='start'; ctx.textBaseline='alphabetic';
+  }
+  if(phase===READY) overlayText(M.start,M.hint);
+  else if(phase===PAUSED) overlayText(M.paused,'');
+}
+
+seedStars();
+fit(WIDTH,HEIGHT);
+startWave(0,null);
+phase=READY;
+paint();
+run(tick,paint,60);
+</script>
+</body>
+</html>

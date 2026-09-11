@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Snake</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--field:#eceae3;--snake:#2f9e44;--snake2:#2b8a3e;--food:#e03131;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  #ttl{margin-right:auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--snake);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* controls: swipe the board, or big arrow keys under it (body.keys) */
+  .pad{display:none;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);gap:12px;width:100%;max-width:380px;margin-left:auto;margin-right:auto;direction:ltr}
+  body.keys .pad{display:grid}
+  .pb{padding:0;border-radius:14px;border:1px solid var(--bd);background:#fff;font-size:30px;font-weight:700;cursor:pointer;color:var(--ink);touch-action:none;min-height:72px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .pb:active,.pb.on{background:#fdf3d9}
+  #bu{grid-column:2;grid-row:1}
+  #bl{grid-column:1;grid-row:2}
+  #bd{grid-column:2;grid-row:2}
+  #br{grid-column:3;grid-row:2}
+  .seg{display:flex;flex:0 0 auto;border:1px solid var(--bd);border-radius:999px;background:var(--btn);padding:3px}
+  .seg button{border:0;background:transparent;border-radius:999px;padding:0 13px;min-height:44px;font-weight:700;font-size:14px;color:#8a8a8a;cursor:pointer;white-space:nowrap}
+  .seg button.on{background:#eceae3;color:var(--ink)}
+  @media (max-width:360px){.seg button span{display:none}}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="ttl">Snake</span><span class="pill" id="sc">0</span><span class="pill" id="bst">★ 0</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="pad">
+    <button class="pb" id="bu">&#9650;</button>
+    <button class="pb" id="bl">&#9664;</button>
+    <button class="pb" id="bd">&#9660;</button>
+    <button class="pb" id="br">&#9654;</button>
+  </div>
+  <div class="btns">
+    <button class="btn" id="restart">Restart</button>
+    <div class="seg" id="ctl"><button data-m="buttons">&#127918;<span></span></button><button data-m="swipe">&#128070;<span></span></button></div>
+  </div>
+  <div class="help" id="helpcard"><b>How to play.</b> <b>Swipe anywhere</b> to steer the snake. Eat the food to grow — every bite scores a point and the pace slowly rises. Don't hit the walls or your own tail!</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> <b>Swipe anywhere</b> to steer the snake. Eat the food to grow — every bite scores a point and the pace slowly rises. Don't hit the walls or your own tail!",
+    vi:"<b>Cách chơi.</b> <b>Vuốt bất kỳ đâu</b> để điều khiển rắn. Ăn mồi để dài ra — mỗi lần ăn được 1 điểm và tốc độ tăng dần. Đừng đâm vào tường hoặc đuôi của chính mình!",
+    ko:"<b>플레이 방법.</b> <b>아무 곳이나 스와이프</b>해서 뱀을 조종하세요. 먹이를 먹으면 길어지고 1점을 얻으며 속도가 조금씩 빨라집니다. 벽이나 자기 꼬리에 부딪히면 안 돼요!",
+    zh:"<b>玩法。</b> <b>在任意位置滑动</b>来控制蛇的方向。吃到食物就会变长——每吃一个得 1 分，速度也会慢慢加快。别撞到墙或自己的尾巴！",
+    ja:"<b>遊び方。</b> <b>画面のどこでもスワイプ</b>してヘビを操作します。エサを食べると伸びて1点獲得、スピードも少しずつ上がります。壁や自分のしっぽにぶつからないように！",
+    ar:"<b>طريقة اللعب.</b> <b>اسحب في أي مكان</b> لتوجيه الثعبان. كُل الطعام لتكبر — كل قضمة نقطة والسرعة تزداد تدريجيًا. لا تصطدم بالجدران أو بذيلك!"
+  };
+  var L=pick(),el=document.getElementById("helpcard");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2 id="overttl">Game over</h2><p id="overmsg"></p><button id="again">Play again</button></div></div>
+<script>
+const BEST_KEY="snake.best";
+const COLS=17, ROWS=17;
+const CFG={baseMs:160, rampEvery:5, rampMs:10, minMs:70};
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+const UI={
+  en:{start:"Tap to start",swipe:"Swipe to steer",paused:"Paused — tap to resume",over:"Game over",score:"Score",best:"Best",again:"Play again",restart:"Restart"},
+  vi:{start:"Chạm để bắt đầu",swipe:"Vuốt để điều khiển",paused:"Tạm dừng — chạm để tiếp tục",over:"Kết thúc!",score:"Điểm",best:"Kỷ lục",again:"Chơi lại",restart:"Chơi lại"},
+  ko:{start:"탭하여 시작",swipe:"스와이프로 조종",paused:"일시정지 — 탭하여 계속",over:"게임 오버",score:"점수",best:"최고",again:"다시 하기",restart:"다시 시작"},
+  zh:{start:"点按开始",swipe:"滑动控制方向",paused:"已暂停——点按继续",over:"游戏结束",score:"分数",best:"最佳",again:"再玩一次",restart:"重新开始"},
+  ja:{start:"タップでスタート",swipe:"スワイプで操作",paused:"一時停止中 — タップで再開",over:"ゲームオーバー",score:"スコア",best:"ベスト",again:"もう一度",restart:"リスタート"},
+  ar:{start:"انقر للبدء",swipe:"اسحب للتوجيه",paused:"متوقف — انقر للمتابعة",over:"انتهت اللعبة",score:"النقاط",best:"الأفضل",again:"العب مجددًا",restart:"إعادة"}
+};
+const M=UI[LANG]||UI.en;
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Snake is endless/score-based, so it POSTs a fixed `level: 1` with the score —
+// the server ranks score games by score first, then time. Reads the shared
+// player token (set by the hub, same origin). No token → silently skips.
+// Mirrors the GBLB block in games/zip/index.html; keep in sync.
+const GBLB=(function(){
+  var GAME='snake', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+// ── Pure step logic (kept in sync with logic.mjs) ─────────────────────────
+function initState(cols,rows){
+  var cx=Math.floor(cols/2), cy=Math.floor(rows/2);
+  return {cols:cols,rows:rows,snake:[[cx,cy],[cx-1,cy],[cx-2,cy]],dir:[1,0],pendingDir:null,
+    food:[Math.min(cols-1,cx+4),cy],foods:0,grow:0,dead:false};
+}
+function turn(st,dir){
+  var d=st.pendingDir||st.dir;
+  if(dir[0]===-d[0]&&dir[1]===-d[1])return false;
+  if(dir[0]===d[0]&&dir[1]===d[1])return false;
+  st.pendingDir=dir; return true;
+}
+function placeFood(st,rand){
+  var occ={},i;
+  for(i=0;i<st.snake.length;i++)occ[st.snake[i][0]+','+st.snake[i][1]]=1;
+  var free=[];
+  for(var y=0;y<st.rows;y++)for(var x=0;x<st.cols;x++)if(!occ[x+','+y])free.push([x,y]);
+  if(!free.length){st.food=null;return null;}
+  st.food=free[Math.floor(rand()*free.length)];
+  return st.food;
+}
+function stepState(st,rand){
+  if(st.dead)return 'dead';
+  if(st.pendingDir){st.dir=st.pendingDir;st.pendingDir=null;}
+  var head=st.snake[0], nx=head[0]+st.dir[0], ny=head[1]+st.dir[1];
+  if(nx<0||ny<0||nx>=st.cols||ny>=st.rows){st.dead=true;return 'die';}
+  var lim=st.grow>0?st.snake.length:st.snake.length-1;
+  for(var i=0;i<lim;i++)if(st.snake[i][0]===nx&&st.snake[i][1]===ny){st.dead=true;return 'die';}
+  st.snake.unshift([nx,ny]);
+  var ev='move';
+  if(st.food&&nx===st.food[0]&&ny===st.food[1]){st.foods++;st.grow++;ev='eat';placeFood(st,rand||Math.random);}
+  if(st.grow>0)st.grow--; else st.snake.pop();
+  return ev;
+}
+function speedMs(foods){return Math.max(CFG.minMs,CFG.baseMs-Math.floor(foods/CFG.rampEvery)*CFG.rampMs);}
+
+// ── game shell ────────────────────────────────────────────────────────────
+const READY=0,PLAYING=1,DEAD=2,PAUSED=3;
+let st=initState(COLS,ROWS), phase=READY, acc=0, lastT=0;
+let prevSnake=st.snake.map(function(p){return [p[0],p[1]];});
+let flash=0, deadAt=0, best=0, popups=[]; // popups: {x,y,age}
+let W=0, cell=0, bx=0, by=0;
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+try{best=+localStorage.getItem(BEST_KEY)||0;}catch(e){}
+$('bst').textContent='★ '+best;
+$('restart').textContent=M.restart;
+$('overttl').textContent=M.over; $('again').textContent=M.again;
+if(LANG==='ar'){document.querySelector('#wino div').dir='rtl';}
+// ── controls: swipe (default here) or big arrow keys — one choice shared with
+// the brick games (same key), so a player who picked keys keeps them. ──────
+const CTRL=(function(){
+  const KEY='gobrain.bg.controls';
+  const L={en:['Buttons','Swipe'],vi:['Nút','Vuốt'],ko:['버튼','스와이프'],zh:['按键','滑动'],ja:['ボタン','スワイプ'],ar:['أزرار','سحب']}[LANG]||['Buttons','Swipe'];
+  let mode='swipe';
+  try{ if(localStorage.getItem(KEY)==='buttons') mode='buttons'; }catch(e){}
+  const bs=$('ctl').getElementsByTagName('button');
+  function paint(){
+    document.body.classList.toggle('keys',mode==='buttons');
+    for(let i=0;i<bs.length;i++) bs[i].classList.toggle('on',bs[i].getAttribute('data-m')===mode);
+  }
+  for(let i=0;i<bs.length;i++){
+    bs[i].getElementsByTagName('span')[0].textContent=' '+L[i];
+    bs[i].setAttribute('aria-label',L[i]);
+    bs[i].addEventListener('click',function(){
+      mode=this.getAttribute('data-m');
+      try{ localStorage.setItem(KEY,mode); }catch(e){}
+      paint(); layout();
+    });
+  }
+  paint();
+  return {keys:function(){ return mode==='buttons'; }};
+})();
+
+
+function layout(){
+  var wrap=document.getElementById('wrap');
+  W=Math.min(wrap.clientWidth-60,520);
+  if(CTRL.keys()){
+    // keys showing: shrink the board so the keys stay on screen
+    const top=cv.parentNode.getBoundingClientRect().top+(window.scrollY||0);
+    const room=window.innerHeight-top-28-12-document.querySelector('.pad').offsetHeight-16;
+    W=Math.max(Math.min(W,room),Math.floor(W*0.6));
+  }
+  cell=Math.floor(W/COLS);
+  var bw=cell*COLS;
+  bx=Math.floor((W-bw)/2); by=bx;
+  var H=bw+2*by;
+  cv.width=Math.round(W*devicePixelRatio); cv.height=Math.round(H*devicePixelRatio);
+  cv.style.width=W+'px'; cv.style.height=H+'px';
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+function cc(p){return [bx+p[0]*cell+cell/2, by+p[1]*cell+cell/2];}
+
+function startRun(){
+  st=initState(COLS,ROWS);
+  prevSnake=st.snake.map(function(p){return [p[0],p[1]];});
+  acc=0; flash=0; popups.length=0;
+  phase=PLAYING; $('sc').textContent='0'; $('wino').style.display='none';
+  GBLB.start();
+}
+function die(){
+  phase=DEAD; deadAt=Date.now(); flash=1;
+  var score=st.foods;
+  GBLB.report(score);
+  if(score>best){best=score;try{localStorage.setItem(BEST_KEY,best);}catch(e){}}
+  $('bst').textContent='★ '+best;
+  setTimeout(function(){
+    if(phase!==DEAD)return;
+    $('overmsg').textContent=M.score+' '+score+' — '+M.best+' '+best;
+    $('wino').style.display='grid';
+  },700);
+}
+function tick(){
+  prevSnake=st.snake.map(function(p){return [p[0],p[1]];});
+  var ev=stepState(st,Math.random);
+  if(ev==='die'){die();return;}
+  if(ev==='eat'){
+    $('sc').textContent=st.foods;
+    var h=st.snake[0], p=cc(h);
+    popups.push({x:p[0],y:p[1],age:0});
+    if(popups.length>6)popups.shift();
+  }
+}
+
+// ── draw ──────────────────────────────────────────────────────────────────
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function draw(now,dt){
+  dt=dt||16.7; // ms since the last frame — keeps fades speed-independent
+  var Hc=cell*ROWS+2*by;
+  ctx.clearRect(0,0,W,Hc);
+  // field
+  rr(bx-4,by-4,cell*COLS+8,cell*ROWS+8,10);
+  ctx.fillStyle='#eceae3'; ctx.fill();
+  // subtle checker dots
+  ctx.fillStyle='rgba(0,0,0,0.025)';
+  for(var y=0;y<ROWS;y++)for(var x=(y%2);x<COLS;x+=2)ctx.fillRect(bx+x*cell,by+y*cell,cell,cell);
+  // food (pulse)
+  if(st.food&&phase!==DEAD){
+    var fp=cc(st.food), pr=cell*0.30*(1+0.13*Math.sin(now/180));
+    ctx.fillStyle='#e03131';
+    ctx.beginPath();ctx.arc(fp[0],fp[1],pr,0,7);ctx.fill();
+    ctx.strokeStyle='rgba(224,49,49,0.35)'; ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(fp[0],fp[1],pr+3+1.5*Math.sin(now/180+1),0,7);ctx.stroke();
+    // stem
+    ctx.strokeStyle='#2b8a3e'; ctx.lineWidth=Math.max(2,cell*0.08); ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(fp[0]+pr*0.1,fp[1]-pr);ctx.lineTo(fp[0]+pr*0.45,fp[1]-pr-cell*0.16);ctx.stroke();
+  }
+  // snake — interpolated rounded polyline
+  var t=phase===PLAYING?Math.min(1,acc/speedMs(st.foods)):1;
+  var n=st.snake.length, pts=[], i, from, to;
+  for(i=0;i<n;i++){
+    to=st.snake[i];
+    from=prevSnake[Math.min(i,prevSnake.length-1)];
+    var px=from[0]+(to[0]-from[0])*t, py=from[1]+(to[1]-from[1])*t;
+    pts.push([bx+px*cell+cell/2, by+py*cell+cell/2]);
+  }
+  if(pts.length){
+    ctx.strokeStyle=phase===DEAD?'#a8382f':'#2f9e44';
+    ctx.lineWidth=cell*0.78; ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+    for(i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);
+    if(pts.length===1)ctx.lineTo(pts[0][0]+0.01,pts[0][1]);
+    ctx.stroke();
+    // head cap + eyes
+    var hd=pts[0];
+    ctx.fillStyle=phase===DEAD?'#943029':'#2b8a3e';
+    ctx.beginPath();ctx.arc(hd[0],hd[1],cell*0.46,0,7);ctx.fill();
+    var dx=st.dir[0], dy=st.dir[1];
+    var exo=cell*0.16, eyo=cell*0.20;
+    // eyes perpendicular to heading, nudged forward
+    var e1=[hd[0]+dx*exo-dy*eyo, hd[1]+dy*exo+dx*eyo];
+    var e2=[hd[0]+dx*exo+dy*eyo, hd[1]+dy*exo-dx*eyo];
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc(e1[0],e1[1],cell*0.11,0,7);ctx.fill();
+    ctx.beginPath();ctx.arc(e2[0],e2[1],cell*0.11,0,7);ctx.fill();
+    ctx.fillStyle='#1a1a1a';
+    ctx.beginPath();ctx.arc(e1[0]+dx*cell*0.04,e1[1]+dy*cell*0.04,cell*0.055,0,7);ctx.fill();
+    ctx.beginPath();ctx.arc(e2[0]+dx*cell*0.04,e2[1]+dy*cell*0.04,cell*0.055,0,7);ctx.fill();
+  }
+  // score popups
+  for(i=popups.length-1;i>=0;i--){
+    var pp=popups[i]; pp.age+=dt/1000;
+    if(pp.age>0.8){popups.splice(i,1);continue;}
+    var a=1-pp.age/0.8;
+    ctx.fillStyle='rgba(43,138,62,'+a.toFixed(2)+')';
+    ctx.font='bold '+Math.round(cell*0.75)+'px -apple-system,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('+1',pp.x,pp.y-cell*0.5-pp.age*cell*1.4);
+  }
+  // death flash
+  if(flash>0){
+    ctx.fillStyle='rgba(224,49,49,'+(flash*0.28).toFixed(3)+')';
+    rr(bx-4,by-4,cell*COLS+8,cell*ROWS+8,10); ctx.fill();
+    flash=Math.max(0,flash-dt/1000*3);
+  }
+  // overlays
+  if(phase===READY||phase===PAUSED){
+    ctx.fillStyle='rgba(242,240,235,0.72)';
+    rr(bx-4,by-4,cell*COLS+8,cell*ROWS+8,10); ctx.fill();
+    ctx.fillStyle='#1a1a1a'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='bold '+Math.round(cell*1.0)+'px -apple-system,sans-serif';
+    var cxp=bx+cell*COLS/2, cyp=by+cell*ROWS/2;
+    if(phase===READY){
+      ctx.fillText(M.start,cxp,cyp-cell*0.8);
+      ctx.font=Math.round(cell*0.72)+'px -apple-system,sans-serif'; ctx.fillStyle='#777';
+      if(!CTRL.keys())ctx.fillText(M.swipe,cxp,cyp+cell*0.8);
+    } else {
+      ctx.font='bold '+Math.round(cell*0.85)+'px -apple-system,sans-serif';
+      ctx.fillText(M.paused,cxp,cyp);
+    }
+  }
+}
+function frame(now){
+  if(!lastT)lastT=now;
+  var dt=Math.max(0,Math.min(100,now-lastT)); lastT=now;
+  if(phase===PLAYING){
+    acc+=dt;
+    var iv=speedMs(st.foods);
+    var guard=0;
+    while(acc>=iv&&phase===PLAYING&&guard++<4){acc-=iv;tick();}
+  }
+  draw(now,dt);
+  requestAnimationFrame(frame);
+}
+
+// ── input: swipe anywhere; tap starts/resumes ─────────────────────────────
+let swX=0, swY=0, swActive=false, swMoved=0;
+function onDown(ev){
+  if(ev.target&&(ev.target.tagName==='BUTTON'))return;
+  swX=ev.clientX; swY=ev.clientY; swActive=true; swMoved=0;
+}
+function onMove(ev){
+  if(!swActive)return;
+  var dx=ev.clientX-swX, dy=ev.clientY-swY;
+  var adx=Math.abs(dx), ady=Math.abs(dy);
+  swMoved=Math.max(swMoved,adx,ady);
+  if(Math.max(adx,ady)<18)return;
+  var dir=adx>ady?[dx>0?1:-1,0]:[0,dy>0?1:-1];
+  if(phase===PLAYING)turn(st,dir);
+  swX=ev.clientX; swY=ev.clientY; // chained swipes without lifting
+}
+function onUp(ev){
+  if(!swActive)return; swActive=false;
+  if(swMoved<12){
+    if(phase===READY)startRun();
+    else if(phase===PAUSED)phase=PLAYING;
+    else if(phase===DEAD&&Date.now()-deadAt>700&&$('wino').style.display==='none')startRun();
+  }
+}
+document.addEventListener('pointerdown',onDown);
+document.addEventListener('pointermove',onMove);
+document.addEventListener('pointerup',onUp);
+document.addEventListener('pointercancel',function(){swActive=false;});
+// keys for desktop
+document.addEventListener('keydown',function(e){
+  var map={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]};
+  var dir=map[e.key];
+  if(!dir)return;
+  e.preventDefault();
+  if(phase===READY)startRun();
+  else if(phase===PAUSED)phase=PLAYING;
+  if(phase===PLAYING)turn(st,dir);
+});
+// iOS in-app webviews ignore touch-action:none — block page scroll while playing.
+document.addEventListener('touchmove',function(e){if(phase===PLAYING)e.preventDefault();},{passive:false});
+cv.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+// pause when backgrounded
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='hidden'&&phase===PLAYING){phase=PAUSED;lastT=0;}
+});
+$('restart').onclick=function(){startRun();};
+$('again').onclick=function(){startRun();};
+// arrow keys: a press turns at once (and starts / resumes like a tap)
+[['bu',[0,-1]],['bl',[-1,0]],['bd',[0,1]],['br',[1,0]]].forEach(function(p){
+  $(p[0]).addEventListener('pointerdown',function(e){
+    e.preventDefault();
+    if(phase===READY)startRun();
+    else if(phase===PAUSED)phase=PLAYING;
+    if(phase===PLAYING)turn(st,p[1]);
+  });
+});
+addEventListener('resize',function(){layout();});
+
+layout();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Tank Siege</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--field:#eceae3;--accent:#c9a227;--accent2:#8a6d1b;--warn:#e03131;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 14px;font-weight:700;white-space:nowrap;font-size:14px}
+  #ttl{margin-right:auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win p{margin:0;color:#555;font-size:15px;line-height:1.5}
+  .win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--accent);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  .top .pill{padding:8px 11px;font-size:13px}
+  .pad{display:grid;direction:ltr;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(2,1fr);gap:12px;margin-top:-2px}
+  .pb{border-radius:14px;border:1px solid var(--bd);background:#fff;font-size:30px;font-weight:700;cursor:pointer;color:var(--ink);touch-action:none;display:flex;align-items:center;justify-content:center;padding:0;min-height:66px}
+  .pb:active{background:#f6f1dd}
+  #bu{grid-area:1/2/2/3}#bl{grid-area:2/1/3/2}#bd{grid-area:2/2/3/3}#br{grid-area:2/3/3/4}
+  #bfire{grid-area:1/4/3/6;font-size:21px;letter-spacing:.06em;background:var(--accent);color:#3a2f06;border-color:#b08f1e}
+  #bfire:active{background:var(--accent2);color:#fff}
+  /* controls: big keys, or one swipe pad in their place (body.swipe) */
+  .swp{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:150px;padding:12px 16px;border-radius:18px;border:2px dashed var(--bd);background:var(--card);color:#8c8c8c;font-weight:700;font-size:14.5px;text-align:center;line-height:1.4;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .swp b{font-size:30px;opacity:.45;margin-bottom:6px}
+  .swp.on{background:#f3f1ea;border-color:#b9b9b9}
+  body.swipe .pad{display:none}
+  body.swipe .swp{display:flex}
+  .seg{display:flex;flex:0 0 auto;border:1px solid var(--bd);border-radius:999px;background:var(--btn);padding:3px}
+  .seg button{border:0;background:transparent;border-radius:999px;padding:0 13px;min-height:44px;font-weight:700;font-size:14px;color:#8a8a8a;cursor:pointer;white-space:nowrap}
+  .seg button.on{background:var(--field);color:var(--ink)}
+  @media (max-width:360px){.seg button span{display:none}}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="ttl">Stage 1</span><span class="pill" id="en">✖ 20</span><span class="pill" id="lv">♥ 3</span><span class="pill" id="sc">★1 0</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="pad">
+    <button class="pb" id="bu">&#9650;</button>
+    <button class="pb" id="bl">&#9664;</button>
+    <button class="pb" id="br">&#9654;</button>
+    <button class="pb" id="bd">&#9660;</button>
+    <button class="pb" id="bfire">FIRE</button>
+  </div>
+  <div class="swp" id="swp"><b>&#128070;</b><span id="swph"></span></div>
+  <div class="btns">
+    <button class="btn" id="restart">Restart</button>
+    <div class="seg" id="ctl"><button data-m="buttons">&#127918;<span></span></button><button data-m="swipe">&#128070;<span></span></button></div>
+  </div>
+  <div class="help" id="helpcard"></div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Steer with the pad (or drag the field), <b>FIRE</b> to shoot (or tap the field). Hold the line for 20 tanks a stage — and never let them reach the golden core behind you: losing it ends the run instantly. Brick chips away, steel needs a 4★ gun, water stops tanks but not bullets, trees hide everything. Flashing tanks drop power-ups: ★ upgrades your gun, ◎ shield, ❄ freeze, ▦ steel walls around the core, ✹ clears the field, ♥ an extra life.",
+    vi:"<b>Cách chơi.</b> Dùng phím điều hướng (hoặc kéo trên bản đồ) để lái, <b>FIRE</b> để bắn (hoặc chạm vào bản đồ). Mỗi màn có 20 xe địch — và tuyệt đối đừng để chúng chạm tới lõi vàng phía sau bạn: mất lõi là thua ngay. Tường gạch vỡ dần, thép chỉ thủng khi súng đạt 4★, nước chặn xe nhưng không chặn đạn, cây che khuất mọi thứ. Xe nhấp nháy rơi vật phẩm: ★ nâng cấp súng, ◎ khiên, ❄ đóng băng địch, ▦ bọc thép quanh lõi, ✹ quét sạch màn, ♥ thêm mạng.",
+    ko:"<b>플레이 방법.</b> 방향 패드(또는 필드 드래그)로 이동하고 <b>FIRE</b>(또는 필드 탭)로 사격합니다. 스테이지마다 20대를 막아내되, 뒤쪽의 황금 코어에 절대 닿게 하지 마세요 — 코어를 잃으면 즉시 게임 오버입니다. 벽돌은 조금씩 부서지고, 강철은 4★ 포로만 뚫리며, 물은 전차만 막고 포탄은 통과하고, 숲은 모든 것을 가립니다. 깜빡이는 전차는 아이템을 떨어뜨립니다: ★ 포 강화, ◎ 보호막, ❄ 적 정지, ▦ 코어 강철벽, ✹ 전멸, ♥ 추가 목숨.",
+    zh:"<b>玩法。</b> 用方向键（或在场地上拖动）操控，按 <b>FIRE</b>（或点击场地）开炮。每关要挡下 20 辆敌方坦克，绝不能让它们打到你身后的金色核心——核心一毁立刻结束。砖墙会一块块碎裂，钢墙要 4★ 主炮才能击穿，水面挡坦克但挡不住炮弹，树林能藏住一切。闪烁的坦克会掉落道具：★ 强化主炮、◎ 护盾、❄ 冻结敌军、▦ 核心钢墙、✹ 全场清除、♥ 额外生命。",
+    ja:"<b>遊び方。</b> 方向パッド（またはフィールドのドラッグ）で移動し、<b>FIRE</b>（またはフィールドをタップ）で砲撃します。各ステージ20両を食い止めつつ、背後の黄金のコアには絶対に触れさせないこと — 破壊された時点で終了です。レンガは少しずつ崩れ、鋼鉄は4★の主砲でしか抜けず、水は戦車だけを止め、森はすべてを隠します。点滅する戦車はアイテムを落とします: ★ 主砲強化、◎ シールド、❄ 敵停止、▦ コアの鋼鉄壁、✹ 全滅、♥ 残機追加。",
+    ar:"<b>طريقة اللعب.</b> تحرّك بلوحة الاتجاهات (أو اسحب فوق الميدان)، واضغط <b>FIRE</b> (أو المس الميدان) لإطلاق النار. اصمد أمام 20 دبابة في كل مرحلة، ولا تدع أيًّا منها تصل إلى النواة الذهبية خلفك — فقدانها ينهي الجولة فورًا. الطوب يتفتّت تدريجيًا، والفولاذ لا يُخترق إلا بمدفع 4★، والماء يوقف الدبابات لا القذائف، والأشجار تخفي كل شيء. الدبابات الوامضة تُسقط تعزيزات: ★ ترقية المدفع، ◎ درع، ❄ تجميد العدو، ▦ جدران فولاذية حول النواة، ✹ مسح الميدان، ♥ حياة إضافية."
+  };
+  var L=pick(),el=document.getElementById("helpcard");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2 id="overttl"></h2><p id="overmsg"></p><button id="again"></button></div></div>
+<script>
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+const UI={
+  en:{"stage":"Stage","score":"Score","best":"Best","start":"Tap to start","hint":"Drag to steer · tap to fire","paused":"Paused — tap to resume","over":"The core is lost","allClear":"All stages cleared!","again":"Play again","restart":"Restart","cleared":"STAGE CLEARED","drops":{"shield":"SHIELD","freeze":"FREEZE","repair":"STEEL WALL","bomb":"WIPEOUT","star":"GUN UP","life":"+1 LIFE"}},
+  vi:{"stage":"Màn","score":"Điểm","best":"Kỷ lục","start":"Chạm để bắt đầu","hint":"Kéo để lái · chạm để bắn","paused":"Tạm dừng — chạm để tiếp tục","over":"Lõi đã bị phá","allClear":"Đã phá đảo!","again":"Chơi lại","restart":"Chơi lại","cleared":"QUA MÀN","drops":{"shield":"KHIÊN","freeze":"ĐÓNG BĂNG","repair":"TƯỜNG THÉP","bomb":"QUÉT SẠCH","star":"NÂNG SÚNG","life":"+1 MẠNG"}},
+  ko:{"stage":"스테이지","score":"점수","best":"최고","start":"탭하여 시작","hint":"드래그로 이동 · 탭으로 사격","paused":"일시정지 — 탭하여 계속","over":"코어가 파괴됐습니다","allClear":"전 스테이지 클리어!","again":"다시 하기","restart":"다시 시작","cleared":"스테이지 클리어","drops":{"shield":"보호막","freeze":"정지","repair":"강철벽","bomb":"전멸","star":"포 강화","life":"+1 목숨"}},
+  zh:{"stage":"第","score":"分数","best":"最佳","start":"点按开始","hint":"拖动操控 · 点击开炮","paused":"已暂停——点按继续","over":"核心已被摧毁","allClear":"全部通关！","again":"再玩一次","restart":"重新开始","cleared":"通关","drops":{"shield":"护盾","freeze":"冻结","repair":"钢墙","bomb":"全场清除","star":"主炮强化","life":"+1 生命"}},
+  ja:{"stage":"ステージ","score":"スコア","best":"ベスト","start":"タップでスタート","hint":"ドラッグで移動 · タップで砲撃","paused":"一時停止中 — タップで再開","over":"コアが破壊された","allClear":"全ステージクリア！","again":"もう一度","restart":"リスタート","cleared":"ステージクリア","drops":{"shield":"シールド","freeze":"停止","repair":"鋼鉄壁","bomb":"全滅","star":"主砲強化","life":"+1 残機"}},
+  ar:{"stage":"مرحلة","score":"النقاط","best":"الأفضل","start":"انقر للبدء","hint":"اسحب للتحرك · انقر لإطلاق النار","paused":"متوقف — انقر للمتابعة","over":"النواة دُمّرت","allClear":"أُنجزت كل المراحل!","again":"العب مجددًا","restart":"إعادة","cleared":"اكتملت المرحلة","drops":{"shield":"درع","freeze":"تجميد","repair":"جدار فولاذي","bomb":"مسح","star":"ترقية المدفع","life":"+1 حياة"}}
+};
+const M=UI[LANG]||UI.en;
+const $=id=>document.getElementById(id);
+// ── Controls: big keys, or one swipe pad in their place. The choice lives under
+// one key shared by every arcade game, so it follows the player between games.
+const CTRL=(function(){
+  const KEY='gobrain.bg.controls';
+  const L={en:['Buttons','Swipe'],vi:['Nút','Vuốt'],ko:['버튼','스와이프'],zh:['按键','滑动'],ja:['ボタン','スワイプ'],ar:['أزرار','سحب']}[LANG]||['Buttons','Swipe'];
+  const H={"en":"Drag to drive · tap (or a second finger) to fire","vi":"Kéo để lái · chạm (hoặc ngón thứ hai) để bắn","ko":"드래그로 이동 · 탭(또는 두 번째 손가락)으로 발사","zh":"拖动驾驶 · 点按（或第二根手指）开火","ja":"ドラッグで移動 · タップ（または2本目の指）で発射","ar":"اسحب للقيادة · انقر (أو بإصبع ثانٍ) للإطلاق"};
+  let mode='buttons';
+  try{ if(localStorage.getItem(KEY)==='swipe') mode='swipe'; }catch(e){}
+  const bs=$('ctl').getElementsByTagName('button');
+  function paint(){
+    document.body.classList.toggle('swipe',mode==='swipe');
+    for(let i=0;i<bs.length;i++) bs[i].classList.toggle('on',bs[i].getAttribute('data-m')===mode);
+  }
+  for(let i=0;i<bs.length;i++){
+    bs[i].getElementsByTagName('span')[0].textContent=' '+L[i];
+    bs[i].setAttribute('aria-label',L[i]);
+    bs[i].addEventListener('click',function(){
+      mode=this.getAttribute('data-m');
+      try{ localStorage.setItem(KEY,mode); }catch(e){}
+      paint();
+    });
+  }
+  $('swph').textContent=H[LANG]||H.en;
+  paint();
+  return {swipe:function(){ return mode==='swipe'; }};
+})();
+if(LANG==='ar'){document.documentElement.dir='rtl';document.querySelector('#wino div').dir='rtl';}
+// ── Leaderboard reporter (Go Brain) — mirrors the GBLB block in games/zip. ──
+const GBLB=(function(){
+  var GAME='tank', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(level){ var ms=t0?(Date.now()-t0):0; emit('level_complete',{level:level,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:level,durationMs:ms})}).catch(function(){}); }catch(e){} }
+  };
+})();
+// ── Pure rules — inlined verbatim from logic.mjs (the tests import that file). ──
+// logic.mjs — Tank Siege's pure rules: a deterministic, fixed-step battlefield.
+// index.html inlines this file verbatim; gen-levels.mjs and gen-levels.test.mjs
+// import it, so the shipped rules are exactly the tested rules.
+//
+// Depth, in the order a player meets it:
+//   1. terrain      — brick chips away a quarter at a time, steel needs a maxed
+//                     gun, water stops tanks but not shots, trees hide both
+//   2. the base     — you can win every duel and still lose; the brick collar
+//                     around the core is a resource you spend
+//   3. gun levels   — 1★ single slow shot → 4★ twin fast shots that cut steel
+//   4. enemy roster — basic / fast / gunner / armor, each wanting a different answer
+//   5. drops        — shield, freeze, collar-repair, bomb, star, extra life
+//   6. the ramp     — 30 stages mix terrain, roster and spawn pressure
+//
+// Geometry: 13×13 tiles of 8 units (FIELD 104). Tanks are one tile, move on a
+// half-tile (4-unit) lattice; bricks are chipped in 2×2 quarters of 4 units.
+
+const TILE = 8;
+const COLS = 13;
+const ROWS = 13;
+const FIELD = COLS * TILE;   // 104 units
+const HALF = TILE / 2;       // the movement lattice
+
+const T_EMPTY = 0, T_BRICK = 1, T_STEEL = 2, T_TREE = 3, T_WATER = 4, T_ICE = 5, T_BASE = 6;
+/** Map characters used by gen-levels.mjs and the tests. */
+const CHARS = { ".": T_EMPTY, "#": T_BRICK, "@": T_STEEL, "*": T_TREE, "~": T_WATER, "_": T_ICE, "B": T_BASE };
+
+const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // up, right, down, left
+const UP = 0, RIGHT = 1, DOWN = 2, LEFT = 3;
+
+const BASE_COL = 6, BASE_ROW = 12;
+/** The eight brick cells that form the base's collar (what `repair` rebuilds). */
+const COLLAR = [
+  [5, 11], [6, 11], [7, 11], [5, 12], [7, 12],
+];
+
+// ── Tank kinds ──────────────────────────────────────────────────────────────
+// speed is units/tick, cool is ticks between shots, hp is hits to kill.
+const KINDS = {
+  player: { speed: 0.75, cool: 22, hp: 1, bullet: 2.0, score: 0, c: "#c9a227" },
+  basic:  { speed: 0.42, cool: 78, hp: 1, bullet: 1.6, score: 100, c: "#9aa0a6" },
+  fast:   { speed: 1.05, cool: 70, hp: 1, bullet: 1.8, score: 200, c: "#3aa7c2" },
+  gunner: { speed: 0.55, cool: 40, hp: 1, bullet: 3.0, score: 300, c: "#2f9e44" },
+  armor:  { speed: 0.55, cool: 60, hp: 4, bullet: 2.0, score: 400, c: "#e03131" },
+};
+const ENEMY_KINDS = ["basic", "fast", "gunner", "armor"];
+/** Armour's paint changes as it is worn down — a readable health bar. */
+const ARMOR_COLORS = ["#e03131", "#e8590c", "#f59f00", "#40c057"];
+
+const DROPS = ["shield", "freeze", "repair", "bomb", "star", "life"];
+
+const CONFIG = {
+  lives: 3,
+  maxOnField: 4,          // enemies alive at once
+  spawnEveryTicks: 190,   // gap between reinforcements
+  spawnBlinkTicks: 60,    // the star-shaped materialise, during which nothing can hit
+  shieldTicks: 600,
+  freezeTicks: 600,
+  repairTicks: 900,       // how long the collar stays steel after a repair drop
+  respawnShieldTicks: 240,
+  dropScore: 500,
+  clearBonusPerLife: 200,
+  starMax: 4,             // 4★ cuts steel
+  thinkTicks: 34,         // enemy re-decides this often
+  tick: 1 / 60,
+};
+
+/** Deterministic PRNG — a seed reproduces a whole battle (used by the probes). */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ── Terrain ─────────────────────────────────────────────────────────────────
+const tileAt = (w, c, r) => (c < 0 || r < 0 || c >= COLS || r >= ROWS ? T_STEEL : w.tiles[r * COLS + c]);
+const qbit = (qc, qr) => 1 << ((qr & 1) * 2 + (qc & 1));
+
+/** Is the quarter at (qc,qr) solid to a tank? Water blocks, trees and ice do not. */
+function solidForTank(w, qc, qr) {
+  const c = qc >> 1, r = qr >> 1, t = tileAt(w, c, r);
+  if (t === T_BRICK) return (w.brick[r * COLS + c] & qbit(qc, qr)) !== 0;
+  return t === T_STEEL || t === T_WATER || t === T_BASE;
+}
+/** …and to a bullet? Water and trees let shots through; bricks stop them. */
+function solidForBullet(w, qc, qr) {
+  const c = qc >> 1, r = qr >> 1, t = tileAt(w, c, r);
+  if (t === T_BRICK) return (w.brick[r * COLS + c] & qbit(qc, qr)) !== 0;
+  return t === T_STEEL || t === T_BASE;
+}
+
+/** Rect (x,y,w,h) in units → the quarter cells it touches. */
+function quarters(x, y, w, h) {
+  const out = [];
+  const q0c = Math.floor(x / (TILE / 2)), q1c = Math.ceil((x + w) / (TILE / 2)) - 1;
+  const q0r = Math.floor(y / (TILE / 2)), q1r = Math.ceil((y + h) / (TILE / 2)) - 1;
+  for (let qr = q0r; qr <= q1r; qr++) for (let qc = q0c; qc <= q1c; qc++) out.push([qc, qr]);
+  return out;
+}
+
+function tankBlocked(w, x, y) {
+  if (x < 0 || y < 0 || x + TILE > FIELD || y + TILE > FIELD) return true;
+  // shrink by a hair so a tank exactly flush with a wall isn't counted as inside it
+  for (const [qc, qr] of quarters(x + 0.01, y + 0.01, TILE - 0.02, TILE - 0.02))
+    if (solidForTank(w, qc, qr)) return true;
+  return false;
+}
+
+const overlap = (a, b, size = TILE) =>
+  Math.abs(a.x - b.x) < size - 0.001 && Math.abs(a.y - b.y) < size - 0.001;
+
+// ── World ───────────────────────────────────────────────────────────────────
+/**
+ * @param level {{map:string[], roster:string[], flashAt:number[], name?:string}}
+ * `roster` is the spawn queue (kind per enemy); `flashAt` marks the queue indices
+ * that arrive flashing — killing one drops a power-up.
+ */
+function createWorld(level, rand, carry = {}) {
+  const tiles = new Uint8Array(COLS * ROWS);
+  const brick = new Uint8Array(COLS * ROWS);
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const ch = level.map[r] ? level.map[r][c] || "." : ".";
+      const t = CHARS[ch] === undefined ? T_EMPTY : CHARS[ch];
+      tiles[r * COLS + c] = t;
+      if (t === T_BRICK) brick[r * COLS + c] = 0b1111;
+    }
+  }
+  tiles[BASE_ROW * COLS + BASE_COL] = T_BASE;
+
+  const w = {
+    tiles, brick,
+    level: level.n || 1,
+    tick: 0,
+    queue: level.roster.slice(),
+    flashAt: new Set(level.flashAt || []),
+    spawned: 0,
+    total: level.roster.length,
+    tanks: [],
+    bullets: [],
+    drop: null,
+    lives: carry.lives === undefined ? CONFIG.lives : carry.lives,
+    stars: carry.stars || 1,
+    score: carry.score || 0,
+    kills: 0,
+    freeze: 0,
+    repair: 0,
+    baseAlive: true,
+    over: false, won: false,
+    spawnT: 0, spawnSlot: 0,
+    nextId: 1,
+    events: [],
+  };
+  spawnPlayer(w, CONFIG.respawnShieldTicks);
+  // first wave arrives at once so the stage opens with pressure, not a pause
+  for (let i = 0; i < CONFIG.maxOnField && w.queue.length; i++) trySpawnEnemy(w, rand);
+  return w;
+}
+
+const PLAYER_START = { x: 4 * TILE, y: 12 * TILE };
+const SPAWN_POINTS = [{ x: 0, y: 0 }, { x: 6 * TILE, y: 0 }, { x: 12 * TILE, y: 0 }];
+
+function spawnPlayer(w, shield) {
+  const t = {
+    id: w.nextId++, side: "p", kind: "player",
+    x: PLAYER_START.x, y: PLAYER_START.y, dir: UP,
+    hp: 1, cool: 0, shield: shield || 0, blink: 0, slide: 0, moving: false, flash: false,
+  };
+  w.tanks.push(t);
+  return t;
+}
+const player = (w) => w.tanks.find((t) => t.side === "p") || null;
+const enemies = (w) => w.tanks.filter((t) => t.side === "e");
+
+function trySpawnEnemy(w, rand) {
+  if (!w.queue.length) return null;
+  if (enemies(w).length >= CONFIG.maxOnField) return null;
+  const slots = [w.spawnSlot % 3, (w.spawnSlot + 1) % 3, (w.spawnSlot + 2) % 3];
+  for (const s of slots) {
+    const p = SPAWN_POINTS[s];
+    if (w.tanks.some((t) => overlap(t, p))) continue;
+    const kind = w.queue.shift();
+    const idx = w.spawned++;
+    w.spawnSlot = s + 1;
+    const t = {
+      id: w.nextId++, side: "e", kind,
+      x: p.x, y: p.y, dir: DOWN,
+      hp: KINDS[kind].hp, cool: 0, shield: 0, blink: CONFIG.spawnBlinkTicks,
+      slide: 0, moving: true, flash: w.flashAt.has(idx), think: 0, want: DOWN,
+    };
+    w.tanks.push(t);
+    return t;
+  }
+  return null;
+}
+
+// ── Movement ────────────────────────────────────────────────────────────────
+const snap = (v) => Math.round(v / HALF) * HALF;
+
+/** Move a tank one tick toward `dir`; returns true if it actually moved. */
+function driveTank(w, t, dir, speed) {
+  if (t.dir !== dir) {
+    // turning re-aligns the perpendicular axis to the half-tile lattice, which
+    // is what makes threading a one-tile gap feel fair
+    if (dir === UP || dir === DOWN) { const nx = snap(t.x); if (!tankBlocked(w, nx, t.y) && !blockedByTank(w, t, nx, t.y)) t.x = nx; }
+    else { const ny = snap(t.y); if (!tankBlocked(w, t.x, ny) && !blockedByTank(w, t, t.x, ny)) t.y = ny; }
+    t.dir = dir;
+  }
+  const [dx, dy] = DIRS[dir];
+  const nx = t.x + dx * speed, ny = t.y + dy * speed;
+  if (tankBlocked(w, nx, ny) || blockedByTank(w, t, nx, ny)) { t.moving = false; return false; }
+  t.x = nx; t.y = ny; t.moving = true;
+  return true;
+}
+function blockedByTank(w, self, x, y) {
+  for (const o of w.tanks) {
+    if (o === self || o.dead) continue;
+    if (o.blink > 0 && o.side !== self.side) continue; // materialising tanks are ghosts
+    if (overlap({ x, y }, o)) return true;
+  }
+  return false;
+}
+/** Is this tank standing on ice? (ice makes it coast for a few ticks) */
+function onIce(w, t) {
+  const c = Math.floor((t.x + TILE / 2) / TILE), r = Math.floor((t.y + TILE / 2) / TILE);
+  return tileAt(w, c, r) === T_ICE;
+}
+
+// ── Shooting ────────────────────────────────────────────────────────────────
+function bulletsOf(w, t) { return w.bullets.filter((b) => b.owner === t.id); }
+function maxBullets(w, t) { return t.side === "p" ? (w.stars >= 3 ? 2 : 1) : 1; }
+function bulletPower(w, t) { return t.side === "p" && w.stars >= CONFIG.starMax ? 2 : 1; }
+
+function fire(w, t) {
+  if (t.cool > 0 || t.dead) return null;
+  if (bulletsOf(w, t).length >= maxBullets(w, t)) return null;
+  const k = KINDS[t.kind];
+  const speed = t.side === "p" ? (w.stars >= 2 ? k.bullet * 1.35 : k.bullet) : k.bullet;
+  const [dx, dy] = DIRS[t.dir];
+  const b = {
+    owner: t.id, side: t.side, dir: t.dir, speed,
+    x: t.x + TILE / 2 - 1 + dx * (TILE / 2), y: t.y + TILE / 2 - 1 + dy * (TILE / 2),
+    power: bulletPower(w, t),
+  };
+  w.bullets.push(b);
+  t.cool = k.cool - (t.side === "p" ? Math.min(10, (w.stars - 1) * 4) : 0);
+  return b;
+}
+
+/** Chip a brick quarter (or shatter a steel tile with a 4★ shot). */
+function damageTile(w, qc, qr, power) {
+  const c = qc >> 1, r = qr >> 1;
+  if (c < 0 || r < 0 || c >= COLS || r >= ROWS) return false;
+  const i = r * COLS + c, t = w.tiles[i];
+  if (t === T_BRICK) {
+    w.brick[i] &= ~qbit(qc, qr);
+    // a shot also clears the quarter behind the one it hit, so a hole opens fast
+    if (w.brick[i] === 0) w.tiles[i] = T_EMPTY;
+    return true;
+  }
+  if (t === T_STEEL) { if (power >= 2) { w.tiles[i] = T_EMPTY; return true; } return false; }
+  if (t === T_BASE) { w.baseAlive = false; w.over = true; w.events.push({ type: "base" }); return true; }
+  return false;
+}
+
+// ── The step ────────────────────────────────────────────────────────────────
+/**
+ * One 1/60 s step. `input` is `{dir:0..3|null, fire:boolean}`.
+ * Returns the world's `events` for this tick (the shell turns them into sfx).
+ */
+function step(w, input, rand) {
+  w.events = [];
+  if (w.over) return w.events;
+  w.tick++;
+  if (w.freeze > 0) w.freeze--;
+  if (w.repair > 0 && --w.repair === 0) restoreCollar(w, T_BRICK);
+
+  const p = player(w);
+  if (p) {
+    if (p.cool > 0) p.cool--;
+    if (p.shield > 0) p.shield--;
+    const k = KINDS.player;
+    const speed = k.speed * (1 + (w.stars - 1) * 0.07);
+    if (input && input.dir !== null && input.dir !== undefined) {
+      driveTank(w, p, input.dir, speed);
+      p.slide = onIce(w, p) ? 14 : 0;
+    } else if (p.slide > 0) {
+      p.slide--;                       // ice: coast on for a beat after letting go
+      if (!driveTank(w, p, p.dir, speed * 0.7)) p.slide = 0;
+    } else p.moving = false;
+    if (input && input.fire) fire(w, p);
+  }
+
+  for (const t of enemies(w)) {
+    if (t.blink > 0) { t.blink--; continue; }
+    if (w.freeze > 0) { t.moving = false; continue; }
+    if (t.cool > 0) t.cool--;
+    thinkEnemy(w, t, rand);
+    driveTank(w, t, t.want, KINDS[t.kind].speed);
+    if (shouldFire(w, t, rand)) fire(w, t);
+  }
+
+  stepBullets(w);
+
+  // reinforcements
+  w.spawnT++;
+  if (w.queue.length && w.spawnT >= CONFIG.spawnEveryTicks) { if (trySpawnEnemy(w, rand)) w.spawnT = 0; }
+
+  // power-up pickup
+  if (w.drop && p && !p.dead && overlap(p, w.drop)) { applyDrop(w, w.drop.kind); w.drop = null; }
+
+  if (!w.queue.length && enemies(w).length === 0 && !w.over) {
+    w.over = true; w.won = true;
+    w.score += w.lives * CONFIG.clearBonusPerLife;
+    w.events.push({ type: "clear" });
+  }
+  return w.events;
+}
+
+function stepBullets(w) {
+  const dead = new Set();
+  for (const b of w.bullets) {
+    const [dx, dy] = DIRS[b.dir];
+    // sub-step so a fast bullet can't tunnel through a one-quarter wall
+    const steps = Math.max(1, Math.ceil(b.speed / 1.5));
+    const s = b.speed / steps;
+    for (let i = 0; i < steps && !dead.has(b); i++) {
+      b.x += dx * s; b.y += dy * s;
+      if (b.x < 0 || b.y < 0 || b.x + 2 > FIELD || b.y + 2 > FIELD) { dead.add(b); w.events.push({ type: "wall", x: b.x, y: b.y }); break; }
+      let hit = false;
+      for (const [qc, qr] of quarters(b.x, b.y, 2, 2)) {
+        if (solidForBullet(w, qc, qr)) { damageTile(w, qc, qr, b.power); hit = true; }
+      }
+      if (hit) { dead.add(b); w.events.push({ type: "wall", x: b.x, y: b.y }); break; }
+      for (const t of w.tanks) {
+        if (t.dead || t.id === b.owner || t.blink > 0) continue;
+        if (t.side === b.side) continue;                 // no friendly fire
+        if (Math.abs(t.x + 4 - (b.x + 1)) < 4.6 && Math.abs(t.y + 4 - (b.y + 1)) < 4.6) {
+          dead.add(b); hitTank(w, t, b); break;
+        }
+      }
+    }
+  }
+  // bullets that meet head-on cancel out
+  for (let i = 0; i < w.bullets.length; i++) {
+    for (let j = i + 1; j < w.bullets.length; j++) {
+      const a = w.bullets[i], b = w.bullets[j];
+      if (a.side === b.side || dead.has(a) || dead.has(b)) continue;
+      if (Math.abs(a.x - b.x) < 3 && Math.abs(a.y - b.y) < 3) { dead.add(a); dead.add(b); }
+    }
+  }
+  if (dead.size) w.bullets = w.bullets.filter((b) => !dead.has(b));
+}
+
+function hitTank(w, t, b) {
+  if (t.side === "p") {
+    if (t.shield > 0) return;
+    if (w.stars > 1) { w.stars--; w.events.push({ type: "downgrade" }); t.shield = 90; return; }
+    killPlayer(w, t);
+    return;
+  }
+  t.hp--;
+  if (t.hp > 0) { w.events.push({ type: "clang", x: t.x, y: t.y }); return; }
+  t.dead = true;
+  w.tanks = w.tanks.filter((x) => x !== t);
+  w.kills++;
+  w.score += KINDS[t.kind].score;
+  w.events.push({ type: "boom", x: t.x, y: t.y, score: KINDS[t.kind].score });
+  if (t.flash) dropPowerUp(w, t);
+}
+
+function killPlayer(w, t) {
+  t.dead = true;
+  w.tanks = w.tanks.filter((x) => x !== t);
+  w.events.push({ type: "boom", x: t.x, y: t.y, player: true });
+  w.lives--;
+  w.stars = 1;
+  if (w.lives < 0) { w.over = true; w.events.push({ type: "dead" }); return; }
+  spawnPlayer(w, CONFIG.respawnShieldTicks);
+}
+
+// ── Power-ups ───────────────────────────────────────────────────────────────
+function dropPowerUp(w, t) {
+  const r = w.__rand ? w.__rand() : ((w.tick * 9301 + 49297) % 233280) / 233280;
+  const pool = w.stars >= CONFIG.starMax ? DROPS.filter((d) => d !== "star") : DROPS;
+  const kind = pool[Math.floor(r * pool.length) % pool.length];
+  // land it away from the walls so it is always reachable
+  const c = 1 + Math.floor(r * 1000) % (COLS - 2), rr = 1 + Math.floor(r * 7919) % (ROWS - 3);
+  w.drop = { kind, x: c * TILE, y: rr * TILE };
+  w.events.push({ type: "drop", kind });
+}
+
+function applyDrop(w, kind) {
+  const p = player(w);
+  w.score += CONFIG.dropScore;
+  switch (kind) {
+    case "shield": if (p) p.shield = CONFIG.shieldTicks; break;
+    case "freeze": w.freeze = CONFIG.freezeTicks; break;
+    case "repair": restoreCollar(w, T_STEEL); w.repair = CONFIG.repairTicks; break;
+    case "bomb":
+      for (const t of enemies(w)) { w.score += KINDS[t.kind].score; w.kills++; w.events.push({ type: "boom", x: t.x, y: t.y }); }
+      w.tanks = w.tanks.filter((t) => t.side === "p");
+      break;
+    case "star": w.stars = Math.min(CONFIG.starMax, w.stars + 1); break;
+    case "life": w.lives++; break;
+  }
+  w.events.push({ type: "pickup", kind });
+}
+
+function restoreCollar(w, type) {
+  for (const [c, r] of COLLAR) {
+    const i = r * COLS + c;
+    w.tiles[i] = type;
+    w.brick[i] = type === T_BRICK ? 0b1111 : 0;
+  }
+}
+
+// ── Enemy AI ────────────────────────────────────────────────────────────────
+/** Aligned on a shooting lane with the target, and facing it? */
+function aimed(t, target) {
+  const dx = target.x - t.x, dy = target.y - t.y;
+  if (Math.abs(dx) < 4 && ((dy > 0 && t.dir === DOWN) || (dy < 0 && t.dir === UP))) return true;
+  if (Math.abs(dy) < 4 && ((dx > 0 && t.dir === RIGHT) || (dx < 0 && t.dir === LEFT))) return true;
+  return false;
+}
+function towards(t, tx, ty) {
+  const dx = tx - t.x, dy = ty - t.y;
+  if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? RIGHT : LEFT;
+  return dy > 0 ? DOWN : UP;
+}
+function thinkEnemy(w, t, rand) {
+  const r = rand || Math.random;
+  t.think = (t.think || 0) - 1;
+  const stuck = !t.moving;
+  if (t.think > 0 && !stuck) return;
+  t.think = CONFIG.thinkTicks + Math.floor(r() * CONFIG.thinkTicks);
+  const p = player(w);
+  // Hunters go for the base; the rest split their attention. A gunner that can
+  // see the player prefers the duel — that is what makes it dangerous.
+  const roll = r();
+  let want;
+  if (roll < 0.22) want = towards(t, BASE_COL * TILE, BASE_ROW * TILE);
+  else if (p && roll < 0.62) want = towards(t, p.x, p.y);
+  else want = Math.floor(r() * 4) % 4;
+  if (stuck && want === t.dir) want = (t.dir + (r() < 0.5 ? 1 : 3)) % 4;
+  t.want = want;
+}
+function shouldFire(w, t, rand) {
+  const r = rand || Math.random;
+  const p = player(w);
+  if (p && aimed(t, p)) return true;
+  // Only a tank that has actually worked its way down to the core takes a shot
+  // at it — otherwise a spawn point sitting in the base's column would end the
+  // stage before the player had a move.
+  const bx = BASE_COL * TILE, by = BASE_ROW * TILE;
+  if (aimed(t, { x: bx, y: by }) && Math.abs(t.x - bx) + Math.abs(t.y - by) < 6 * TILE) return true;
+  return r() < 0.02;
+}
+
+// ── Readouts for the shell / the probes ─────────────────────────────────────
+function summary(w) {
+  return {
+    tick: w.tick, score: w.score, kills: w.kills, lives: w.lives, stars: w.stars,
+    left: w.queue.length + enemies(w).length, baseAlive: w.baseAlive, won: w.won, over: w.over,
+  };
+}
+
+// ── Shell: canvas, input, stage flow ───────────────────────────────────────
+const KEY='gobrain.tank.stage', BKEY='gobrain.tank.best';
+const READY=0,PLAYING=1,CLEAR=2,DEAD=3,PAUSED=4;
+let DATA=null, stageIdx=0, w=null, rand=Math.random, phase=READY;
+let carry={lives:CONFIG.lives, stars:1, score:0};
+let booms=[], pops=[], shakeT=0, banner=null, bannerT=0;
+
+const cv=$('cv'), ctx=cv.getContext('2d');
+let u=4, dpr=1;
+function layout(){
+  const cssW=Math.min(cv.parentNode.clientWidth, 460);
+  dpr=Math.min(3, window.devicePixelRatio||1);
+  u=cssW/FIELD;
+  cv.width=Math.round(cssW*dpr); cv.height=Math.round(cssW*dpr);
+  cv.style.height=cssW+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  draw();
+}
+
+// ── stage flow ─────────────────────────────────────────────────────────────
+function levelAt(i){ return DATA.levels[Math.min(i, DATA.levels.length-1)]; }
+function loadStage(i){
+  stageIdx=i;
+  rand=mulberry32(0xB0A7 ^ (i*2654435761));
+  w=createWorld(levelAt(i), rand, carry);
+  w.__rand=rand;
+  booms=[]; pops=[]; shakeT=0;
+  hud();
+}
+function startRun(){
+  carry={lives:CONFIG.lives, stars:1, score:0};
+  $('wino').style.display='none';
+  loadStage(+(localStorage.getItem(KEY)||0));
+  phase=PLAYING; GBLB.start(); lastT=0;
+}
+function nextStage(){
+  carry={lives:w.lives, stars:w.stars, score:w.score};
+  const n=stageIdx+1;
+  if(n>=DATA.levels.length){ finish(true); return; }
+  try{localStorage.setItem(KEY,String(n));}catch(e){}
+  loadStage(n); phase=PLAYING; GBLB.start();
+}
+function finish(all){
+  phase=DEAD;
+  const best=Math.max(+(localStorage.getItem(BKEY)||0), stageIdx+1);
+  try{localStorage.setItem(BKEY,String(best));}catch(e){}
+  try{localStorage.setItem(KEY,'0');}catch(e){}
+  $('overttl').textContent=all?M.allClear:M.over;
+  $('overmsg').textContent=M.stage+' '+(stageIdx+1)+' · '+M.score+' '+w.score+' · '+M.best+' '+best;
+  $('again').textContent=M.again;
+  $('wino').style.display='grid';
+  hud();
+}
+function hud(){
+  if(!w)return;
+  $('ttl').textContent=M.stage+' '+(stageIdx+1);
+  $('en').textContent='✖ '+(w.queue.length+enemies(w).length);
+  $('lv').textContent='♥ '+Math.max(0,w.lives);
+  $('sc').textContent='★'+w.stars+'  '+w.score;
+}
+
+// ── input ──────────────────────────────────────────────────────────────────
+let held=null, fireHeld=false, fireTap=false;
+function press(dir){ held=dir; }
+function release(dir){ if(held===dir) held=null; }
+[['bu',UP],['br',RIGHT],['bd',DOWN],['bl',LEFT]].forEach(function(p){
+  const el=$(p[0]);
+  el.addEventListener('pointerdown',function(e){e.preventDefault(); tapStart(); press(p[1]);});
+  ['pointerup','pointercancel','pointerleave'].forEach(function(k){ el.addEventListener(k,function(){release(p[1]);}); });
+});
+const bf=$('bfire');
+bf.addEventListener('pointerdown',function(e){e.preventDefault(); tapStart(); fireHeld=true; fireTap=true;});
+['pointerup','pointercancel','pointerleave'].forEach(function(k){ bf.addEventListener(k,function(){fireHeld=false;}); });
+
+// canvas + swipe pad: drag to steer, tap to fire — the whole game is playable
+// one-thumbed, and a second finger fires without breaking the drive
+let gx=0,gy=0,gt=0,gMoved=0,gOn=false,gId=null,gEl=null;
+[cv,$('swp')].forEach(function(el){
+  el.addEventListener('pointerdown',function(e){
+    if(el!==cv) e.preventDefault();
+    if(gOn&&e.pointerId!==gId){ fireTap=true; return; }
+    gx=e.clientX; gy=e.clientY; gt=Date.now(); gMoved=0; gOn=true; gId=e.pointerId; gEl=el;
+    el.classList.add('on');
+    if(el.setPointerCapture)try{el.setPointerCapture(e.pointerId);}catch(_){}
+    tapStart();
+  });
+  el.addEventListener('pointermove',function(e){
+    if(!gOn||e.pointerId!==gId)return;
+    const dx=e.clientX-gx, dy=e.clientY-gy;
+    gMoved=Math.max(gMoved,Math.abs(dx),Math.abs(dy));
+    if(gMoved<14)return;
+    held=Math.abs(dx)>Math.abs(dy)?(dx>0?RIGHT:LEFT):(dy>0?DOWN:UP);
+  });
+  el.addEventListener('pointerup',gEnd);
+  el.addEventListener('pointercancel',function(e){ if(e.pointerId!==gId)return; gOn=false; held=null; el.classList.remove('on'); });
+  if(el!==cv) el.addEventListener('touchmove',function(e){ e.preventDefault(); },{passive:false});
+});
+function gEnd(e){ if(!gOn||e.pointerId!==gId)return; gOn=false;
+  if(gEl) gEl.classList.remove('on');
+  if(gMoved<12&&Date.now()-gt<320) fireTap=true;
+  held=null;
+}
+
+function tapStart(){
+  if(phase===READY&&DATA){ startRun(); return; }
+  if(phase===PAUSED){ phase=PLAYING; lastT=0; }
+}
+const KEYDIR={ArrowUp:UP,ArrowRight:RIGHT,ArrowDown:DOWN,ArrowLeft:LEFT,w:UP,d:RIGHT,s:DOWN,a:LEFT,W:UP,D:RIGHT,S:DOWN,A:LEFT};
+document.addEventListener('keydown',function(e){
+  if(e.key==='p'||e.key==='P'){ if(phase===PLAYING)phase=PAUSED; else if(phase===PAUSED){phase=PLAYING;lastT=0;} e.preventDefault(); return; }
+  if(e.key===' '||e.key==='Enter'){ e.preventDefault(); if(phase===READY||phase===PAUSED){tapStart();return;} fireHeld=true; fireTap=true; return; }
+  const d=KEYDIR[e.key]; if(d===undefined)return;
+  e.preventDefault();
+  if(phase===READY){tapStart();return;}
+  held=d;
+});
+document.addEventListener('keyup',function(e){
+  if(e.key===' '||e.key==='Enter'){ fireHeld=false; return; }
+  const d=KEYDIR[e.key]; if(d!==undefined&&held===d) held=null;
+});
+document.addEventListener('touchmove',function(e){if(phase===PLAYING)e.preventDefault();},{passive:false});
+cv.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&phase===PLAYING){phase=PAUSED;lastT=0;} });
+$('restart').textContent=M.restart;
+$('restart').onclick=function(){ try{localStorage.setItem(KEY,'0');}catch(e){} startRun(); };
+$('again').onclick=startRun;
+addEventListener('resize',layout);
+
+// ── painting ───────────────────────────────────────────────────────────────
+const C_FIELD='#23221f', C_GRID='#2c2b27';
+function px(v){ return v*u; }
+function rr(x,y,ww,hh,r,c){ ctx.fillStyle=c; ctx.beginPath();
+  if(ctx.roundRect){ctx.roundRect(x,y,ww,hh,r);}else{
+    ctx.moveTo(x+r,y);ctx.lineTo(x+ww-r,y);ctx.quadraticCurveTo(x+ww,y,x+ww,y+r);
+    ctx.lineTo(x+ww,y+hh-r);ctx.quadraticCurveTo(x+ww,y+hh,x+ww-r,y+hh);
+    ctx.lineTo(x+r,y+hh);ctx.quadraticCurveTo(x,y+hh,x,y+hh-r);
+    ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);}
+  ctx.closePath(); ctx.fill();
+}
+function drawBrickQuarter(x,y,s){
+  ctx.fillStyle='#a5511f'; ctx.fillRect(x,y,s,s);
+  ctx.fillStyle='#7d3a13';
+  const h=s/2;
+  ctx.fillRect(x,y+h-Math.max(1,s*0.06),s,Math.max(1,s*0.06));
+  ctx.fillRect(x+h-Math.max(1,s*0.06),y,Math.max(1,s*0.06),h);
+  ctx.fillRect(x,y+h,Math.max(1,s*0.06),h);
+  ctx.fillStyle='rgba(255,255,255,.13)'; ctx.fillRect(x,y,s,Math.max(1,s*0.09));
+}
+function drawTerrain(){
+  ctx.fillStyle=C_FIELD; ctx.fillRect(0,0,px(FIELD),px(FIELD));
+  ctx.fillStyle=C_GRID;
+  for(let i=1;i<COLS;i++){ ctx.fillRect(Math.round(px(i*TILE)),0,1,px(FIELD)); ctx.fillRect(0,Math.round(px(i*TILE)),px(FIELD),1); }
+  const q=px(TILE/2);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const t=w.tiles[r*COLS+c], X=px(c*TILE), Y=px(r*TILE), S=px(TILE);
+    if(t===T_BRICK){
+      const m=w.brick[r*COLS+c];
+      for(let k=0;k<4;k++) if(m&(1<<k)) drawBrickQuarter(X+(k&1)*q, Y+(k>>1)*q, q);
+    } else if(t===T_STEEL){
+      ctx.fillStyle='#b9bec4'; ctx.fillRect(X,Y,S,S);
+      ctx.fillStyle='#8d9399'; ctx.fillRect(X+S*0.5,Y,S*0.5,S*0.5); ctx.fillRect(X,Y+S*0.5,S*0.5,S*0.5);
+      ctx.fillStyle='rgba(255,255,255,.5)'; ctx.fillRect(X,Y,S,Math.max(1,S*0.08));
+    } else if(t===T_WATER){
+      ctx.fillStyle='#12588f'; ctx.fillRect(X,Y,S,S);
+      ctx.fillStyle='#2f86c9';
+      const ph=(w.tick*0.05+c+r)%2<1?0:S*0.25;
+      ctx.fillRect(X,Y+S*0.2+ph,S,Math.max(1,S*0.12));
+      ctx.fillRect(X,Y+S*0.62-ph,S,Math.max(1,S*0.12));
+    } else if(t===T_ICE){
+      ctx.fillStyle='#cfe6f2'; ctx.fillRect(X,Y,S,S);
+      ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=Math.max(1,S*0.06);
+      ctx.beginPath(); ctx.moveTo(X+S*0.2,Y+S*0.2); ctx.lineTo(X+S*0.8,Y+S*0.8);
+      ctx.moveTo(X+S*0.8,Y+S*0.2); ctx.lineTo(X+S*0.2,Y+S*0.8); ctx.stroke();
+    } else if(t===T_BASE){ drawCore(X,Y,S); }
+  }
+}
+function drawCore(X,Y,S){
+  if(!w.baseAlive){
+    ctx.fillStyle='#5a5751'; ctx.fillRect(X+S*0.1,Y+S*0.55,S*0.8,S*0.35);
+    ctx.fillStyle='#7a766e'; ctx.fillRect(X+S*0.3,Y+S*0.35,S*0.2,S*0.2);
+    return;
+  }
+  ctx.fillStyle='#efe3b0'; ctx.fillRect(X+S*0.12,Y+S*0.72,S*0.76,S*0.18);
+  ctx.fillStyle=ACC;
+  ctx.beginPath(); ctx.moveTo(X+S*0.5,Y+S*0.08); ctx.lineTo(X+S*0.88,Y+S*0.72);
+  ctx.lineTo(X+S*0.12,Y+S*0.72); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#fff8dc';
+  ctx.beginPath(); ctx.arc(X+S*0.5,Y+S*0.5,S*0.16,0,7); ctx.fill();
+}
+function tankColor(t){
+  if(t.side==='p') return [ACC,'#e3c14e','#f0d97a','#ffe9a8'][Math.min(3,w.stars-1)];
+  if(t.kind==='armor') return ARMOR_COLORS[Math.max(0,Math.min(3,t.hp-1))];
+  return KINDS[t.kind].c;
+}
+function drawTank(t){
+  const S=px(TILE), X=px(t.x), Y=px(t.y), c=tankColor(t);
+  if(t.blink>0 && Math.floor(t.blink/5)%2===0){ drawSpawnStar(X,Y,S); return; }
+  if(t.blink>0){ drawSpawnStar(X,Y,S); return; }
+  ctx.save(); ctx.translate(X+S/2,Y+S/2); ctx.rotate(t.dir*Math.PI/2);
+  // treads
+  ctx.fillStyle='rgba(0,0,0,.45)';
+  ctx.fillRect(-S*0.46,-S*0.44,S*0.22,S*0.88); ctx.fillRect(S*0.24,-S*0.44,S*0.22,S*0.88);
+  ctx.fillStyle=c;
+  ctx.fillRect(-S*0.46,-S*0.44,S*0.22,S*0.88); ctx.fillRect(S*0.24,-S*0.44,S*0.22,S*0.88);
+  ctx.fillStyle='rgba(0,0,0,.28)';
+  for(let i=-3;i<=3;i++){ ctx.fillRect(-S*0.46,i*S*0.13,S*0.22,Math.max(1,S*0.05)); ctx.fillRect(S*0.24,i*S*0.13,S*0.22,Math.max(1,S*0.05)); }
+  // hull + turret + barrel
+  ctx.fillStyle=c; ctx.fillRect(-S*0.26,-S*0.34,S*0.52,S*0.68);
+  ctx.fillStyle='rgba(255,255,255,.22)'; ctx.fillRect(-S*0.26,-S*0.34,S*0.52,Math.max(1,S*0.1));
+  ctx.fillStyle=c; ctx.fillRect(-S*0.09,-S*0.62,S*0.18,S*0.38);
+  ctx.fillStyle='rgba(0,0,0,.35)'; ctx.beginPath(); ctx.arc(0,0,S*0.2,0,7); ctx.fill();
+  ctx.fillStyle=c; ctx.beginPath(); ctx.arc(0,0,S*0.16,0,7); ctx.fill();
+  ctx.restore();
+  if(t.flash && Math.floor(w.tick/12)%2===0){
+    ctx.strokeStyle='#ffffff'; ctx.lineWidth=Math.max(1,S*0.08);
+    ctx.strokeRect(X+S*0.08,Y+S*0.08,S*0.84,S*0.84);
+  }
+  if(t.shield>0){
+    ctx.strokeStyle=t.shield>90||Math.floor(t.shield/4)%2===0?'#7fd3ff':'rgba(127,211,255,.3)';
+    ctx.lineWidth=Math.max(1.5,S*0.1);
+    ctx.beginPath(); ctx.arc(X+S/2,Y+S/2,S*0.56,0,7); ctx.stroke();
+  }
+}
+function drawSpawnStar(X,Y,S){
+  const k=Math.floor(w.tick/6)%4, r=S*(0.18+k*0.11);
+  ctx.strokeStyle='#e9e4d8'; ctx.lineWidth=Math.max(1.5,S*0.09);
+  ctx.beginPath();
+  for(let i=0;i<4;i++){ const a=i*Math.PI/2+Math.PI/4;
+    ctx.moveTo(X+S/2,Y+S/2); ctx.lineTo(X+S/2+Math.cos(a)*r, Y+S/2+Math.sin(a)*r); }
+  ctx.moveTo(X+S/2-r,Y+S/2); ctx.lineTo(X+S/2+r,Y+S/2);
+  ctx.moveTo(X+S/2,Y+S/2-r); ctx.lineTo(X+S/2,Y+S/2+r);
+  ctx.stroke();
+}
+function drawTrees(){
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(w.tiles[r*COLS+c]!==T_TREE)continue;
+    const X=px(c*TILE), Y=px(r*TILE), S=px(TILE);
+    ctx.fillStyle='#1f7a33'; ctx.fillRect(X,Y,S,S);
+    ctx.fillStyle='#2f9e44';
+    for(let i=0;i<4;i++) ctx.beginPath(),ctx.arc(X+S*(0.28+(i&1)*0.45),Y+S*(0.28+(i>>1)*0.45),S*0.26,0,7),ctx.fill();
+  }
+}
+const DROP_ICON={shield:'◎',freeze:'❄',repair:'▦',bomb:'✹',star:'★',life:'♥'};
+function drawDrop(){
+  if(!w.drop)return;
+  const S=px(TILE), X=px(w.drop.x), Y=px(w.drop.y);
+  if(Math.floor(w.tick/8)%2===0)return;
+  rr(X,Y,S,S,S*0.2,'#f7f3e8');
+  ctx.fillStyle=ACC2; ctx.font='700 '+Math.round(S*0.62)+'px -apple-system,system-ui,sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(DROP_ICON[w.drop.kind]||'?', X+S/2, Y+S*0.56);
+}
+function drawBullets(){
+  ctx.fillStyle='#fdf6e3';
+  for(const b of w.bullets) ctx.fillRect(px(b.x),px(b.y),Math.max(2,px(2)),Math.max(2,px(2)));
+}
+function drawFX(){
+  for(const b of booms){
+    const k=1-b.t/b.max, S=px(TILE)*(0.4+k*1.1);
+    ctx.globalAlpha=Math.max(0,b.t/b.max);
+    ctx.fillStyle=b.player?'#ffd166':'#ff8f3f';
+    ctx.beginPath(); ctx.arc(px(b.x)+px(TILE)/2,px(b.y)+px(TILE)/2,S/2,0,7); ctx.fill();
+    ctx.fillStyle='#fff3d6';
+    ctx.beginPath(); ctx.arc(px(b.x)+px(TILE)/2,px(b.y)+px(TILE)/2,S/4,0,7); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const p of pops){
+    ctx.globalAlpha=Math.max(0,p.t/40);
+    ctx.fillStyle='#fff'; ctx.font='700 '+Math.round(px(TILE)*0.5)+'px -apple-system,system-ui,sans-serif';
+    ctx.fillText(p.text, px(p.x)+px(TILE)/2, px(p.y)-p.rise);
+    ctx.globalAlpha=1;
+  }
+}
+function drawBanner(){
+  if(!banner)return;
+  const W=px(FIELD);
+  ctx.globalAlpha=Math.min(1,bannerT/25);
+  ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(0,W*0.38,W,W*0.24);
+  ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='800 '+Math.round(W*0.075)+'px -apple-system,system-ui,sans-serif';
+  ctx.fillText(banner, W/2, W*0.5);
+  ctx.globalAlpha=1;
+}
+function drawOverlay(){
+  const W=px(FIELD);
+  ctx.fillStyle='rgba(20,19,17,.72)'; ctx.fillRect(0,0,W,W);
+  ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='800 '+Math.round(W*0.075)+'px -apple-system,system-ui,sans-serif';
+  ctx.fillText(phase===PAUSED?M.paused:M.start, W/2, W*0.46);
+  ctx.font='500 '+Math.round(W*0.042)+'px -apple-system,system-ui,sans-serif';
+  ctx.fillStyle='rgba(255,255,255,.75)';
+  ctx.fillText(M.hint, W/2, W*0.56);
+}
+function draw(){
+  if(!ctx)return;
+  const W=px(FIELD);
+  ctx.clearRect(0,0,cv.width,cv.height);
+  if(!w){ ctx.fillStyle=C_FIELD; ctx.fillRect(0,0,W,W); return; }
+  ctx.save();
+  if(shakeT>0){ const k=shakeT/12; ctx.translate((Math.random()-0.5)*px(2)*k,(Math.random()-0.5)*px(2)*k); }
+  drawTerrain();
+  drawDrop();
+  for(const t of w.tanks) drawTank(t);
+  drawBullets();
+  drawTrees();
+  drawFX();
+  ctx.restore();
+  drawBanner();
+  if(phase===READY||phase===PAUSED) drawOverlay();
+}
+
+// ── loop ───────────────────────────────────────────────────────────────────
+let lastT=0, acc=0;
+function frame(ts){
+  requestAnimationFrame(frame);
+  if(!lastT) lastT=ts;
+  let dt=Math.min(120, ts-lastT); lastT=ts;
+  if(shakeT>0)shakeT--;
+  if(bannerT>0&&--bannerT===0)banner=null;
+  for(const b of booms) b.t--;
+  booms=booms.filter(b=>b.t>0);
+  for(const p of pops){ p.t--; p.rise+=0.6; }
+  pops=pops.filter(p=>p.t>0);
+
+  if(phase===PLAYING&&w){
+    acc+=dt;
+    let guard=0;
+    while(acc>=1000/60 && guard++<6){
+      acc-=1000/60;
+      const inp={dir:held, fire:fireHeld||fireTap};
+      fireTap=false;
+      const evs=step(w, inp, rand);
+      for(const e of evs) onEvent(e);
+      if(w.over) break;
+    }
+    if(w.over){
+      if(w.won){ banner=M.cleared; bannerT=90; phase=CLEAR;
+        GBLB.report(stageIdx+1);
+        setTimeout(function(){ if(phase===CLEAR) nextStage(); },1200);
+      } else { banner=null; finish(false); }
+    }
+    hud();
+  }
+  draw();
+}
+function onEvent(e){
+  if(e.type==='boom'){ booms.push({x:e.x,y:e.y,t:22,max:22,player:!!e.player}); shakeT=e.player?12:6;
+    if(e.score) pops.push({x:e.x,y:e.y,t:40,rise:0,text:'+'+e.score}); }
+  else if(e.type==='base'){ shakeT=16; booms.push({x:BASE_COL*TILE,y:BASE_ROW*TILE,t:30,max:30,player:true}); }
+  else if(e.type==='pickup'){ pops.push({x:w.drop?w.drop.x:BASE_COL*TILE,y:BASE_ROW*TILE,t:40,rise:0,text:M.drops[e.kind]||''}); }
+  else if(e.type==='downgrade'){ shakeT=8; }
+}
+
+// ── boot ───────────────────────────────────────────────────────────────────
+const ACC=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()||'#c9a227';
+const ACC2=getComputedStyle(document.documentElement).getPropertyValue('--accent2').trim()||'#8a6d1b';
+$('ttl').textContent=M.stage+' 1';
+layout();
+requestAnimationFrame(frame);
+fetch('./levels.json').then(function(r){return r.json();}).then(function(d){
+  DATA=d;
+  loadStage(Math.min(+(localStorage.getItem(KEY)||0), d.levels.length-1));
+  phase=READY; draw();
+}).catch(function(){
+  DATA={levels:[{n:1,map:['.............','.............','.............','.............','.............','.............','.............','.............','.............','.............','.............','.....###.....','.....#B#.....'],roster:['basic','basic','basic','basic','basic','basic'],flashAt:[2]}]};
+  loadStage(0); phase=READY; draw();
+});
+</script>
+</body>
+</html>

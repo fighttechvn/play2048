@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Five Letters</title>
+<style>
+  :root{
+    --bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--bd:#d0d0d0;--btn:#fff;--muted:#777;
+    --ok:#3b5bdb;--near:#e8a33d;--off:#8b909b;--tilebd:#c6c8cd;--key:#e6e4df;--keyink:#1a1a1a
+  }
+  @media (prefers-color-scheme: dark){
+    :root{--bg:#15171c;--card:#1d2027;--ink:#e9ecf1;--bd:#363a44;--btn:#252934;--muted:#8b93a3;
+      --ok:#4c6ef5;--near:#e8a33d;--off:#3f4450;--tilebd:#454a56;--key:#3a3f4b;--keyink:#e9ecf1}
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overscroll-behavior:none;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  #wrap{max-width:520px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;gap:12px;
+    padding:calc(62px + var(--saa-top, env(safe-area-inset-top,0px)))
+            calc(16px + var(--saa-right, env(safe-area-inset-right,0px)))
+            calc(16px + var(--saa-bottom, env(safe-area-inset-bottom,0px)))
+            calc(16px + var(--saa-left, env(safe-area-inset-left,0px)))}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 14px;
+    font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+  #lvl{margin-right:auto}
+  .modes{display:flex;gap:6px;background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:4px}
+  .modes button{flex:1;border:0;background:transparent;color:var(--muted);font-weight:700;font-size:14px;
+    padding:10px 4px;border-radius:999px;cursor:pointer;min-height:40px}
+  .modes button.on{background:var(--ok);color:#fff}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px;direction:ltr}
+  #grid{display:flex;flex-direction:column;gap:6px;max-width:330px;margin:0 auto}
+  .row{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+  .row.shake{animation:shk .5s}
+  @keyframes shk{10%,90%{transform:translateX(-2px)}20%,80%{transform:translateX(4px)}
+    30%,50%,70%{transform:translateX(-6px)}40%,60%{transform:translateX(6px)}}
+  .tile{aspect-ratio:1;border:2px solid var(--tilebd);border-radius:10px;display:flex;align-items:center;
+    justify-content:center;font-size:clamp(20px,7vw,30px);font-weight:800;text-transform:uppercase;
+    background:var(--card);color:var(--ink);transition:transform .22s ease;user-select:none}
+  .tile.fill{border-color:var(--muted);animation:pop .12s ease}
+  @keyframes pop{0%{transform:scale(.85)}100%{transform:scale(1)}}
+  .tile.flip{transform:rotateX(90deg)}
+  .tile.ok,.tile.near,.tile.off{border-color:transparent;color:#fff}
+  .tile.ok{background:var(--ok)}
+  .tile.near{background:var(--near)}
+  .tile.off{background:var(--off)}
+  #kb{display:flex;flex-direction:column;gap:6px;direction:ltr}
+  .krow{display:flex;gap:5px;justify-content:center}
+  .key{flex:1;max-width:44px;min-width:0;min-height:50px;border:0;border-radius:8px;background:var(--key);
+    color:var(--keyink);font-weight:700;font-size:15px;text-transform:uppercase;cursor:pointer;padding:0}
+  .key.wide{max-width:72px;flex:1.6;font-size:12px}
+  .key.ok{background:var(--ok);color:#fff}
+  .key.near{background:var(--near);color:#fff}
+  .key.off{background:var(--off);color:#fff}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;
+    font-size:14.5px;color:var(--muted);line-height:1.5}
+  .help b{color:var(--ink)}
+  .help .cok{color:var(--ok)}.help .cnear{color:var(--near)}
+  #toast{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);
+    background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;font-weight:700;font-size:14px;
+    opacity:0;pointer-events:none;transition:opacity .25s;z-index:30;white-space:nowrap}
+  #toast.show{opacity:1}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.55);
+    z-index:9;padding:24px}
+  .win.show{display:grid}
+  .win .card{background:var(--card);color:var(--ink);border-radius:18px;padding:24px 26px;text-align:center;
+    max-width:340px;width:100%}
+  .win h2{margin:0 0 4px;font-size:24px}
+  .win .word{display:inline-block;margin:6px 0 2px;padding:6px 16px;border-radius:10px;background:var(--ok);
+    color:#fff;font-weight:800;font-size:20px;letter-spacing:3px;text-transform:uppercase}
+  .stats{display:flex;gap:6px;margin:14px 0 4px}
+  .stats div{flex:1;background:var(--bg);border-radius:10px;padding:8px 2px}
+  .stats b{display:block;font-size:20px}
+  .stats span{font-size:10.5px;color:var(--muted)}
+  #dist{margin:10px 0 2px;text-align:left}
+  #dist .dr{display:flex;align-items:center;gap:6px;margin:3px 0;font-size:12px;font-weight:700}
+  #dist .bar{height:16px;border-radius:4px;background:var(--off);color:#fff;font-size:11px;line-height:16px;
+    text-align:right;padding:0 5px;min-width:16px}
+  #dist .bar.me{background:var(--ok)}
+  .wbtns{display:flex;gap:8px;margin-top:14px}
+  .wbtns button{flex:1;padding:13px 6px;border:0;border-radius:999px;font-weight:700;font-size:15px;cursor:pointer}
+  #share{background:var(--ok);color:#fff}
+  #again{background:var(--btn);border:1px solid var(--bd);color:var(--ink)}
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;pointer-events:none}
+  #tut.on{display:block}
+  #tut.block{pointer-events:auto}
+  #tutBg{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.42);pointer-events:none}
+  #tutHole{position:fixed;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.42);
+    transition:left .22s ease,top .22s ease,width .22s ease,height .22s ease;pointer-events:none}
+  #tutCard{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 40px);max-width:300px;
+    pointer-events:auto;background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(16px) saturate(1.5);
+    backdrop-filter:blur(16px) saturate(1.5);border:1px solid rgba(255,255,255,.55);border-radius:16px;
+    padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .demo{display:flex;gap:4px;margin-top:10px}
+  #tutCard .demo i{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+    font-style:normal;font-weight:800;color:#fff;font-size:15px;text-transform:uppercase}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#5a5a5a;font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;min-height:44px;margin:-4px -8px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:12px}.top>*+*{margin-left:8px}.modes>*+*{margin-left:6px}
+  .krow>*+*{margin-left:5px}.stats>*+*{margin-left:6px}.wbtns>*+*{margin-left:8px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">Five Letters</span><span class="pill" id="daynum"></span></div>
+  <div class="modes"><button id="m_daily" class="on">Daily</button><button id="m_practice">Practice</button></div>
+  <div class="board"><div id="grid"></div></div>
+  <div id="kb"></div>
+  <div class="help" id="help"></div>
+</div>
+<div id="toast"></div>
+<div class="win" id="wino"><div class="card">
+  <h2 id="wtitle"></h2>
+  <div><span class="word" id="wword"></span></div>
+  <div class="stats">
+    <div><b id="s_played">0</b><span id="l_played"></span></div>
+    <div><b id="s_pct">0</b><span id="l_pct"></span></div>
+    <div><b id="s_streak">0</b><span id="l_streak"></span></div>
+    <div><b id="s_max">0</b><span id="l_max"></span></div>
+  </div>
+  <div id="dist"></div>
+  <div class="wbtns"><button id="share"></button><button id="again"></button></div>
+</div></div>
+<div id="tut">
+  <div id="tutBg"></div>
+  <div id="tutHole"></div>
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="demo" id="tutDemo" style="display:none"></div>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script src="./words.js"></script>
+<script>
+const STATSKEY="word5.stats";
+const TUTKEY="word5.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})();
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+
+// ── Leaderboard reporter (Go Brain) — score game: POST {gameId, score, level:1} on win ──
+const GBLB=(function(){
+  var GAME='word5', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    over:function(score,win){ var ms=t0?(Date.now()-t0):0; t0=0; emit('game_over',{score:score,win:win?1:0});
+      if(!win||!score) return; var tok=token(); if(!tok) return;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,score:score,level:1,durationMs:ms})}).catch(function(){}); }catch(e){} }
+  };
+})();
+
+// ── i18n ────────────────────────────────────────────────────────────────────
+const HELP={
+  en:'<b>How to play.</b> Guess the hidden 5-letter English word in 6 tries. After each guess the tiles show how close you were: <b class="cok">blue</b> = right letter, right spot · <b class="cnear">amber</b> = in the word, another spot · gray = not in the word. <b>Daily</b> is the same word for everyone, once a day; <b>Practice</b> is endless.',
+  vi:'<b>Cách chơi.</b> Đoán từ tiếng Anh 5 chữ cái ẩn trong 6 lượt. Sau mỗi lượt, các ô cho biết bạn gần đúng đến đâu: <b class="cok">xanh</b> = đúng chữ, đúng chỗ · <b class="cnear">hổ phách</b> = có trong từ, khác chỗ · xám = không có trong từ. <b>Hằng ngày</b>: cùng một từ cho mọi người, mỗi ngày một lần; <b>Luyện tập</b>: chơi không giới hạn.',
+  ko:'<b>플레이 방법.</b> 숨겨진 5글자 영어 단어를 6번 안에 맞혀 보세요. 매 추측 후 타일 색이 힌트를 줍니다: <b class="cok">파랑</b> = 맞는 글자, 맞는 위치 · <b class="cnear">호박색</b> = 단어에 있지만 다른 위치 · 회색 = 단어에 없음. <b>데일리</b>는 하루 한 번 모두 같은 단어, <b>연습</b>은 무제한입니다.',
+  zh:'<b>玩法。</b> 在 6 次机会内猜出隐藏的 5 字母英文单词。每次猜测后，格子颜色会提示：<b class="cok">蓝色</b> = 字母正确且位置正确 · <b class="cnear">琥珀色</b> = 单词中有此字母但位置不同 · 灰色 = 单词中没有。<b>每日</b>：所有人同一个词，每天一次；<b>练习</b>：无限次。',
+  ja:'<b>遊び方。</b> 隠された5文字の英単語を6回以内に当てましょう。推測のたびにタイルの色がヒントになります：<b class="cok">青</b> = 正しい文字・正しい位置 · <b class="cnear">琥珀色</b> = 単語に含まれるが別の位置 · グレー = 単語に含まれない。<b>デイリー</b>は1日1回、全員同じ単語。<b>練習</b>は無制限です。',
+  ar:'<b>طريقة اللعب.</b> خمّن الكلمة الإنجليزية المخفية المكوّنة من 5 أحرف خلال 6 محاولات. بعد كل تخمين تُظهر الألوان مدى قربك: <b class="cok">أزرق</b> = حرف صحيح في مكانه · <b class="cnear">كهرماني</b> = موجود في الكلمة لكن في مكان آخر · رمادي = غير موجود. <b>اليومية</b>: كلمة واحدة للجميع مرة يوميًا؛ <b>التدريب</b>: بلا حدود.'
+};
+const UI={
+  en:{daily:"Daily",practice:"Practice",share:"Share",again:"New word",toPractice:"Practice",notEnough:"Not enough letters",
+      notWord:"Not in word list",copied:"Copied!",win:"Solved! 🎉",lose:"So close!",doneDaily:"Come back tomorrow!",
+      played:"Played",pct:"Win %",streak:"Streak",max:"Best",title:"Five Letters"},
+  vi:{daily:"Hằng ngày",practice:"Luyện tập",share:"Chia sẻ",again:"Từ mới",toPractice:"Luyện tập",notEnough:"Chưa đủ chữ cái",
+      notWord:"Không có trong từ điển",copied:"Đã sao chép!",win:"Tuyệt vời! 🎉",lose:"Tiếc quá!",doneDaily:"Hẹn mai quay lại!",
+      played:"Đã chơi",pct:"Thắng %",streak:"Chuỗi",max:"Tốt nhất",title:"Five Letters"},
+  ko:{daily:"데일리",practice:"연습",share:"공유",again:"새 단어",toPractice:"연습",notEnough:"글자가 부족해요",
+      notWord:"단어 목록에 없어요",copied:"복사됨!",win:"정답! 🎉",lose:"아쉬워요!",doneDaily:"내일 다시 만나요!",
+      played:"플레이",pct:"승률 %",streak:"연속",max:"최고",title:"Five Letters"},
+  zh:{daily:"每日",practice:"练习",share:"分享",again:"新词",toPractice:"练习",notEnough:"字母不够",
+      notWord:"不在词表中",copied:"已复制！",win:"猜对了！🎉",lose:"差一点！",doneDaily:"明天再来！",
+      played:"已玩",pct:"胜率 %",streak:"连胜",max:"最佳",title:"Five Letters"},
+  ja:{daily:"デイリー",practice:"練習",share:"シェア",again:"新しい単語",toPractice:"練習",notEnough:"文字が足りません",
+      notWord:"単語リストにありません",copied:"コピーしました！",win:"正解！🎉",lose:"おしい！",doneDaily:"また明日！",
+      played:"プレイ",pct:"勝率 %",streak:"連勝",max:"最高",title:"Five Letters"},
+  ar:{daily:"اليومية",practice:"تدريب",share:"مشاركة",again:"كلمة جديدة",toPractice:"تدريب",notEnough:"الأحرف غير كافية",
+      notWord:"ليست في قائمة الكلمات",copied:"تم النسخ!",win:"أحسنت! 🎉",lose:"قريب جدًا!",doneDaily:"عُد غدًا!",
+      played:"لعبت",pct:"نسبة الفوز",streak:"سلسلة",max:"الأفضل",title:"Five Letters"}
+};
+const S=UI[LANG]||UI.en;
+(function(){var el=document.getElementById('help');el.innerHTML=HELP[LANG]||HELP.en;if(LANG==='ar'){el.dir='rtl';}})();
+
+// ── word data ───────────────────────────────────────────────────────────────
+const ANSWERS=window.WORD5_ANSWERS||["about"];
+const ACCEPT=(function(){var s={};var i;for(i=0;i<ANSWERS.length;i++)s[ANSWERS[i]]=1;
+  var a=window.WORD5_ACCEPT||[];for(i=0;i<a.length;i++)s[a[i]]=1;return s;})();
+const DAILY_POOL=Math.min(2000,ANSWERS.length);   // daily words come from the most common slice
+const EPOCH=20454;                                 // days( 2026-01-01 ) → daily #1
+function mulberry32(a){return function(){a|=0;a=(a+0x6d2b79f5)|0;var t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return ((t^(t>>>14))>>>0)/4294967296;};}
+function utcDay(){return Math.floor(Date.now()/86400000);}
+function dailyWord(day){var r=mulberry32((day*2654435761)^0x9e3779b9);return ANSWERS[Math.floor(r()*DAILY_POOL)];}
+
+// ── state ───────────────────────────────────────────────────────────────────
+let mode="daily";                 // 'daily' | 'practice'
+let answer="", guesses=[], cur="", done=false, won=false, revealing=false;
+let day=utcDay(), dayNum=day-EPOCH+1;
+let keyState={};                  // letter → 'ok'|'near'|'off'
+const $=function(id){return document.getElementById(id);};
+const gridEl=$('grid'), kbEl=$('kb');
+
+function dailyKey(){return "word5.daily."+day;}
+function loadStats(){try{var s=JSON.parse(localStorage.getItem(STATSKEY));if(s&&s.dist)return s;}catch(e){}
+  return {played:0,won:0,streak:0,maxStreak:0,lastWinDay:0,dist:[0,0,0,0,0,0]};}
+function saveStats(s){try{localStorage.setItem(STATSKEY,JSON.stringify(s));}catch(e){}}
+
+// ── board / keyboard build ──────────────────────────────────────────────────
+(function(){
+  for(var r=0;r<6;r++){var row=document.createElement('div');row.className='row';
+    for(var c=0;c<5;c++){var t=document.createElement('div');t.className='tile';row.appendChild(t);}
+    gridEl.appendChild(row);}
+  var rows=["qwertyuiop","asdfghjkl","*zxcvbnm<"];
+  for(var i=0;i<rows.length;i++){var kr=document.createElement('div');kr.className='krow';
+    for(var j=0;j<rows[i].length;j++){var ch=rows[i][j];var b=document.createElement('button');
+      if(ch==='*'){b.className='key wide';b.textContent='ENTER';b.dataset.k='enter';}
+      else if(ch==='<'){b.className='key wide';b.textContent='⌫';b.dataset.k='back';}
+      else{b.className='key';b.textContent=ch;b.dataset.k=ch;}
+      kr.appendChild(b);}
+    kbEl.appendChild(kr);}
+  kbEl.addEventListener('pointerdown',function(e){
+    var t=e.target;while(t&&t!==kbEl&&!t.dataset.k)t=t.parentNode;
+    if(!t||t===kbEl)return;e.preventDefault();press(t.dataset.k);});
+})();
+
+// feedback for a guess vs answer: array of 'ok'|'near'|'off' (two-pass for duplicates)
+function score(guess,ans){
+  var res=['off','off','off','off','off'],used=[0,0,0,0,0],i,j;
+  for(i=0;i<5;i++)if(guess[i]===ans[i]){res[i]='ok';used[i]=1;}
+  for(i=0;i<5;i++){if(res[i]==='ok')continue;
+    for(j=0;j<5;j++){if(!used[j]&&guess[i]===ans[j]){res[i]='near';used[j]=1;break;}}}
+  return res;
+}
+
+function paintRow(r,guess,res,instant,thenFn){
+  var row=gridEl.children[r];
+  function setTile(c){var t=row.children[c];t.textContent=guess[c];t.className='tile '+res[c];}
+  if(instant){for(var c=0;c<5;c++)setTile(c);if(thenFn)thenFn();return;}
+  var c2=0;
+  (function flipOne(){
+    if(c2>=5){if(thenFn)thenFn();return;}
+    var t=row.children[c2],cc=c2;
+    t.classList.add('flip');
+    setTimeout(function(){setTile(cc);var tt=row.children[cc];tt.classList.add('flip');
+      // force style flush then un-flip so the transition plays
+      void tt.offsetWidth;tt.classList.remove('flip');},220);
+    c2++;setTimeout(flipOne,260);
+  })();
+}
+function paintCur(){
+  var row=gridEl.children[guesses.length];if(!row)return;
+  for(var c=0;c<5;c++){var t=row.children[c];
+    if(c<cur.length){t.textContent=cur[c];t.className='tile fill';}
+    else{t.textContent='';t.className='tile';}}
+}
+function paintKeys(){
+  var btns=kbEl.querySelectorAll('.key');
+  for(var i=0;i<btns.length;i++){var k=btns[i].dataset.k;if(k==='enter'||k==='back')continue;
+    btns[i].className='key'+(keyState[k]?' '+keyState[k]:'');}
+}
+function mergeKeys(guess,res){
+  var rank={off:1,near:2,ok:3};
+  for(var i=0;i<5;i++){var k=guess[i];
+    if(!keyState[k]||rank[res[i]]>rank[keyState[k]])keyState[k]=res[i];}
+}
+function toast(msg,ms){var t=$('toast');t.textContent=msg;t.classList.add('show');
+  clearTimeout(toast._t);toast._t=setTimeout(function(){t.classList.remove('show');},ms||1600);}
+
+// ── game flow ───────────────────────────────────────────────────────────────
+function newGame(){
+  guesses=[];cur="";done=false;won=false;revealing=false;keyState={};
+  day=utcDay();dayNum=day-EPOCH+1;
+  if(mode==='daily'){
+    answer=dailyWord(day);$('daynum').textContent='#'+dayNum;$('daynum').style.display='';
+    var saved=null;try{saved=JSON.parse(localStorage.getItem(dailyKey()));}catch(e){}
+    if(saved&&saved.guesses){
+      for(var i=0;i<saved.guesses.length;i++){var g=saved.guesses[i],res=score(g,answer);
+        paintRow(i,g,res,true);mergeKeys(g,res);guesses.push(g);}
+      done=!!saved.done;won=!!saved.win;
+    }
+  } else {
+    answer=ANSWERS[Math.floor(Math.random()*ANSWERS.length)];
+    $('daynum').style.display='none';
+  }
+  for(var r=guesses.length;r<6;r++){var row=gridEl.children[r];
+    for(var c=0;c<5;c++){row.children[c].textContent='';row.children[c].className='tile';}}
+  paintKeys();
+  $('lvl').textContent=S.title;
+  $('m_daily').className=mode==='daily'?'on':'';
+  $('m_practice').className=mode==='practice'?'on':'';
+  if(!done)GBLB.start();
+  maybeStartTut();
+}
+function saveDaily(){
+  if(mode!=='daily')return;
+  try{localStorage.setItem(dailyKey(),JSON.stringify({guesses:guesses,done:done,win:won}));}catch(e){}
+}
+function press(k){
+  if(tutActive)return;
+  if(revealing)return;
+  if(done){openResult();return;}
+  if(k==='back'){cur=cur.slice(0,-1);paintCur();return;}
+  if(k==='enter'){submit();return;}
+  if(cur.length>=5)return;
+  cur+=k;paintCur();
+}
+function submit(){
+  var row=gridEl.children[guesses.length];
+  if(cur.length<5){shake(row);toast(S.notEnough);return;}
+  if(!ACCEPT[cur]){shake(row);toast(S.notWord);return;}
+  var g=cur,res=score(g,answer);
+  guesses.push(g);cur="";revealing=true;
+  saveDaily();
+  paintRow(guesses.length-1,g,res,false,function(){
+    mergeKeys(g,res);paintKeys();revealing=false;
+    if(g===answer){finish(true);}
+    else if(guesses.length>=6){finish(false);}
+  });
+}
+function shake(row){if(!row)return;row.classList.remove('shake');void row.offsetWidth;row.classList.add('shake');}
+function finish(win){
+  done=true;won=win;saveDaily();
+  var st=loadStats();
+  st.played++;
+  if(win){st.won++;st.dist[guesses.length-1]++;
+    if(mode==='daily'){st.streak=(st.lastWinDay===day-1)?st.streak+1:1;st.lastWinDay=day;
+      if(st.streak>st.maxStreak)st.maxStreak=st.streak;}}
+  else if(mode==='daily'){st.streak=0;}
+  saveStats(st);
+  GBLB.over(win?(7-guesses.length)*100:0,win);
+  setTimeout(openResult,win?350:650);
+}
+function openResult(){
+  var st=loadStats();
+  $('wtitle').textContent=won?S.win:S.lose;
+  $('wword').textContent=answer;
+  $('s_played').textContent=st.played;
+  $('s_pct').textContent=st.played?Math.round(st.won*100/st.played):0;
+  $('s_streak').textContent=st.streak;
+  $('s_max').textContent=st.maxStreak;
+  $('l_played').textContent=S.played;$('l_pct').textContent=S.pct;
+  $('l_streak').textContent=S.streak;$('l_max').textContent=S.max;
+  var d=$('dist');d.innerHTML='';
+  var mx=1,i;for(i=0;i<6;i++)if(st.dist[i]>mx)mx=st.dist[i];
+  for(i=0;i<6;i++){var dr=document.createElement('div');dr.className='dr';
+    var n=document.createElement('span');n.textContent=(i+1);dr.appendChild(n);
+    var bar=document.createElement('div');bar.className='bar'+((won&&i===guesses.length-1)?' me':'');
+    bar.style.width=Math.max(8,Math.round(st.dist[i]*100/mx))+'%';bar.textContent=st.dist[i];
+    dr.appendChild(bar);d.appendChild(dr);}
+  $('share').textContent=S.share;
+  $('again').textContent=mode==='daily'?S.toPractice:S.again;
+  $('wino').classList.add('show');
+}
+$('again').onclick=function(){
+  $('wino').classList.remove('show');
+  if(mode==='daily'){mode='practice';}
+  newGame();
+};
+$('wino').addEventListener('pointerdown',function(e){if(e.target===this)this.classList.remove('show');});
+
+// ── share ───────────────────────────────────────────────────────────────────
+function shareText(){
+  var head='GoBrain Five Letters'+(mode==='daily'?' #'+dayNum:'')+' '+(won?guesses.length:'X')+'/6';
+  var rows=[],i,j;
+  for(i=0;i<guesses.length;i++){var res=score(guesses[i],answer),r='';
+    for(j=0;j<5;j++)r+=res[j]==='ok'?'🟦':res[j]==='near'?'🟨':'⬜';
+    rows.push(r);}
+  return head+'\n\n'+rows.join('\n');
+}
+$('share').onclick=function(){
+  var txt=shareText();
+  if(navigator.share){navigator.share({text:txt}).catch(function(){});return;}
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(function(){toast(S.copied);},function(){legacyCopy(txt);});
+  }else legacyCopy(txt);
+};
+function legacyCopy(txt){
+  var ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.focus();ta.select();
+  try{document.execCommand('copy');toast(S.copied);}catch(e){}
+  document.body.removeChild(ta);
+}
+
+// ── mode switching ──────────────────────────────────────────────────────────
+$('m_daily').onclick=function(){if(mode!=='daily'){mode='daily';newGame();if(done)openResult();}};
+$('m_practice').onclick=function(){if(mode!=='practice'){mode='practice';newGame();}};
+
+// physical keyboard
+window.addEventListener('keydown',function(e){
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  var k=e.key;
+  if(k==='Enter')press('enter');
+  else if(k==='Backspace'||k==='Delete')press('back');
+  else if(/^[a-zA-Z]$/.test(k))press(k.toLowerCase());
+});
+
+// ── first-run tutorial (2 steps) ────────────────────────────────────────────
+let tutActive=false,tutStep=0;
+const TUT_T={
+  en:{s1t:"Welcome to Five Letters",s1b:"Guess the hidden 5-letter word. You have 6 tries — type with the keyboard below.",
+      s2t:"Read the colors",s2b:"Blue: right letter, right spot. Amber: in the word, another spot. Gray: not in the word.",
+      next:"Next",play:"Play",skip:"Skip"},
+  vi:{s1t:"Chào mừng đến Five Letters",s1b:"Đoán từ 5 chữ cái ẩn. Bạn có 6 lượt — gõ bằng bàn phím bên dưới.",
+      s2t:"Đọc màu sắc",s2b:"Xanh: đúng chữ, đúng chỗ. Hổ phách: có trong từ, khác chỗ. Xám: không có trong từ.",
+      next:"Tiếp",play:"Chơi",skip:"Bỏ qua"},
+  ko:{s1t:"Five Letters에 오신 것을 환영합니다",s1b:"숨겨진 5글자 단어를 맞혀 보세요. 기회는 6번 — 아래 키보드로 입력하세요.",
+      s2t:"색을 읽어요",s2b:"파랑: 맞는 글자, 맞는 위치. 호박색: 단어에 있지만 다른 위치. 회색: 단어에 없음.",
+      next:"다음",play:"플레이",skip:"건너뛰기"},
+  zh:{s1t:"欢迎来到 Five Letters",s1b:"猜出隐藏的 5 字母单词。你有 6 次机会——用下方键盘输入。",
+      s2t:"看懂颜色",s2b:"蓝色：字母对、位置对。琥珀色：单词里有、位置不同。灰色：单词里没有。",
+      next:"下一步",play:"开始玩",skip:"跳过"},
+  ja:{s1t:"Five Letters へようこそ",s1b:"隠された5文字の単語を当てましょう。チャンスは6回 — 下のキーボードで入力します。",
+      s2t:"色を読む",s2b:"青：正しい文字・正しい位置。琥珀色：単語にあるが別の位置。グレー：単語にない。",
+      next:"次へ",play:"プレイ",skip:"スキップ"},
+  ar:{s1t:"مرحبًا بك في Five Letters",s1b:"خمّن الكلمة المخفية من 5 أحرف. لديك 6 محاولات — اكتب بلوحة المفاتيح أدناه.",
+      s2t:"اقرأ الألوان",s2b:"أزرق: حرف صحيح في مكانه. كهرماني: موجود في الكلمة بمكان آخر. رمادي: غير موجود.",
+      next:"التالي",play:"العب",skip:"تخطّي"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+const STEPS=[
+  {t:M.s1t,b:M.s1b,btn:M.next,target:function(){return gridEl;},demo:false},
+  {t:M.s2t,b:M.s2b,btn:M.play,target:function(){return gridEl;},demo:true}
+];
+function maybeStartTut(){
+  if(!TUT_ON)return;
+  if(localStorage.getItem(TUTKEY))return;
+  if(tutActive||done||guesses.length)return;
+  tutActive=true;tutStep=0;renderTut();
+}
+function renderTut(){
+  var s=STEPS[tutStep],tut=$('tut');
+  tut.classList.add('on');tut.classList.add('block');
+  if(LANG==='ar')$('tutCard').dir='rtl';
+  $('tutTitle').textContent=s.t;$('tutBody').textContent=s.b;
+  $('tutSkip').textContent=M.skip;$('tutNext').textContent=s.btn;
+  var demo=$('tutDemo');
+  if(s.demo){demo.style.display='flex';demo.innerHTML='';
+    var word='ROBIN',cls=['ok','near','off','off','near'];
+    for(var i=0;i<5;i++){var d=document.createElement('i');d.textContent=word[i];
+      d.style.background=cls[i]==='ok'?'#3b5bdb':cls[i]==='near'?'#e8a33d':'#8b909b';demo.appendChild(d);}}
+  else demo.style.display='none';
+  var tgt=s.target&&s.target();
+  if(tgt){var r=tgt.getBoundingClientRect(),pad=8,h=$('tutHole');
+    $('tutBg').style.display='none';h.style.display='block';
+    h.style.left=(r.left-pad)+'px';h.style.top=(r.top-pad)+'px';
+    h.style.width=(r.width+pad*2)+'px';h.style.height=(r.height+pad*2)+'px';
+    var card=$('tutCard');card.style.transform='translateX(-50%)';
+    var below=r.top<innerHeight*0.5,ch=card.offsetHeight;
+    var top=below?r.bottom+16:r.top-16-ch;
+    card.style.top=Math.max(12,Math.min(top,innerHeight-ch-12))+'px';}
+}
+function nextTut(){tutStep++;if(tutStep>=STEPS.length){endTut();return;}renderTut();}
+function endTut(){tutActive=false;localStorage.setItem(TUTKEY,'1');$('tut').classList.remove('on');}
+$('tutNext').onclick=nextTut;
+$('tutSkip').onclick=endTut;
+
+// iOS 12 / old WebKit: no CSS aspect-ratio — keep tiles square via JS.
+if(!(window.CSS&&CSS.supports&&CSS.supports("aspect-ratio","1"))){
+  var squareUp=function(){var ts=gridEl.querySelectorAll('.tile');
+    for(var i=0;i<ts.length;i++)ts[i].style.height=ts[i].clientWidth+'px';};
+  window.addEventListener('resize',squareUp);
+  setTimeout(squareUp,0);setTimeout(squareUp,120);
+}
+window.addEventListener('resize',function(){if(tutActive)renderTut();});
+
+$('m_daily').textContent=S.daily;
+$('m_practice').textContent=S.practice;
+newGame();
+if(mode==='daily'&&done)setTimeout(openResult,300);
+</script>
+</body>
+</html>

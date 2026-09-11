@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Scan 25</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--acc:#3b5bdb;--btn:#fff;--bd:#d0d0d0;--red:#e03131;--gold:#f5a623}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  .pill.err{color:var(--red);border-color:var(--red);background:#fff5f5}
+  .targetrow{display:flex;justify-content:center}
+  #target{font-size:17px;border-color:var(--acc);color:var(--acc);min-width:110px;text-align:center}
+  #target.red{color:var(--red);border-color:var(--red);background:#fff5f5}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px;position:relative}
+  #grid{display:grid;grid-template-columns:repeat(5,1fr);grid-gap:8px;gap:8px}
+  #grid.shake{animation:shake .35s}
+  .cell{position:relative;border:1px solid var(--bd);border-radius:10px;background:#fafafa;padding:0;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;user-select:none;transition:opacity .3s,-webkit-transform .12s;transition:opacity .3s,transform .12s;outline:none}
+  .cell::before{content:"";display:block;padding-top:100%}
+  .cell b{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:800;color:var(--ink)}
+  #grid.n4 .cell b{font-size:26px}
+  .cell.red{background:#fff5f5;border-color:#ffc9c9}
+  .cell.red b{color:var(--red)}
+  .cell.done{opacity:.22;-webkit-transform:scale(.94);transform:scale(.94)}
+  .cell.pop{animation:pop .25s}
+  .cell.bad{background:#ffa8a8!important;border-color:var(--red)!important;animation:pop .25s}
+  @keyframes pop{0%{-webkit-transform:scale(1);transform:scale(1)}50%{-webkit-transform:scale(1.14);transform:scale(1.14)}100%{-webkit-transform:scale(1);transform:scale(1)}}
+  @keyframes shake{0%,100%{-webkit-transform:translateX(0);transform:translateX(0)}25%,75%{-webkit-transform:translateX(-6px);transform:translateX(-6px)}50%{-webkit-transform:translateX(6px);transform:translateX(6px)}}
+  #ppop{position:absolute;display:none;font-weight:800;color:var(--red);font-size:18px;pointer-events:none;z-index:3;text-shadow:0 1px 6px #fff}
+  #ppop.on{display:block;animation:rise .8s ease both}
+  @keyframes rise{0%{opacity:0;-webkit-transform:translate(-50%,0);transform:translate(-50%,0)}25%{opacity:1}100%{opacity:0;-webkit-transform:translate(-50%,-42px);transform:translate(-50%,-42px)}}
+  #cover{position:absolute;top:0;left:0;right:0;bottom:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,.94);border-radius:18px;z-index:2;padding:20px;text-align:center}
+  #cover h2{margin:0 0 8px}
+  #coverHint{margin:0 0 4px;font-size:14.5px;color:#555;line-height:1.5;max-width:300px}
+  #coverBtn{margin-top:16px;padding:13px 40px;border:0;border-radius:999px;background:var(--acc);color:#fff;font-weight:700;font-size:17px;cursor:pointer}
+  #hint{font-size:13.5px;color:#777;text-align:center;line-height:1.45;min-height:18px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win p{margin:4px 0}
+  #winStars{font-size:34px;letter-spacing:6px;color:#d8d8d8;margin:6px 0 2px}
+  #winStars .on{color:var(--gold)}
+  .win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--acc);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* First-run tutorial — simple 2-step centered card */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;background:rgba(0,0,0,.45)}
+  #tut.on{display:block}
+  #tutCard{position:fixed;left:50%;top:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);width:calc(100% - 40px);max-width:320px;background:#fff;border-radius:16px;padding:20px 22px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;min-height:44px;margin:-4px -8px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}#tutCard .row>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">Scan 25 · Level 1</span><span class="pill" id="timer">0.0s</span></div>
+  <div class="targetrow"><span class="pill" id="target">…</span></div>
+  <div class="board">
+    <div id="grid"></div>
+    <div id="ppop">+1s</div>
+    <div id="cover">
+      <h2 id="coverTitle">Level 1</h2>
+      <p id="coverHint"></p>
+      <button id="coverBtn">Start</button>
+    </div>
+  </div>
+  <div id="hint"></div>
+  <div class="btns"><button class="btn" id="restart">Restart</button></div>
+  <div class="help"><b>How to play.</b> Tap the numbers in ascending order (1 → 2 → 3 …) as fast as you can — the timer is running. A wrong tap costs +1s.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Tap the numbers in ascending order (1 → 2 → 3 …) as fast as you can — the timer is running. A wrong tap costs +1s. Later levels reverse the order, shrink the grid, mix red and black counts, or switch to letters — the hint above the board always shows what to find next.",
+    vi:"<b>Cách chơi.</b> Chạm các số theo thứ tự tăng dần (1 → 2 → 3 …) nhanh nhất có thể — đồng hồ đang chạy. Chạm sai bị cộng +1 giây. Các cấp sau sẽ đảo thứ tự, thu nhỏ lưới, xen kẽ đỏ–đen hoặc dùng chữ cái — dòng gợi ý phía trên luôn cho biết cần tìm gì.",
+    ko:"<b>플레이 방법.</b> 숫자를 오름차순(1 → 2 → 3 …)으로 최대한 빨리 탭하세요 — 타이머가 돌아갑니다. 잘못 탭하면 +1초. 뒤 레벨에서는 순서가 뒤집히거나, 그리드가 작아지거나, 빨강·검정이 섞이거나, 글자가 나옵니다 — 보드 위 힌트가 항상 다음 목표를 알려줍니다.",
+    zh:"<b>玩法。</b> 尽快按升序（1 → 2 → 3 …）点击数字——计时进行中。点错加1秒。后面的关卡会倒序、缩小网格、红黑交替或改用字母——棋盘上方的提示始终告诉你下一个目标。",
+    ja:"<b>遊び方。</b> 数字を昇順（1 → 2 → 3 …）にできるだけ速くタップ — タイマーが動いています。ミスタップは+1秒。後半のレベルでは逆順、小さいグリッド、赤と黒の交互、文字などが登場 — ボード上のヒントが次の目標を示します。",
+    ar:"<b>طريقة اللعب.</b> انقر الأرقام تصاعديًا (1 → 2 → 3 …) بأسرع ما يمكن — المؤقّت يعمل. النقرة الخاطئة تضيف ثانية. المستويات اللاحقة تعكس الترتيب أو تصغّر الشبكة أو تمزج الأحمر والأسود أو تستخدم الحروف — التلميح فوق اللوحة يُظهر دائمًا الهدف التالي."
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2 id="winTitle">Level cleared!</h2><div id="winStars"></div><p id="winTime"></p><button id="next">Next level</button></div></div>
+<div id="tut">
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script>
+const KEY="scan.level";
+const TUTKEY="scan.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // hub passes ?tut=0 to disable
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Times each level and POSTs the completion to the leaderboard API using the
+// shared player token (set by the hub, same origin). No token → silently skips.
+// Paste this block into other bundles, changing only GAME, to roll the feature out.
+const GBLB=(function(){
+  var GAME='scan', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(level){ var ms=t0?(Date.now()-t0):0; emit('level_complete',{level:level,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:level,durationMs:ms})}).catch(function(){}); }catch(e){} }
+  };
+})();
+
+// ── UI strings (6 languages) ──────────────────────────────────────────────
+const STR={
+  en:{level:"Level",find:"Find",start:"Start",restart:"Restart",next:"Next level",clear:"Cleared!",time:"Time"},
+  vi:{level:"Cấp",find:"Tìm",start:"Bắt đầu",restart:"Chơi lại",next:"Cấp tiếp theo",clear:"Hoàn thành!",time:"Thời gian"},
+  ko:{level:"레벨",find:"찾기",start:"시작",restart:"다시 시작",next:"다음 레벨",clear:"레벨 클리어!",time:"시간"},
+  zh:{level:"关卡",find:"找",start:"开始",restart:"重来",next:"下一关",clear:"过关！",time:"用时"},
+  ja:{level:"レベル",find:"探す",start:"スタート",restart:"リスタート",next:"次のレベル",clear:"クリア！",time:"タイム"},
+  ar:{level:"المستوى",find:"ابحث",start:"ابدأ",restart:"إعادة",next:"المستوى التالي",clear:"أنجزت المستوى!",time:"الوقت"}
+};
+const S=STR[LANG]||STR.en;
+// Per-variant in-game hint text — introduces each new rule gently.
+const HINTS={
+  en:{asc:"Tap 1 → 25 in order, fast!",desc:"Reverse! Tap 25 → 1.",fast4:"Small grid: 1 → 16 — go fast!",redblack:"Black counts up 1→13, red counts down 12→1 — alternate. Follow the Find pill.",letters:"Letters! Tap A → Y in order.",color:"Ignore the colors — tap 1 → 25."},
+  vi:{asc:"Chạm 1 → 25 theo thứ tự, thật nhanh!",desc:"Ngược lại! Chạm 25 → 1.",fast4:"Lưới nhỏ: 1 → 16 — nhanh lên!",redblack:"Đen tăng 1→13, đỏ giảm 12→1 — xen kẽ. Theo dõi ô «Tìm».",letters:"Chữ cái! Chạm A → Y theo thứ tự.",color:"Bỏ qua màu sắc — chạm 1 → 25."},
+  ko:{asc:"1 → 25 순서대로 빠르게 탭하세요!",desc:"거꾸로! 25 → 1 순서로.",fast4:"작은 그리드: 1 → 16 — 서두르세요!",redblack:"검정은 1→13 오름차순, 빨강은 12→1 내림차순 — 번갈아 탭. «찾기» 표시를 따라가세요.",letters:"글자! A → Y 순서로 탭하세요.",color:"색은 무시하고 1 → 25 순서로."},
+  zh:{asc:"按 1 → 25 顺序快速点击！",desc:"反过来！按 25 → 1 点击。",fast4:"小网格：1 → 16——要快！",redblack:"黑色 1→13 递增，红色 12→1 递减——交替点击。跟着「找」提示走。",letters:"字母！按 A → Y 顺序点击。",color:"忽略颜色——按 1 → 25 点击。"},
+  ja:{asc:"1 → 25 の順に素早くタップ！",desc:"逆順！25 → 1 の順に。",fast4:"小さいグリッド：1 → 16 — 急いで！",redblack:"黒は 1→13 昇順、赤は 12→1 降順 — 交互にタップ。「探す」表示に従って。",letters:"文字！A → Y の順にタップ。",color:"色は無視して 1 → 25 の順に。"},
+  ar:{asc:"انقر 1 → 25 بالترتيب وبسرعة!",desc:"بالعكس! انقر 25 → 1.",fast4:"شبكة صغيرة: 1 → 16 — أسرع!",redblack:"الأسود تصاعديًا 1→13 والأحمر تنازليًا 12→1 — بالتناوب. تابع مؤشر «ابحث».",letters:"حروف! انقر A → Y بالترتيب.",color:"تجاهل الألوان — انقر 1 → 25."}
+};
+const HINT=HINTS[LANG]||HINTS.en;
+
+// ── Pure logic (kept in sync with games/scan/gen-levels.mjs — source of truth) ──
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function targetsFor(variant,size){
+  var n=size*size,o=[],v,k,i;
+  if(variant==="desc"){for(v=n;v>=1;v--)o.push({t:String(v),c:""});return o;}
+  if(variant==="letters"){var A="ABCDEFGHIJKLMNOPQRSTUVWXY";for(i=0;i<n;i++)o.push({t:A[i],c:""});return o;}
+  if(variant==="redblack"){for(k=1;k<=12;k++){o.push({t:String(k),c:"b"});o.push({t:String(13-k),c:"r"});}o.push({t:"13",c:"b"});return o;}
+  for(v=1;v<=n;v++)o.push({t:String(v),c:""});return o;
+}
+function shuffle(arr,rnd){var a=arr.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(rnd()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;}return a;}
+function layoutFor(level){var targets=targetsFor(level.variant,level.size);var cells=targets.map(function(c,i){return {t:c.t,c:c.c,ord:i};});return shuffle(cells,mulberry32(level.seed));}
+
+// distractor backgrounds for the "color" variant
+const PASTEL=["#ffd6a5","#caffbf","#9bf6ff","#bdb2ff","#ffc6ff","#fdffb6"];
+
+// ── Game state ────────────────────────────────────────────────────────────
+let DATA=null,lvl=0,L=null,cells=[],targets=[],idx=0,pen=0,t0=0,tick=0,running=false;
+const $=function(id){return document.getElementById(id);};
+
+fetch('./levels.json').then(function(r){return r.json();}).then(function(d){
+  DATA=d; lvl=Math.min(+(localStorage.getItem(KEY)||0), d.levels.length-1); load(lvl);
+});
+
+function load(i){
+  L=DATA.levels[i]; idx=0; pen=0; running=false; stopTick();
+  $("lvl").textContent="Scan 25 · "+S.level+" "+(i+1);
+  $("timer").textContent="0.0s"; $("timer").classList.remove("err");
+  $("restart").textContent=S.restart;
+  targets=targetsFor(L.variant,L.size);
+  buildGrid();
+  updateTarget();
+  $("hint").textContent=HINT[L.variant]||"";
+  if(LANG==="ar"){$("hint").dir="rtl";$("coverHint").dir="rtl";}
+  $("coverTitle").textContent=S.level+" "+(i+1);
+  $("coverHint").textContent=HINT[L.variant]||"";
+  $("coverBtn").textContent=S.start;
+  $("cover").style.display="flex";
+  maybeStartTut();
+}
+function buildGrid(){
+  cells=layoutFor(L);
+  var g=$("grid");
+  g.innerHTML="";
+  g.style.gridTemplateColumns="repeat("+L.size+",1fr)";
+  if(L.size===4)g.classList.add("n4");else g.classList.remove("n4");
+  var rc=mulberry32(((L.seed+999)>>>0)||1);
+  for(var k=0;k<cells.length;k++){(function(cell){
+    var b=document.createElement("button");
+    b.className="cell"+(cell.c==="r"?" red":"");
+    if(L.variant==="color")b.style.background=PASTEL[Math.floor(rc()*PASTEL.length)];
+    var s=document.createElement("b");
+    s.textContent=cell.t;
+    b.appendChild(s);
+    b.addEventListener("pointerdown",function(ev){ev.preventDefault();tap(cell,b);});
+    g.appendChild(b);
+    cell.el=b;
+  })(cells[k]);}
+}
+function startLevel(){
+  $("cover").style.display="none";
+  t0=Date.now(); pen=0; running=true;
+  GBLB.start();
+  tick=setInterval(updTimer,100);
+}
+function stopTick(){if(tick){clearInterval(tick);tick=0;}}
+function elapsed(){return (Date.now()-t0)/1000+pen;}
+function updTimer(){$("timer").textContent=elapsed().toFixed(1)+"s";}
+function updateTarget(){
+  var tg=$("target"),c=targets[idx];
+  if(!c){tg.textContent="✓";tg.classList.remove("red");return;}
+  tg.textContent=S.find+": "+c.t;
+  if(c.c==="r")tg.classList.add("red");else tg.classList.remove("red");
+}
+function tap(cell,b){
+  if(!running)return;
+  if(cell.ord===idx){
+    b.classList.add("pop");
+    setTimeout(function(){b.classList.remove("pop");b.classList.add("done");},120);
+    idx++;
+    updateTarget();
+    if(idx===cells.length)finish();
+  }else if(cell.ord>idx){
+    penalty(b);
+  } // taps on already-done cells are ignored
+}
+function penalty(b){
+  pen+=1;
+  b.classList.add("bad");
+  $("grid").classList.add("shake");
+  var t=$("timer");t.classList.add("err");
+  updTimer();
+  var p=$("ppop");
+  p.style.left=(b.offsetLeft+b.offsetWidth/2+14)+"px";
+  p.style.top=(b.offsetTop+8)+"px";
+  p.classList.remove("on");void p.offsetWidth;p.classList.add("on");
+  setTimeout(function(){b.classList.remove("bad");$("grid").classList.remove("shake");t.classList.remove("err");},450);
+}
+function finish(){
+  running=false;stopTick();
+  var f=elapsed();
+  updTimer();
+  GBLB.report(lvl+1); // record completion time to the leaderboard
+  var stars=f<=L.par[0]?3:(f<=L.par[1]?2:(f<=L.par[2]?1:0));
+  var html="";
+  for(var i=0;i<3;i++)html+='<span'+(i<stars?' class="on"':'')+'>★</span>';
+  $("winStars").innerHTML=html;
+  $("winTitle").textContent=S.level+" "+(lvl+1)+" · "+S.clear;
+  $("winTime").textContent=S.time+": "+f.toFixed(1)+"s";
+  $("next").textContent=S.next;
+  if(LANG==="ar")$("wino").dir="rtl";
+  $("wino").style.display="grid";
+}
+$("next").onclick=function(){
+  $("wino").style.display="none";
+  lvl=Math.min(lvl+1,DATA.levels.length-1);
+  try{localStorage.setItem(KEY,String(lvl));}catch(e){}
+  load(lvl);
+};
+$("restart").onclick=function(){$("wino").style.display="none";load(lvl);};
+$("coverBtn").addEventListener("pointerdown",function(ev){ev.preventDefault();if(!running&&$("cover").style.display!=="none")startLevel();});
+
+// ── First-run tutorial (2 steps) ──────────────────────────────────────────
+const TUT_T={
+  en:{t1:"Find the numbers",b1:"Numbers are scattered on the grid. Tap them in order, starting from 1.",t2:"Beat the clock",b2:"The timer runs while you search — wrong taps add +1s. Finish fast to earn 3 stars.",skip:"Skip",next:"Next",play:"Play"},
+  vi:{t1:"Tìm các số",b1:"Các số nằm rải rác trên lưới. Chạm theo thứ tự, bắt đầu từ 1.",t2:"Đua với thời gian",b2:"Đồng hồ chạy trong lúc bạn tìm — chạm sai +1 giây. Hoàn thành nhanh để đạt 3 sao.",skip:"Bỏ qua",next:"Tiếp",play:"Chơi"},
+  ko:{t1:"숫자를 찾으세요",b1:"숫자가 그리드에 흩어져 있어요. 1부터 순서대로 탭하세요.",t2:"시간과의 싸움",b2:"찾는 동안 타이머가 돌아갑니다 — 잘못 탭하면 +1초. 빨리 끝내면 별 3개!",skip:"건너뛰기",next:"다음",play:"플레이"},
+  zh:{t1:"找数字",b1:"数字散布在网格上。从1开始按顺序点击。",t2:"与时间赛跑",b2:"搜索时计时不停——点错加1秒。快速完成可得3星。",skip:"跳过",next:"下一步",play:"开始玩"},
+  ja:{t1:"数字を探そう",b1:"数字がグリッドに散らばっています。1から順にタップ。",t2:"時間との勝負",b2:"探している間もタイマーは進みます — ミスは+1秒。速くクリアして星3つ！",skip:"スキップ",next:"次へ",play:"プレイ"},
+  ar:{t1:"ابحث عن الأرقام",b1:"الأرقام مبعثرة على الشبكة. انقرها بالترتيب بدءًا من 1.",t2:"اسبق الوقت",b2:"المؤقّت يعمل أثناء بحثك — النقرة الخاطئة +1 ثانية. أنهِ بسرعة لتحصل على 3 نجوم.",skip:"تخطّي",next:"التالي",play:"العب"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+var tutStep=0,tutShown=false;
+function maybeStartTut(){
+  if(!TUT_ON)return;
+  if(tutShown)return;
+  if(localStorage.getItem(TUTKEY))return;
+  if(lvl!==0)return;
+  tutShown=true;tutStep=0;
+  if(LANG==="ar")$("tutCard").dir="rtl";
+  renderTut();$("tut").classList.add("on");
+}
+function renderTut(){
+  $("tutTitle").textContent=tutStep===0?M.t1:M.t2;
+  $("tutBody").textContent=tutStep===0?M.b1:M.b2;
+  $("tutSkip").textContent=M.skip;
+  $("tutNext").textContent=tutStep===0?M.next:M.play;
+}
+function endTut(){
+  try{localStorage.setItem(TUTKEY,"1");}catch(e){}
+  $("tut").classList.remove("on");
+}
+$("tutNext").onclick=function(){if(tutStep===0){tutStep=1;renderTut();}else{endTut();}};
+$("tutSkip").onclick=endTut;
+</script>
+</body>
+</html>

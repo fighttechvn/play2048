@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-VCLVPVRXMV');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#faf8ef" />
+  <title>Free Sudoku Online — 4 Difficulties, No Sign-Up, Plays Offline</title>
+  <meta name="description" content="Play Sudoku free in your browser: four difficulties, pencil marks, unlimited undo and a hint that explains itself. No account, no ads, works offline." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://gobrain.fighttech.vn/blog/sudoku-online-free/" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Sudoku Online: How to Play and How to Get Faster 🔢" />
+  <meta property="og:description" content="Play Sudoku free in your browser: four difficulties, pencil marks, unlimited undo and a hint that explains itself. No account, no ads, works offline." />
+  <meta property="og:url" content="https://gobrain.fighttech.vn/blog/sudoku-online-free/" />
+  <meta property="og:site_name" content="Go Brain" />
+  <meta property="og:image" content="https://gobrain.fighttech.vn/play/thumbs/sudoku.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://gobrain.fighttech.vn/play/thumbs/sudoku.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="../../assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="../../assets/app-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem("gobrain.theme")||"system";var d=p==="dark"||(p!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");}catch(e){}})();</script>
+  <link rel="stylesheet" href="../../css/styles.css" />
+  <link rel="stylesheet" href="../../css/legal.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "Sudoku Online: How to Play and How to Get Faster",
+    "description": "Play Sudoku free in your browser: four difficulties, pencil marks, unlimited undo and a hint that explains itself. No account, no ads, works offline.",
+    "author": {
+      "@type": "Organization",
+      "name": "FightTech"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Go Brain"
+    },
+    "datePublished": "2026-08-10",
+    "mainEntityOfPage": "https://gobrain.fighttech.vn/blog/sudoku-online-free/"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Is Sudoku maths?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. The digits are just nine distinct symbols — you could play with nine colours and nothing would change. There is no arithmetic in Sudoku at all."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does a Sudoku puzzle ever need guessing?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "A well-made one never does. Every board we ship is verified to have a single solution reachable by logic, so if you are guessing there is a deduction you haven't spotted yet."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How long should a Sudoku take?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Easy boards run five to ten minutes for most people, Hard ones twenty to forty. Speed comes from pattern recognition, so it drops fast over the first couple of weeks and then plateaus."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="../../" aria-label="Go Brain"><img class="logo" src="../../assets/app-icon.png" alt="" width="30" height="30" /><span>Go Brain</span></a>
+      <nav class="nav">
+        <div class="nav-links">
+          <a href="../">Blog</a><a href="../../play/">Play online</a><a href="../../sdk/">SDK</a><a href="../../support/">Support</a>
+        </div>
+        <div class="controls">
+          <div class="select-wrap">
+            <select id="themeSelect" class="theme" aria-label="Theme"><option value="system">◐ System</option><option value="light">☀ Light</option><option value="dark">☾ Dark</option></select>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-main">
+    <div class="container">
+      <div class="legal-wrap">
+        <a class="back-link" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> All articles</a>
+
+        <div class="legal-head">
+          <span class="eyebrow">Brain Games</span>
+          <h1>Sudoku Online: How to Play and How to Get Faster 🔢</h1>
+          <p class="updated"><strong>Published:</strong> August 10, 2026 · 6 min read</p>
+          <p class="legal-lead">Sudoku is the puzzle everyone has heard of and most people play slightly wrong — filling in the obvious cells, then stalling and guessing. The gap between stalling and solving is about three techniques. Here they are.</p>
+        </div>
+
+        <nav class="toc" aria-label="Table of contents">
+          <h2>Contents</h2>
+          <ol>
+            <li><a href="#rules">The rules</a></li>
+            <li><a href="#technique">Three techniques that unstick a board</a></li>
+            <li><a href="#marks">Pencil marks, properly</a></li>
+            <li><a href="#ours">About our version</a></li>
+          </ol>
+        </nav>
+
+        <div class="legal-body">
+
+          <h2 id="rules">The rules</h2>
+          <p>A 9×9 grid, split into nine 3×3 boxes. Fill every cell with a digit from 1 to 9 so that no digit repeats in any row, any column, or any box. That's it. There is exactly one valid completion of a well-made puzzle, and you never need to guess to find it.</p>
+
+          <h2 id="technique">Three techniques that unstick a board</h2>
+          <p><strong>1. Scanning (the one you already do).</strong> Pick a digit, say 7. Look at the three boxes in a band, cross out rows and columns that already contain a 7, and see whether any box has only one cell left. This clears Easy boards on its own and Medium boards partway.</p>
+          <p><strong>2. The naked single vs the hidden single.</strong> These are different and the second one is where most people leave value on the table. A <em>naked</em> single is a cell where only one digit fits — you find it by looking at the cell. A <em>hidden</em> single is a digit that fits in only one cell of a row, column or box, even though that cell could also hold other digits. You find it by looking at the <em>unit</em>, not the cell. Most stalls happen because someone is only hunting naked singles.</p>
+          <p><strong>3. The naked pair.</strong> If two cells in the same unit can only hold, say, {4,8} and {4,8}, then between them they use up both digits — so 4 and 8 can be eliminated from every other cell in that unit. You haven't placed anything, but you've often unlocked three placements elsewhere. This is the technique that takes you into Hard.</p>
+          <p>Beyond this there are pointing pairs, box-line reduction and X-wings, but honestly: pairs plus disciplined hidden-single hunting will finish almost everything we ship below Expert.</p>
+
+          <h2 id="marks">Pencil marks, properly</h2>
+          <p>The mistake is marking everything everywhere. A grid with every candidate written in all 60 empty cells is unreadable, and you end up scanning your own notes instead of the board.</p>
+          <p>Better: mark a unit only when you're actively working it. Fill in candidates for one row, find what it gives you, then move on. Notes are a tool for the deduction you are making right now, not a record you maintain.</p>
+
+          <h2 id="ours">About our version</h2>
+          <p>Four difficulties, from a board you'll finish over one coffee to one that will take a genuine sitting. Every puzzle is generated with a solver in the loop and verified to have exactly one solution — no board here can be finished two different ways, and none of them can only be finished by guessing.</p>
+          <p>Notes mode, unlimited undo, mistake highlighting you can turn off, and a hint that shows you the cell and the reason rather than just dropping a digit in.</p>
+          <p>It runs in your browser, works offline once loaded, needs no account, and costs nothing. Your progress and your best times stay on your device.</p>
+
+
+          <h2 id="faq">Questions people actually ask</h2>
+          <p><strong>Is Sudoku maths?</strong><br />No. The digits are just nine distinct symbols — you could play with nine colours and nothing would change. There is no arithmetic in Sudoku at all.</p>
+          <p><strong>Does a Sudoku puzzle ever need guessing?</strong><br />A well-made one never does. Every board we ship is verified to have a single solution reachable by logic, so if you are guessing there is a deduction you haven't spotted yet.</p>
+          <p><strong>How long should a Sudoku take?</strong><br />Easy boards run five to ten minutes for most people, Hard ones twenty to forty. Speed comes from pattern recognition, so it drops fast over the first couple of weeks and then plateaus.</p>
+
+          <h2 id="more">Keep reading</h2>
+          <ul>
+            <li><a href="../killer-sudoku-cages/">Cages: Killer Sudoku Explained (and How to Open One) 🔢</a> — Sudoku with sums bolted on. The cages look like extra work but they're a gift — they let you start deducing before a single digit is on the board.</li>
+            <li><a href="../kakuro-online-free/">Kakuro: The Cross-Sum Puzzle Worth Learning 🔢</a> — A crossword made of sums. Steeper than Sudoku, more satisfying, and the entire game opens up once you memorise about six number combinations.</li>
+            <li><a href="../logic-puzzle-games/">Logic Puzzle Games: A Guide to the 12 in Go Brain 🧠</a> — Sudoku, Kakuro, Nonogram, Crowns and eight more. What separates a real deduction puzzle from a guessing game, and which to start with.</li>
+          </ul>
+
+          <div class="legal-contact" id="play">
+            <h2>Play Sudoku now</h2>
+            <p>Four difficulties, verified single solutions, notes and undo. Free, no account.</p>
+            <p style="margin-top:16px"><a class="btn btn-primary" href="../../play/?open=sudoku">▶ Play Sudoku</a></p>
+          </div>
+
+          <div class="legal-nav-links">
+            <a href="../">← All articles</a>
+            <a href="../../play/">Play online</a>
+            <a href="../../support/">Support</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="margin-top:0;border-top:none">
+        <span>© <span id="year">2026</span> FightTech. All rights reserved.</span>
+        <span><a href="../../privacy/">Privacy</a> · <a href="../../terms/">Terms</a> · <a href="../../support/">Support</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../../js/main.js"></script>
+  <script src="../../js/app-banner.js"></script>
+</body>
+</html>

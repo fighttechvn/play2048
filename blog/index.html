@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-VCLVPVRXMV');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#faf8ef" />
+  <title>Blog — free brain games, puzzle guides &amp; how-to-play — Go Brain</title>
+  <meta name="description" content="How to play every game in the Go Brain hub — Sudoku, Kakuro, Nonogram, Crowns, Minesweeper, word games and arcade classics. Free, no sign-up, works offline." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://gobrain.fighttech.vn/blog/" />
+  <link rel="icon" type="image/png" sizes="512x512" href="../assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="../assets/app-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem("gobrain.theme")||"system";var d=p==="dark"||(p!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/legal.css" />
+  <style>
+    .post-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:16px; }
+    .post-card { display:block; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:22px 24px; text-decoration:none; color:inherit; transition:border-color .15s ease, transform .15s ease; }
+    .post-card:hover { border-color:var(--border-strong); transform:translateY(-2px); }
+    .post-card .eyebrow { display:inline-block; margin-bottom:8px; }
+    .post-card h2 { margin:0 0 6px; font-size:20px; }
+    .post-card p { margin:0 0 10px; color:var(--muted); font-size:15px; }
+    .post-card .meta { font-family:var(--font-mono); font-size:12px; color:var(--muted); }
+    .blog-sec { margin:34px 0 14px; font-size:15px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); font-family:var(--font-mono); }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="../" aria-label="Go Brain"><img class="logo" src="../assets/app-icon.png" alt="" width="30" height="30" /><span>Go Brain</span></a>
+      <nav class="nav">
+        <div class="nav-links">
+          <a href="../blog/" class="current">Blog</a><a href="../play/">Play online</a><a href="../sdk/">SDK</a><a href="../support/">Support</a>
+        </div>
+        <div class="controls">
+          <div class="select-wrap">
+            <select id="themeSelect" class="theme" aria-label="Theme"><option value="system">◐ System</option><option value="light">☀ Light</option><option value="dark">☾ Dark</option></select>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-main">
+    <div class="container">
+      <div class="legal-wrap">
+        <a class="back-link" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back to home</a>
+
+        <div class="legal-head">
+          <span class="eyebrow">Blog</span>
+          <h1>Go Brain Blog</h1>
+          <p class="legal-lead">How every game in the hub works, which one suits the ten minutes you actually have, and what each one asks of your brain. All free, no sign-up, plays offline.</p>
+        </div>
+
+        <ul class="post-list">
+          <li>
+            <a class="post-card" href="all-games/">
+              <span class="eyebrow">Game Guide</span>
+              <h2>All 33 Games in Go Brain: The Complete List 🧠</h2>
+              <p>Thirty-three games, one hub. Sorted by what each one actually asks of your brain — so you can find the right one for the ten minutes you have.</p>
+              <span class="meta">August 10, 2026 · 8 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="logic-puzzle-games/">
+              <span class="eyebrow">Puzzle Guide</span>
+              <h2>Logic Puzzle Games: A Guide to the 12 in Go Brain 🧠</h2>
+              <p>Sudoku, Kakuro, Nonogram, Crowns and eight more. What separates a real deduction puzzle from a guessing game, and which to start with.</p>
+              <span class="meta">August 10, 2026 · 7 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="word-games/">
+              <span class="eyebrow">Puzzle Guide</span>
+              <h2>Word Games in Go Brain: Four Ways to Play With Letters 🧠</h2>
+              <p>A daily five-letter word, a grid of hidden word paths, four photos with one answer, and riddles designed to fool you. Four very different ways to play with language.</p>
+              <span class="meta">August 10, 2026 · 5 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="brain-training-games/">
+              <span class="eyebrow">Brain Training</span>
+              <h2>Brain Training Games: Focus, Memory and Reaction 🧠</h2>
+              <p>A Schulte table, a Stroop test, a memory sequence, a reaction timer and mental arithmetic — five games built around a number you can try to beat tomorrow.</p>
+              <span class="meta">August 10, 2026 · 6 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="arcade-games/">
+              <span class="eyebrow">Game Guide</span>
+              <h2>Arcade Games in Go Brain: Seven One-Thumb Classics 🎮</h2>
+              <p>Snake, a doodle-jumper, brick breaker, a stacker, a tile-merger, flappy and a bubble shooter. No rules to learn, just a score to beat.</p>
+              <span class="meta">August 10, 2026 · 5 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="casual-puzzle-card-games/">
+              <span class="eyebrow">Game Guide</span>
+              <h2>Casual Puzzle &amp;amp; Card Games: Pour, Block Fit, Solitaire 🃏</h2>
+              <p>Water sort, an 8×8 block fitter and Klondike solitaire — three games for when you want your hands busy and your brain mostly idle.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="brandable-games-for-marketers/">
+              <span class="eyebrow">For Brands</span>
+              <h2>Brandable Games: Turn a Campaign Into Something People Play 📣</h2>
+              <p>Two white-label games built for campaigns rather than players: a memory match that ends in a coupon, and an endless runner with your mascot in it.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="sudoku-online-free/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Sudoku Online: How to Play and How to Get Faster 🔢</h2>
+              <p>Four difficulties, pencil marks, and a hint that teaches instead of just filling a square. Plus the three techniques that get you past Easy.</p>
+              <span class="meta">August 10, 2026 · 6 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="kakuro-online-free/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Kakuro: The Cross-Sum Puzzle Worth Learning 🔢</h2>
+              <p>A crossword made of sums. Steeper than Sudoku, more satisfying, and the entire game opens up once you memorise about six number combinations.</p>
+              <span class="meta">August 10, 2026 · 7 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="killer-sudoku-cages/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Cages: Killer Sudoku Explained (and How to Open One) 🔢</h2>
+              <p>Sudoku with sums bolted on. The cages look like extra work but they're a gift — they let you start deducing before a single digit is on the board.</p>
+              <span class="meta">August 10, 2026 · 6 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="crowns-queens-puzzle/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Crowns: The One-Per-Region Puzzle You'll Finish in Five Minutes 👑</h2>
+              <p>One rule you can learn in ten seconds, and deduction chains that run five steps deep. The best entry point into logic puzzles we have.</p>
+              <span class="meta">August 10, 2026 · 5 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="nonogram-picross-online/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Nonogram: How to Solve Picross Puzzles 🖼️</h2>
+              <p>Number clues along the edges, a picture hiding in the middle. Learn the overlap technique and you can start any board with confidence.</p>
+              <span class="meta">August 10, 2026 · 6 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="minesweeper-no-guess/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Minesweeper Without the Coin Flips 💣</h2>
+              <p>Everyone has lost a Minesweeper game to a coin flip. Ours generates boards that can always be cleared by reasoning — plus the two patterns worth memorising.</p>
+              <span class="meta">August 10, 2026 · 5 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="tango-suns-moons-puzzle/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Tango: The Suns and Moons Balance Puzzle ☀️🌙</h2>
+              <p>Two symbols, two rules, and more depth than that has any right to produce. The binary-puzzle format at its most approachable.</p>
+              <span class="meta">August 10, 2026 · 5 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="zip-one-line-path-puzzle/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Zip: Draw One Line Through Every Cell 🧩</h2>
+              <p>One line, every cell, numbers in order. A Hamiltonian path puzzle that looks like doodling and plays like deduction.</p>
+              <span class="meta">August 10, 2026 · 5 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="shikaku-patch-puzzle/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Patch: Shikaku, the Rectangle-Cutting Puzzle ▭</h2>
+              <p>Divide the grid into rectangles, each containing one number equal to its area. Primes are your best friends here — and they tell you exactly where to start.</p>
+              <span class="meta">August 10, 2026 · 5 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="domino-fit-tiling-puzzle/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Domino Fit: Tiling Puzzles and the Parity Trick 🁢</h2>
+              <p>Cover the board in dominoes with no gaps. There's a colouring argument that rules out half the board's dead ends before you place a single tile.</p>
+              <span class="meta">August 10, 2026 · 5 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="wend-word-path-puzzle/">
+              <span class="eyebrow">Word Games</span>
+              <h2>Wend: Four Hidden Words, Every Letter Used 🔤</h2>
+              <p>Four words snake through a grid of letters, and every single tile belongs to one of them. Find three and the fourth is forced.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="five-letters-wordle-style/">
+              <span class="eyebrow">Word Games</span>
+              <h2>Five Letters: The Daily Word Game, Plus Unlimited Practice 🔤</h2>
+              <p>Six guesses and colour feedback — plus an unlimited mode so you don't have to wait until tomorrow. And the guess-two mistake almost everyone makes.</p>
+              <span class="meta">August 10, 2026 · 5 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="4-pics-1-word-game/">
+              <span class="eyebrow">Word Games</span>
+              <h2>4 Pics 1 Word: Four Photos, One Answer 🖼️</h2>
+              <p>Four photos, one word linking them. The trick is that the link is almost never the obvious category — it's usually a second meaning.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="brain-twist-lateral-puzzles/">
+              <span class="eyebrow">Brain Teasers</span>
+              <h2>Brain Twist: Riddles Where the Obvious Answer Is the Trap 🌀</h2>
+              <p>The answer is always fair. It just requires you to drop an assumption you never noticed you'd made.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="schulte-table-scan-25/">
+              <span class="eyebrow">Brain Training</span>
+              <h2>Scan 25: The Schulte Table, and How to Get Faster at It 👁️</h2>
+              <p>Twenty-five numbers, one grid, find them in order. The people who go fast aren't looking harder — they're looking less.</p>
+              <span class="meta">August 10, 2026 · 5 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="stroop-test-game/">
+              <span class="eyebrow">Brain Training</span>
+              <h2>Color Clash: The Stroop Test as a 60-Second Game 🎨</h2>
+              <p>The word BLUE printed in red ink. You have to say red, and your brain will fight you the entire time. Ninety years of psychology, in sixty seconds.</p>
+              <span class="meta">August 10, 2026 · 5 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="echo-memory-sequence-game/">
+              <span class="eyebrow">Brain Training</span>
+              <h2>Echo: How Long a Sequence Can You Hold? 🔊</h2>
+              <p>A sequence lights up, you repeat it, it gets one longer. Most people stall between 7 and 10 — and there's a trick to getting past that.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="reaction-time-test-game/">
+              <span class="eyebrow">Brain Training</span>
+              <h2>Reflex: What's Your Reaction Time? ⚡</h2>
+              <p>Wait for green, tap. Typical is around 250ms, good is under 200, and anything under 120 means you guessed — here's why.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="math-sprint-mental-math/">
+              <span class="eyebrow">Brain Training</span>
+              <h2>Math Sprint: Spot the Wrong Equation in 60 Seconds ➗</h2>
+              <p>Equations flash up and you judge them true or false. The secret is that you almost never need to work out the answer.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="snake-game-online/">
+              <span class="eyebrow">Arcade</span>
+              <h2>Snake: Still the Best Difficulty Curve Ever Designed 🐍</h2>
+              <p>Snake gets harder because you got better. That single design idea has kept it alive for fifty years — and there's a strategy for surviving the late game.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="sky-jump-endless-jumper/">
+              <span class="eyebrow">Arcade</span>
+              <h2>Sky Jump: Bounce Up an Endless Tower ☁️</h2>
+              <p>Up is the only direction. Three platform types, no ceiling, and the surprisingly deliberate skill of not rushing.</p>
+              <span class="meta">August 10, 2026 · 3 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="bounce-brick-breaker/">
+              <span class="eyebrow">Arcade</span>
+              <h2>Bounce: Aim One Shot, Watch Fifteen Ricochets 🎯</h2>
+              <p>One aim per turn, then physics does the rest. The good shots aren't the accurate ones — they're the ones that trap a ball where it can't escape.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="stacker-tower-game/">
+              <span class="eyebrow">Arcade</span>
+              <h2>Stacker: One Tap, and the Tower Gets Narrower 🏗️</h2>
+              <p>Tap to drop a block. Miss slightly and the overhang is cut away — so your mistakes are permanent and cumulative, which is the entire game.</p>
+              <span class="meta">August 10, 2026 · 3 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="merge-drop-tile-merge-game/">
+              <span class="eyebrow">Arcade</span>
+              <h2>Merge Drop: Chain the Doubles, Watch It Cascade 🔷</h2>
+              <p>Drop numbered tiles, equal ones merge into their double, and a well-built column collapses in a chain. Tile-merging with gravity instead of a slide.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="flap-tap-to-fly-game/">
+              <span class="eyebrow">Arcade</span>
+              <h2>Flap: Tap to Fly, Thread the Gaps 🐦</h2>
+              <p>One button. Gravity pulls you down, each tap pushes you up, and the gaps are exactly as forgiving as they need to be. Which is: not very.</p>
+              <span class="meta">August 10, 2026 · 3 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="bubbo-bubble-shooter/">
+              <span class="eyebrow">Arcade</span>
+              <h2>Bubbo Bubbo: Bubble Shooter With 60 Levels 🫧</h2>
+              <p>Match three to pop — but the real scoring comes from cutting a cluster loose so everything under it falls at once.</p>
+              <span class="meta">August 10, 2026 · 3 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="water-sort-puzzle-pour/">
+              <span class="eyebrow">Puzzle</span>
+              <h2>Pour: The Water Sort Puzzle, and When to Use Your Spare Tube 🧪</h2>
+              <p>Sort the colours tube by tube. Every level is solvable, undo is unlimited, and the only real decision is when to spend your empty tube.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="block-fit-puzzle/">
+              <span class="eyebrow">Puzzle</span>
+              <h2>Block Fit: No Gravity, No Rotation, No Excuses 🧱</h2>
+              <p>Three pieces at a time on an 8×8 board. You can't rotate them, which means bad boards are always something you did three moves ago.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="klondike-solitaire-online/">
+              <span class="eyebrow">Cards</span>
+              <h2>Solitaire: Klondike, Draw One, Endless Deals 🃏</h2>
+              <p>Klondike, draw one, endless deals. Plus the two rules that decide most games: work the biggest pile, and don't rush an ace.</p>
+              <span class="meta">August 10, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="what-is-a-lateral-thinking-puzzle/">
+              <span class="eyebrow">Brain Teasers</span>
+              <h2>What Is a Lateral-Thinking Puzzle? A Beginner's Guide 🧠</h2>
+              <p>The obvious answer is usually the wrong one. Here's what lateral-thinking brain teasers are, why they fool us every time, and how to get better at solving them.</p>
+              <span class="meta">July 13, 2026 · 5 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="meet-twisty-brain-twist-characters/">
+              <span class="eyebrow">Behind the Game</span>
+              <h2>Meet Twisty &amp; the Brain Twist Characters 🧠</h2>
+              <p>Behind every tricky puzzle is a cast of troublemakers. Meet Twisty and friends — and why a friendly cast makes a brain-teaser game feel alive.</p>
+              <span class="meta">July 13, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="how-we-design-a-tricky-level/">
+              <span class="eyebrow">Behind the Game</span>
+              <h2>How We Design a Tricky Level 🧠</h2>
+              <p>Setting the trap, hiding the clue fairly, and the fine line between clever and cheap — a peek inside the craft of building a tricky puzzle.</p>
+              <span class="meta">July 13, 2026 · 6 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="seasonal-brain-teasers-puzzles-for-every-holiday/">
+              <span class="eyebrow">Puzzle Packs</span>
+              <h2>Seasonal Brain Teasers: Puzzles for Every Holiday 🧠</h2>
+              <p>From spooky Halloween riddles to cosy winter teasers, seasonal puzzle packs keep a tricky puzzle game fresh all year. Here's why holiday brain puzzles work.</p>
+              <span class="meta">July 13, 2026 · 5 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="brain-twist-vs-the-classics-genre-guide/">
+              <span class="eyebrow">Puzzle Guide</span>
+              <h2>Brain Twist vs the Classics: A Genre Guide 🧠</h2>
+              <p>How does a tricky puzzle game compare to Sudoku, crosswords, and match-3? A friendly guide to the genres and which brain workout each one gives you.</p>
+              <span class="meta">July 13, 2026 · 6 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="mend-mindful-symmetry/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Mend: The Calm Symmetry Puzzle That Heals Your Focus 🧠</h2>
+              <p>No timer, no losing, no ads. Restore broken mandalas by completing their symmetry — a mindful, anti-doomscroll brain game you can play in 3 minutes.</p>
+              <span class="meta">June 26, 2026 · 4 min read</span>
+            </a>
+          </li>
+          <li>
+            <a class="post-card" href="why-sudoku-web-games/">
+              <span class="eyebrow">Brain Games</span>
+              <h2>Sudoku Online: Your 5-Minute Brain Flex 🧠</h2>
+              <p>Got five minutes? Open a tab, grab a grid, flex your brain. No app, no sign-up, no nonsense — here's why browser Sudoku just hits different.</p>
+              <span class="meta">June 24, 2026 · 3 min read</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="margin-top:0;border-top:none">
+        <span>© <span id="year">2026</span> FightTech. All rights reserved.</span>
+        <span><a href="../privacy/">Privacy</a> · <a href="../terms/">Terms</a> · <a href="../support/">Support</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../js/main.js"></script>
+  <script src="../js/app-banner.js"></script>
+</body>
+</html>

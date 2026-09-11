@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>N-Back</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--acc:#7048e8;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  .pill.err{color:#e03131;border-color:#e03131;background:#fff5f5}
+  .pill.ok{color:#2b8a3e;border-color:#2b8a3e;background:#ebfbee}
+  #lives{color:#e03131;letter-spacing:3px;font-size:17px}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px;position:relative}
+  #grid{display:grid;grid-template-columns:repeat(3,1fr);grid-gap:10px;gap:10px}
+  #grid.shake{animation:shake .4s}
+  .cell{position:relative;border:0;border-radius:14px;padding:0;background:#eceae4;transition:background .12s,box-shadow .18s;outline:none;pointer-events:none}
+  .cell::before{content:"";display:block;padding-top:100%}
+  .cell.lit{background:var(--acc);box-shadow:0 0 0 3px rgba(112,72,232,.3),0 0 20px rgba(112,72,232,.45)}
+  #banner{position:absolute;top:0;left:0;right:0;bottom:0;display:none;align-items:center;justify-content:center;pointer-events:none;font-size:32px;font-weight:800;color:rgba(26,26,26,.88);text-shadow:0 2px 14px #fff,0 0 6px #fff;z-index:2}
+  #banner.on{display:flex;animation:bpop .9s ease both}
+  @keyframes bpop{0%{opacity:0;-webkit-transform:scale(.6);transform:scale(.6)}22%{opacity:1;-webkit-transform:scale(1.04);transform:scale(1.04)}34%{-webkit-transform:scale(1);transform:scale(1)}78%{opacity:1}100%{opacity:0}}
+  @keyframes shake{0%,100%{-webkit-transform:translateX(0);transform:translateX(0)}20%,60%{-webkit-transform:translateX(-7px);transform:translateX(-7px)}40%,80%{-webkit-transform:translateX(7px);transform:translateX(7px)}}
+  .statusrow{display:flex;justify-content:center}
+  #matchBtn{display:block;width:100%;padding:18px 0;border:0;border-radius:16px;background:var(--acc);color:#fff;font-weight:800;font-size:19px;letter-spacing:1px;cursor:pointer;transition:background .15s,-webkit-transform .1s;transition:background .15s,transform .1s;font-family:inherit}
+  #matchBtn:disabled{opacity:.45}
+  #matchBtn.good{background:#2f9e44}
+  #matchBtn.bad{background:#e03131}
+  #matchBtn.press{-webkit-transform:scale(.97);transform:scale(.97)}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win p{margin:4px 0}
+  .win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--acc);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* First-run tutorial — simple 2-step centered card */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;background:rgba(0,0,0,.45)}
+  #tut.on{display:block}
+  #tutCard{position:fixed;left:50%;top:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);width:calc(100% - 40px);max-width:320px;background:#fff;border-radius:16px;padding:20px 22px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;min-height:44px;margin:-4px -8px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}#tutCard .row>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">N-Back · N=1</span><span class="pill" id="lives">♥♥♥</span></div>
+  <div class="board">
+    <div id="grid"></div>
+    <div id="banner"></div>
+  </div>
+  <button id="matchBtn">MATCH</button>
+  <div class="statusrow"><span class="pill" id="status">…</span></div>
+  <div class="help"><b>How to play.</b> A tile lights up every beat. Press MATCH when the position is the same as N beats ago. Clear rounds to raise N and speed. Wrong press or missed match costs a life — 3 and the run ends.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> A tile lights up every beat. Press MATCH when the position is the same as N beats ago. Clear rounds to raise N and speed. Wrong press or missed match costs a life — 3 and the run ends.",
+    vi:"<b>Cách chơi.</b> Mỗi nhịp một ô sáng lên. Nhấn MATCH khi vị trí trùng với N nhịp trước. Qua vòng để tăng N và tốc độ. Nhấn sai hoặc bỏ lỡ đều mất mạng — mất 3 mạng là kết thúc.",
+    ko:"<b>플레이 방법.</b> 박자마다 타일이 켜집니다. 위치가 N박자 전과 같으면 MATCH를 누르세요. 라운드를 깰수록 N과 속도가 올라갑니다. 잘못 누르거나 놓치면 라이프가 줄어요 — 3번이면 종료됩니다.",
+    zh:"<b>玩法。</b> 每一拍会亮起一个方块。当位置与N拍之前相同时按MATCH。过关后N和速度会提升。按错或漏按都会扣命——扣3次游戏结束。",
+    ja:"<b>遊び方。</b> ビートごとにタイルが光ります。Nビート前と同じ位置ならMATCHを押しましょう。ラウンドを重ねるとNと速度が上がります。誤押しも見逃しもライフを失います — 3回で終了です。",
+    ar:"<b>طريقة اللعب.</b> يضيء مربع مع كل نبضة. اضغط MATCH عندما يتطابق الموضع مع ما قبل N نبضات. اجتز الجولات لرفع N والسرعة. الضغط الخاطئ أو تفويت التطابق يكلفك محاولة — ثلاث مرات تنهي الجولة."
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="starto" style="display:grid"><div><h2>N-Back</h2><p id="startMsg"></p><button id="startBtn">Play</button></div></div>
+<div class="win" id="wino"><div><h2 id="goTitle">Game over</h2><p id="goScore"></p><p id="goBest"></p><button id="again">Play again</button></div></div>
+<div id="tut">
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script>
+const KEY="nback.best";
+const TUTKEY="nback.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // hub passes ?tut=0 to disable
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// N-Back is endless/score-based, so it POSTs a fixed `level: 1` with the
+// score — the server ranks score games by score first, then time. Reads the
+// shared player token (set by the hub, same origin). No token → silently skips.
+// Mirrors the GBLB block in games/echo/index.html; keep in sync.
+const GBLB=(function(){
+  var GAME='nback', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+
+// ── UI strings (6 languages) ──────────────────────────────────────────────
+const STR={
+  en:{watch:"Watch the beat…",score:"Score",hit:"Match! +1",miss:"Missed a match!",false_:"Not a match!",nup:"N is now",round:"Round clear!",over:"Game over",best:"Best",play:"Play",again:"Play again",match:"MATCH",tap:"Press MATCH when the lit tile repeats the position from N beats ago."},
+  vi:{watch:"Theo dõi nhịp…",score:"Điểm",hit:"Trùng khớp! +1",miss:"Bỏ lỡ một lần trùng!",false_:"Không trùng!",nup:"N tăng lên",round:"Qua vòng!",over:"Kết thúc",best:"Kỷ lục",play:"Chơi",again:"Chơi lại",match:"MATCH",tap:"Nhấn MATCH khi ô sáng lặp lại vị trí của N nhịp trước."},
+  ko:{watch:"박자를 보세요…",score:"점수",hit:"일치! +1",miss:"일치를 놓쳤어요!",false_:"일치가 아니에요!",nup:"N 상승",round:"라운드 클리어!",over:"게임 오버",best:"최고 기록",play:"플레이",again:"다시 하기",match:"MATCH",tap:"켜진 타일이 N박자 전 위치와 같으면 MATCH를 누르세요."},
+  zh:{watch:"跟上节拍…",score:"得分",hit:"匹配！+1",miss:"漏掉了一次匹配！",false_:"不匹配！",nup:"N 提升至",round:"过关！",over:"游戏结束",best:"最佳",play:"开始",again:"再玩一次",match:"MATCH",tap:"当亮起的方块与N拍前位置相同时按MATCH。"},
+  ja:{watch:"ビートを見て…",score:"スコア",hit:"一致！+1",miss:"一致を見逃した！",false_:"一致していない！",nup:"Nがアップ",round:"ラウンドクリア！",over:"ゲームオーバー",best:"ベスト",play:"プレイ",again:"もう一度",match:"MATCH",tap:"光るタイルがNビート前と同じ位置ならMATCHを押そう。"},
+  ar:{watch:"راقب الإيقاع…",score:"النقاط",hit:"تطابق! +1",miss:"فاتك تطابق!",false_:"غير متطابق!",nup:"ارتفع N إلى",round:"اجتزت الجولة!",over:"انتهت اللعبة",best:"الأفضل",play:"العب",again:"العب مجددًا",match:"MATCH",tap:"اضغط MATCH عندما يكرر المربع المضيء موضع ما قبل N نبضات."}
+};
+const S=STR[LANG]||STR.en;
+
+// ── Pure logic (kept in sync with games/nback/logic.mjs — source of truth) ──
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function paramsForRound(round){var n=Math.min(4,1+Math.floor((round-1)/3));var steps=14+2*n;var showMs=Math.max(500,700-(round-1)*15);var gapMs=Math.max(700,1300-(round-1)*45);var matches=Math.max(4,Math.round((steps-n)*0.3));return {n:n,steps:steps,showMs:showMs,gapMs:gapMs,matches:matches};}
+function genRound(p,rnd){var slots=[];for(var i=p.n;i<p.steps;i++)slots.push(i);for(var i2=slots.length-1;i2>0;i2--){var j=Math.floor(rnd()*(i2+1));var t=slots[i2];slots[i2]=slots[j];slots[j]=t;}var isM=[];for(var z=0;z<p.steps;z++)isM.push(false);for(var k=0;k<p.matches&&k<slots.length;k++)isM[slots[k]]=true;var seq=[];for(var s=0;s<p.steps;s++){if(isM[s])seq.push(seq[s-p.n]);else{var v;do{v=Math.floor(rnd()*9);}while(s>=p.n&&v===seq[s-p.n]);seq.push(v);}}return seq;}
+function isMatch(seq,i,n){return i>=n&&seq[i]===seq[i-n];}
+
+// ── WebAudio beeps — OscillatorNode only, no files; silent-fail if blocked ──
+var actx=null;
+function ensureAudio(){try{var AC=window.AudioContext||window.webkitAudioContext;if(!actx&&AC)actx=new AC();if(actx&&actx.state==="suspended")actx.resume();}catch(e){actx=null;}}
+function tone(freq,dur,type,vol){
+  try{
+    if(!actx)return;
+    var t=actx.currentTime,o=actx.createOscillator(),g=actx.createGain();
+    o.type=type||"sine";o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.linearRampToValueAtTime(vol||0.22,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g);g.connect(actx.destination);
+    o.start(t);o.stop(t+dur+0.05);
+  }catch(e){}
+}
+
+// ── Game state ────────────────────────────────────────────────────────────
+let round=1,P=paramsForRound(1),seq=[],step=-1,pressed=false,graded=false,lives=3,score=0,best=+(localStorage.getItem(KEY)||0),state="idle",timers=[];
+let rnd=mulberry32(((Date.now()%2147483647)>>>0)||1);
+const $=function(id){return document.getElementById(id);};
+const grid=$("grid"),btn=$("matchBtn");
+function later(fn,ms){timers.push(setTimeout(fn,ms));}
+function clearTimers(){for(var i=0;i<timers.length;i++)clearTimeout(timers[i]);timers=[];}
+function hearts(){var s="";for(var i=0;i<3;i++)s+=(i<lives?"♥":"♡");$("lives").textContent=s;}
+function setStatus(t,cls){var st=$("status");st.textContent=t;st.className="pill"+(cls?" "+cls:"");}
+function setPill(){$("lvl").textContent="N-Back · N="+P.n;}
+function banner(t,ms){
+  var b=$("banner");b.textContent=t;
+  b.classList.remove("on");void b.offsetWidth;b.classList.add("on");
+  later(function(){b.classList.remove("on");},ms||900);
+}
+function buildGrid(){
+  grid.innerHTML="";
+  for(var i=0;i<9;i++){var c=document.createElement("div");c.className="cell";grid.appendChild(c);}
+}
+function light(i,ms){
+  var c=grid.children[i];if(!c)return;
+  c.classList.add("lit");
+  tone(320+i*36,0.1,"sine",0.1); // soft positional blip so the beat is audible
+  later(function(){c.classList.remove("lit");},ms);
+}
+function flashBtn(cls){btn.classList.add(cls);later(function(){btn.classList.remove(cls);},420);}
+function loseLife(msg){
+  lives--;hearts();
+  grid.classList.add("shake");
+  tone(130,0.35,"square",0.14);
+  later(function(){grid.classList.remove("shake");},450);
+  setStatus(msg,"err");
+  if(lives<=0){state="pause";clearTimers();later(gameOver,900);return false;}
+  return true;
+}
+// ── Round flow: one timer chain drives stimulus → grade → next ────────────
+function runStep(){
+  step++;
+  if(step>=P.steps){roundDone();return;}
+  pressed=false;graded=false;
+  state="play";
+  light(seq[step],P.showMs);
+  later(gradeStep,P.showMs+P.gapMs-60); // grade just before the next onset
+}
+function gradeStep(){
+  if(state!=="play")return;
+  graded=true;
+  if(isMatch(seq,step,P.n)&&!pressed){
+    if(!loseLife(S.miss))return;
+  }
+  runStep();
+}
+function press(){
+  if(state!=="play"||pressed||graded||step<0)return;
+  pressed=true;
+  btn.classList.add("press");later(function(){btn.classList.remove("press");},110);
+  if(isMatch(seq,step,P.n)){
+    score++;
+    if(score>best){best=score;try{localStorage.setItem(KEY,String(best));}catch(e){}}
+    flashBtn("good");
+    tone(659.25,0.12,"sine",0.18);
+    setStatus(S.score+": "+score,"ok");
+  }else{
+    flashBtn("bad");
+    loseLife(S.false_);
+  }
+}
+function roundDone(){
+  state="pause";
+  round++;
+  var prevN=P.n;
+  P=paramsForRound(round);
+  tone(523.25,0.12,"sine",0.18);later(function(){tone(783.99,0.2,"sine",0.18);},140);
+  if(P.n!==prevN){
+    banner(S.nup+" "+P.n+"!",1200);
+    setPill();
+    later(startRound,1700);
+  }else{
+    banner(S.round,900);
+    later(startRound,1300);
+  }
+}
+function startRound(){
+  seq=genRound(P,rnd);step=-1;
+  setPill();setStatus(S.watch);
+  state="pause";
+  later(runStep,900);
+}
+function gameOver(){
+  state="over";
+  GBLB.report(score);
+  $("goTitle").textContent=S.over;
+  $("goScore").textContent=S.score+": "+score;
+  $("goBest").textContent=S.best+": "+best;
+  $("wino").style.display="grid";
+}
+function startRun(){
+  clearTimers();
+  $("wino").style.display="none";$("starto").style.display="none";
+  round=1;P=paramsForRound(1);lives=3;score=0;state="pause";
+  rnd=mulberry32(((Date.now()%2147483647)>>>0)||1);
+  hearts();buildGrid();setStatus(S.watch);setPill();
+  GBLB.start();
+  startRound();
+}
+btn.addEventListener("pointerdown",function(ev){ev.preventDefault();ensureAudio();press();});
+
+// ── Start / restart ───────────────────────────────────────────────────────
+$("startMsg").textContent=S.tap;
+$("startBtn").textContent=S.play;
+$("again").textContent=S.again;
+btn.textContent=S.match;
+if(LANG==="ar"){$("starto").dir="rtl";$("wino").dir="rtl";}
+$("startBtn").onclick=function(){ensureAudio();if(TUT_ON&&!localStorage.getItem(TUTKEY)){$("starto").style.display="none";showTut();}else{startRun();}};
+$("again").onclick=function(){ensureAudio();startRun();};
+
+// ── First-run tutorial (2 steps) ──────────────────────────────────────────
+const TUT_T={
+  en:{t1:"Welcome to N-Back",b1:"A tile lights up on every beat. Hold the recent positions in your head.",t2:"Press MATCH",b2:"When the lit tile is in the same spot as N beats ago, press MATCH. Start at N=1 — it climbs as you clear rounds. 3 lives.",skip:"Skip",next:"Next",play:"Play"},
+  vi:{t1:"Chào mừng đến N-Back",b1:"Mỗi nhịp một ô sáng lên. Hãy ghi nhớ các vị trí gần nhất.",t2:"Nhấn MATCH",b2:"Khi ô sáng trùng vị trí với N nhịp trước, nhấn MATCH. Bắt đầu từ N=1 — N tăng khi bạn qua vòng. 3 mạng.",skip:"Bỏ qua",next:"Tiếp",play:"Chơi"},
+  ko:{t1:"N-Back에 오신 것을 환영합니다",b1:"박자마다 타일이 켜집니다. 최근 위치들을 머릿속에 담아 두세요.",t2:"MATCH를 누르세요",b2:"켜진 타일이 N박자 전과 같은 자리면 MATCH를 누르세요. N=1부터 시작해 라운드를 깰수록 올라갑니다. 라이프 3개.",skip:"건너뛰기",next:"다음",play:"플레이"},
+  zh:{t1:"欢迎来到 N-Back",b1:"每一拍亮起一个方块。把最近的位置记在脑中。",t2:"按 MATCH",b2:"当亮起的方块与N拍前位置相同时按MATCH。从N=1开始——过关后逐渐提升。3条命。",skip:"跳过",next:"下一步",play:"开始玩"},
+  ja:{t1:"N-Back へようこそ",b1:"ビートごとにタイルが光ります。直近の位置を頭に入れておきましょう。",t2:"MATCHを押そう",b2:"光るタイルがNビート前と同じ場所ならMATCH。N=1から始まり、クリアで上がっていきます。ライフは3つ。",skip:"スキップ",next:"次へ",play:"プレイ"},
+  ar:{t1:"مرحبًا بك في N-Back",b1:"يضيء مربع مع كل نبضة. احتفظ بالمواضع الأخيرة في ذهنك.",t2:"اضغط MATCH",b2:"عندما يكون المربع المضيء في نفس موضع ما قبل N نبضات، اضغط MATCH. تبدأ بـ N=1 — ويرتفع كلما اجتزت الجولات. لديك 3 محاولات.",skip:"تخطّي",next:"التالي",play:"العب"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+var tutStep=0;
+function showTut(){
+  tutStep=0;
+  if(LANG==="ar")$("tutCard").dir="rtl";
+  renderTut();$("tut").classList.add("on");
+}
+function renderTut(){
+  $("tutTitle").textContent=tutStep===0?M.t1:M.t2;
+  $("tutBody").textContent=tutStep===0?M.b1:M.b2;
+  $("tutSkip").textContent=M.skip;
+  $("tutNext").textContent=tutStep===0?M.next:M.play;
+}
+function endTut(){
+  try{localStorage.setItem(TUTKEY,"1");}catch(e){}
+  $("tut").classList.remove("on");
+  startRun();
+}
+$("tutNext").onclick=function(){if(tutStep===0){tutStep=1;renderTut();}else{endTut();}};
+$("tutSkip").onclick=endTut;
+
+// initial idle board behind the start overlay
+hearts();buildGrid();setStatus(S.watch);setPill();
+</script>
+</body>
+</html>

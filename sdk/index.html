@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-VCLVPVRXMV');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f1115" />
+  <title>Game SDK — Go Brain Game Hub</title>
+  <meta name="description" content="Embed every Game Hub game with a single iframe — straight from our cloud (storage.fighttech.vn), or download the self-contained zip and host it yourself." />
+  <link rel="icon" type="image/png" href="../assets/app-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem("gobrain.web.theme")||"system";var d=p==="dark"||(p!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");}catch(e){}})();</script>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/legal.css" />
+  <style>
+    /* Map the SDK/legal design tokens onto the landing site's real token set.
+       styles.css uses the neutral/brand/body/r token family; these aliases keep
+       this page styled in both light and dark without touching shared CSS. */
+    :root {
+      --surface: var(--neutral-secondary-medium);
+      --surface-2: var(--neutral-tertiary-soft);
+      --border: var(--border-default);
+      --border-strong: var(--border-default-strong);
+      --text: var(--heading);
+      --muted: var(--body-subtle);
+      --radius: var(--r);
+      --radius-lg: 12px;
+      --accent: var(--brand);
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    .sdk-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 26px; margin-bottom: 22px; }
+    .sdk-card h2 { margin: 0 0 4px; font-size: 22px; }
+    .sdk-card .muted { color: var(--muted); font-size: 14.5px; margin: 0 0 16px; }
+    .sdk-meta { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; }
+    .sdk-pill { font-family: var(--font-mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 5px 11px; color: var(--muted); }
+    .sdk-pill.cloud { color: var(--accent, #4f8cff); border-color: var(--accent, #4f8cff); }
+    .sdk-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+    .sdk-snippet { position: relative; }
+    .sdk-snippet pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; margin: 0; color: var(--text); }
+    .sdk-copy { position: absolute; top: 8px; right: 8px; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+    .sdk-cloud-banner { display:flex; gap:14px; align-items:flex-start; background: var(--surface-2); border:1px solid var(--border); border-radius: var(--radius-lg); padding:18px 20px; margin: 0 0 24px; }
+    .sdk-cloud-banner .ic { font-size:26px; line-height:1; }
+    .sdk-cloud-banner p { margin:0; font-size:14.5px; color:var(--text); }
+    .sdk-cloud-banner code { font-family: var(--font-mono); font-size:13px; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="../"><img class="logo" src="../assets/app-icon.png" alt="" width="30" height="30" /><span>Go Brain</span></a>
+      <nav class="nav"><div class="nav-links">
+        <a href="../">Home</a><a href="../download/">Download</a><a href="../sdk/">SDK</a><a href="../support/">Support</a>
+      </div></nav>
+    </div>
+  </header>
+
+  <main class="legal-main">
+    <div class="container">
+      <div class="legal-wrap">
+        <a class="back-link" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back to home</a>
+        <div class="legal-head">
+          <span class="eyebrow">Game SDK</span>
+          <h1>Embed our games in your product</h1>
+          <p class="legal-lead">Every game in the Hub is a self-contained, offline-capable bundle. Embed it with a single <code>&lt;iframe&gt;</code> — straight from our cloud, or download the zip and host it yourself. No build step, no dependencies, no tracking.</p>
+        </div>
+
+        <div class="sdk-cloud-banner">
+          <span class="ic">☁️</span>
+          <p><strong>New — cloud embeds.</strong> Every game is now hosted live on our CDN at <code>storage.fighttech.vn/games/&lt;game&gt;/</code>. Just paste the iframe below — nothing to download, host, or update. Prefer to self-host? The <strong>Download</strong> button still ships the full offline bundle.</p>
+        </div>
+
+        <!-- iOS native SDK -->
+        <div class="sdk-card" style="border-color:var(--accent)">
+          <h2>📱 iOS SDK <span style="font-size:13px;color:var(--muted);font-weight:400">native Swift</span></h2>
+          <p class="muted">Embed the games <strong>natively</strong> in your iOS app — no WebView, no HTML/CSS/JS. One Swift Package with two products: <strong>GoBrainGamesSDK</strong> (2048, Sudoku, Tango, Patch, Zip, Wend, Mend) and <strong>BeatGameSDK</strong> (Beat music game).</p>
+          <div class="sdk-meta"><span class="sdk-pill cloud">Swift Package</span><span class="sdk-pill">v0.0.1</span><span class="sdk-pill">iOS 12+</span><span class="sdk-pill">UIKit</span><span class="sdk-pill">~45 KB</span><span class="sdk-pill">native</span></div>
+          <div class="sdk-row">
+            <a class="btn btn-primary" href="play2048-ios-sdk-v0.0.1.zip" download>⬇ Download iOS SDK (zip)</a>
+            <a class="btn btn-ghost" href="https://github.com/fighttechvn/play2048/releases/tag/v0.0.1" target="_blank" rel="noopener">Release notes ↗</a>
+          </div>
+          <div class="sdk-snippet"><button class="sdk-copy" data-copy>Copy</button><pre>// 1) Unzip into YourApp/Packages/Play2048, add it as a local Swift package.
+// 2) Open any game:
+import GoBrainGamesSDK
+let games = GoBrainGamesCoordinator(config: .init(locale: "vi"))
+games.onEvent = { e in print(e.gameId, e.name, e.score ?? -1) }
+games.present(.sudoku, from: self)   // go2048 · tango · patch · zip · wend · mend
+
+import BeatGameSDK
+BeatGameCoordinator(config: .init(locale: "vi", showTutorial: true)).present(from: self)</pre></div>
+          <p class="muted" style="margin-top:12px">Need automated setup? The zip ships a ready-to-paste <strong>AI-agent prompt</strong> (Cursor / Claude Code) plus a full README.</p>
+        </div>
+
+        <h2 style="margin:28px 0 14px;font-size:18px;color:var(--muted)">Web embeds (H5 / iframe)</h2>
+
+        <!-- go2048 -->
+        <div class="sdk-card">
+          <h2>go2048</h2>
+          <p class="muted">Classic 2048 number puzzle — TypeScript + PixiJS v7.</p>
+          <div class="sdk-meta"><span class="sdk-pill cloud">☁ cloud</span><span class="sdk-pill">v1.1.2</span><span class="sdk-pill">~520 KB</span><span class="sdk-pill">offline</span><span class="sdk-pill">WebGL</span></div>
+          <div class="sdk-row"><a class="btn btn-primary" href="https://storage.fighttech.vn/games/go2048/index.html?embed=go2048" target="_blank" rel="noopener">▶ Live demo</a><a class="btn btn-ghost" href="https://storage.fighttech.vn/games/go2048.zip" download>⬇ Download zip</a></div>
+          <div class="sdk-snippet"><button class="sdk-copy" data-copy>Copy</button><pre>&lt;iframe src="https://storage.fighttech.vn/games/go2048/index.html?embed=go2048"
+        width="420" height="760" style="border:0;border-radius:16px"
+        allow="autoplay; fullscreen"&gt;&lt;/iframe&gt;</pre></div>
+        </div>
+
+        <!-- sudoku -->
+        <div class="sdk-card">
+          <h2>Sudoku</h2>
+          <p class="muted">Classic 9×9 logic — 4 difficulties, every puzzle uniquely solvable.</p>
+          <div class="sdk-meta"><span class="sdk-pill cloud">☁ cloud</span><span class="sdk-pill">v1.0.0</span><span class="sdk-pill">~35 KB</span><span class="sdk-pill">offline</span><span class="sdk-pill">HTML/CSS</span></div>
+          <div class="sdk-row"><a class="btn btn-primary" href="https://storage.fighttech.vn/games/sudoku/index.html" target="_blank" rel="noopener">▶ Live demo</a><a class="btn btn-ghost" href="https://storage.fighttech.vn/games/sudoku.zip" download>⬇ Download zip</a></div>
+          <div class="sdk-snippet"><button class="sdk-copy" data-copy>Copy</button><pre>&lt;iframe src="https://storage.fighttech.vn/games/sudoku/index.html"
+        width="480" height="820" style="border:0;border-radius:16px"&gt;&lt;/iframe&gt;</pre></div>
+        </div>
+
+        <!-- zip -->
+        <div class="sdk-card">
+          <h2>Zip</h2>
+          <p class="muted">Numbered-path logic puzzle — fill every cell, hit the dots in order. 99 levels.</p>
+          <div class="sdk-meta"><span class="sdk-pill cloud">☁ cloud</span><span class="sdk-pill">v1.0.0</span><span class="sdk-pill">~60 KB</span><span class="sdk-pill">offline</span><span class="sdk-pill">Canvas</span></div>
+          <div class="sdk-row"><a class="btn btn-primary" href="https://storage.fighttech.vn/games/zip/index.html" target="_blank" rel="noopener">▶ Live demo</a><a class="btn btn-ghost" href="https://storage.fighttech.vn/games/zip.zip" download>⬇ Download zip</a></div>
+          <div class="sdk-snippet"><button class="sdk-copy" data-copy>Copy</button><pre>&lt;iframe src="https://storage.fighttech.vn/games/zip/index.html"
+        width="480" height="800" style="border:0;border-radius:16px"&gt;&lt;/iframe&gt;</pre></div>
+        </div>
+
+        <!-- patch -->
+        <div class="sdk-card">
+          <h2>Patch</h2>
+          <p class="muted">Shikaku-style shape puzzle — split the grid into sized, shaped rectangles. 99 levels.</p>
+          <div class="sdk-meta"><span class="sdk-pill cloud">☁ cloud</span><span class="sdk-pill">v1.0.0</span><span class="sdk-pill">~60 KB</span><span class="sdk-pill">offline</span><span class="sdk-pill">Canvas</span></div>
+          <div class="sdk-row"><a class="btn btn-primary" href="https://storage.fighttech.vn/games/patch/index.html" target="_blank" rel="noopener">▶ Live demo</a><a class="btn btn-ghost" href="https://storage.fighttech.vn/games/patch.zip" download>⬇ Download zip</a></div>
+          <div class="sdk-snippet"><button class="sdk-copy" data-copy>Copy</button><pre>&lt;iframe src="https://storage.fighttech.vn/games/patch/index.html"
+        width="480" height="800" style="border:0;border-radius:16px"&gt;&lt;/iframe&gt;</pre></div>
+        </div>
+
+        <!-- memory -->
+        <div class="sdk-card">
+          <h2>Memory Match</h2>
+          <p class="muted">Brandable memory match — flip cards to learn products and unlock a coupon. Swap colors, cards and reward via a single <code>theme.json</code>.</p>
+          <div class="sdk-meta"><span class="sdk-pill cloud">☁ cloud</span><span class="sdk-pill">v1.0.0</span><span class="sdk-pill">~20 KB</span><span class="sdk-pill">offline</span><span class="sdk-pill">Marketing</span></div>
+          <div class="sdk-row"><a class="btn btn-primary" href="https://storage.fighttech.vn/games/memory/index.html" target="_blank" rel="noopener">▶ Live demo</a><a class="btn btn-ghost" href="https://storage.fighttech.vn/games/memory.zip" download>⬇ Download zip</a></div>
+          <div class="sdk-snippet"><button class="sdk-copy" data-copy>Copy</button><pre>&lt;iframe src="https://storage.fighttech.vn/games/memory/index.html"
+        width="420" height="760" style="border:0;border-radius:16px"&gt;&lt;/iframe&gt;</pre></div>
+        </div>
+
+        <!-- runner -->
+        <div class="sdk-card">
+          <h2>Endless Runner</h2>
+          <p class="muted">Brandable endless runner — your mascot dashes, dodges and grabs rewards. Drop in your sprites and brand colors.</p>
+          <div class="sdk-meta"><span class="sdk-pill cloud">☁ cloud</span><span class="sdk-pill">v1.0.0</span><span class="sdk-pill">~16 KB</span><span class="sdk-pill">offline</span><span class="sdk-pill">Marketing</span></div>
+          <div class="sdk-row"><a class="btn btn-primary" href="https://storage.fighttech.vn/games/runner/index.html" target="_blank" rel="noopener">▶ Live demo</a><a class="btn btn-ghost" href="https://storage.fighttech.vn/games/runner.zip" download>⬇ Download zip</a></div>
+          <div class="sdk-snippet"><button class="sdk-copy" data-copy>Copy</button><pre>&lt;iframe src="https://storage.fighttech.vn/games/runner/index.html"
+        width="420" height="760" style="border:0;border-radius:16px"&gt;&lt;/iframe&gt;</pre></div>
+        </div>
+
+        <!-- bubbo-bubbo -->
+        <div class="sdk-card">
+          <h2>Bubbo Bubbo</h2>
+          <p class="muted">Arcade bubble shooter from the PixiJS open-games collection.</p>
+          <div class="sdk-meta"><span class="sdk-pill cloud">☁ cloud</span><span class="sdk-pill">v1.0.0</span><span class="sdk-pill">~4.2 MB</span><span class="sdk-pill">offline</span><span class="sdk-pill">PixiJS</span></div>
+          <div class="sdk-row"><a class="btn btn-primary" href="https://storage.fighttech.vn/games/bubbo-bubbo/index.html" target="_blank" rel="noopener">▶ Live demo</a><a class="btn btn-ghost" href="https://storage.fighttech.vn/games/bubbo-bubbo.zip" download>⬇ Download zip</a></div>
+          <div class="sdk-snippet"><button class="sdk-copy" data-copy>Copy</button><pre>&lt;iframe src="https://storage.fighttech.vn/games/bubbo-bubbo/index.html"
+        width="960" height="600" style="border:0;border-radius:16px"
+        allow="autoplay; fullscreen; gamepad"&gt;&lt;/iframe&gt;</pre></div>
+        </div>
+
+        <div class="callout" style="margin-top:8px">
+          <p><strong>Two ways to embed:</strong></p>
+          <p><strong>1. Cloud (zero hosting)</strong> — paste the iframe above as-is. The game runs live from <code>storage.fighttech.vn/games/&lt;game&gt;/</code> on our CDN; we keep it updated.</p>
+          <p><strong>2. Self-host</strong> — download the zip, unzip, upload the folder to any static host or CDN, then point the iframe <code>src</code> at its <code>index.html</code>. Bundles use relative paths so they run from any sub-path.</p>
+          <p class="muted">Maintainers: rebuild the zips with <code>./scripts/package-games.sh</code> and push them to the cloud with <code>./.app_dist/devops/deploy-games.sh</code>.</p>
+        </div>
+
+        <div class="legal-nav-links">
+          <a href="../privacy/">Privacy Policy</a><a href="../terms/">Terms of Use</a><a href="../support/">Support</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer" data-site-footer></footer>
+  <script>
+    document.querySelectorAll('[data-copy]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var pre = b.parentElement.querySelector('pre');
+        navigator.clipboard.writeText(pre.textContent).then(function(){ b.textContent='Copied'; setTimeout(function(){b.textContent='Copy';},1500); });
+      });
+    });
+    document.getElementById('year') && (document.getElementById('year').textContent = new Date().getFullYear());
+  </script>
+  <script src="../js/app-banner.js"></script>
+</body>
+</html>

@@ -1,0 +1,318 @@
+{
+  "events": [
+    {
+      "id": "newyear-2026",
+      "game": "4pics1word",
+      "name": { "en": "New Year", "vi": "Tết Dương Lịch", "ko": "새해", "zh": "元旦" },
+      "category": "holiday",
+      "region": ["intl"],
+      "start": "2026-01-01",
+      "end": "2026-01-03",
+      "enabled": true,
+      "priority": 8,
+      "art": { "accent": "#f59f00", "bg": "#fff9db", "motif": "🎆", "mascotSkin": "party",
+        "banner": { "en": "Happy New Year!", "vi": "Chúc Mừng Năm Mới!" } },
+      "themePacks": ["newyear"],
+      "features": { "doubleCoins": true, "dailyChallenge": true, "collectible": "newyear-fireworks" },
+      "items": [
+        { "id": "coins-ny", "type": "coins", "name": { "en": "New Year Coin Pack", "vi": "Gói Xu Năm Mới" }, "currency": "usd", "price": 0.99, "sku": "coins_ny_1500", "amount": 1500, "discount": 0.25 },
+        { "id": "skin-ny", "type": "skin", "name": { "en": "Fireworks Skin", "vi": "Giao Diện Pháo Hoa" }, "currency": "coin", "price": 500 }
+      ]
+    },
+    {
+      "id": "tet-2026",
+      "game": "4pics1word",
+      "name": { "en": "Lunar New Year", "vi": "Tết Nguyên Đán", "ko": "설날", "zh": "春节" },
+      "category": "holiday",
+      "region": ["vn", "asia"],
+      "start": "2026-02-14",
+      "end": "2026-02-24",
+      "enabled": true,
+      "priority": 20,
+      "art": { "accent": "#e03131", "bg": "#fff5f5", "motif": "🧧", "mascotSkin": "tet",
+        "banner": { "en": "Happy Lunar New Year!", "vi": "Chúc Mừng Năm Mới!" } },
+      "themePacks": ["tet"],
+      "features": { "doubleCoins": true, "dailyChallenge": true, "collectible": "tet-stickers" },
+      "items": [
+        { "id": "tet-lixi", "type": "collectible", "name": { "en": "Lucky Money", "vi": "Lì Xì" }, "currency": "coin", "price": 0 },
+        { "id": "coins-tet", "type": "coins", "name": { "en": "Tết Coin Pack", "vi": "Gói Xu Tết" }, "currency": "usd", "price": 0.99, "sku": "coins_tet_2000", "amount": 2000, "discount": 0.3 },
+        { "id": "skin-tet", "type": "skin", "name": { "en": "Tết Board Skin", "vi": "Giao Diện Tết" }, "currency": "coin", "price": 600 }
+      ]
+    },
+    {
+      "id": "valentine-2026",
+      "game": "4pics1word",
+      "name": { "en": "Valentine's Day", "vi": "Lễ Tình Nhân", "ko": "발렌타인데이", "zh": "情人节" },
+      "category": "holiday",
+      "region": ["intl"],
+      "start": "2026-02-12",
+      "end": "2026-02-15",
+      "enabled": true,
+      "priority": 12,
+      "art": { "accent": "#f06595", "bg": "#fff0f6", "motif": "❤️", "mascotSkin": "cupid",
+        "banner": { "en": "Happy Valentine's!", "vi": "Chúc Ngày Tình Nhân Vui Vẻ!" } },
+      "themePacks": ["valentine"],
+      "features": { "doubleCoins": false, "dailyChallenge": true, "collectible": "valentine-hearts" },
+      "items": [
+        { "id": "hint-love", "type": "hint", "name": { "en": "Love Hint Bundle", "vi": "Gói Gợi Ý" }, "currency": "coin", "price": 200, "discount": 0.2 },
+        { "id": "skin-valentine", "type": "skin", "name": { "en": "Rose Skin", "vi": "Giao Diện Hoa Hồng" }, "currency": "coin", "price": 450 }
+      ]
+    },
+    {
+      "id": "womensday-2026",
+      "game": "4pics1word",
+      "name": { "en": "Women's Day", "vi": "Quốc Tế Phụ Nữ", "ko": "세계 여성의 날", "zh": "妇女节" },
+      "category": "holiday",
+      "region": ["vn", "intl"],
+      "start": "2026-03-06",
+      "end": "2026-03-09",
+      "enabled": true,
+      "priority": 12,
+      "art": { "accent": "#cc5de8", "bg": "#f8f0fc", "motif": "💐", "mascotSkin": "flower",
+        "banner": { "en": "Happy Women's Day!", "vi": "Chúc Mừng 8/3!" } },
+      "themePacks": ["womensday"],
+      "features": { "doubleCoins": true, "dailyChallenge": false, "collectible": null },
+      "items": [
+        { "id": "coins-womensday", "type": "coins", "name": { "en": "Bloom Coin Pack", "vi": "Gói Xu 8/3" }, "currency": "usd", "price": 0.99, "sku": "coins_wd_1500", "amount": 1500, "discount": 0.2 }
+      ]
+    },
+    {
+      "id": "easter-2026",
+      "game": "4pics1word",
+      "name": { "en": "Easter", "vi": "Lễ Phục Sinh", "ko": "부활절", "zh": "复活节" },
+      "category": "holiday",
+      "region": ["intl"],
+      "start": "2026-03-30",
+      "end": "2026-04-06",
+      "enabled": true,
+      "priority": 10,
+      "art": { "accent": "#20c997", "bg": "#e6fcf5", "motif": "🥚", "mascotSkin": "bunny",
+        "banner": { "en": "Happy Easter!", "vi": "Chúc Mừng Phục Sinh!" } },
+      "themePacks": ["easter"],
+      "features": { "doubleCoins": false, "dailyChallenge": true, "collectible": "easter-eggs" },
+      "items": [
+        { "id": "easter-egg", "type": "collectible", "name": { "en": "Painted Egg", "vi": "Trứng Phục Sinh" }, "currency": "coin", "price": 0 },
+        { "id": "skin-easter", "type": "skin", "name": { "en": "Spring Skin", "vi": "Giao Diện Mùa Xuân" }, "currency": "coin", "price": 400 }
+      ]
+    },
+    {
+      "id": "reunification-2026",
+      "game": "4pics1word",
+      "name": { "en": "Reunification & Labor Day", "vi": "Giải Phóng & Quốc Tế Lao Động", "zh": "劳动节" },
+      "category": "holiday",
+      "region": ["vn"],
+      "start": "2026-04-29",
+      "end": "2026-05-02",
+      "enabled": true,
+      "priority": 9,
+      "art": { "accent": "#e03131", "bg": "#fff5f5", "motif": "🇻🇳", "mascotSkin": "default",
+        "banner": { "en": "Happy Holidays 30/4 - 1/5!", "vi": "Chúc Mừng 30/4 - 1/5!" } },
+      "themePacks": [],
+      "features": { "doubleCoins": true, "dailyChallenge": false, "collectible": null },
+      "items": [
+        { "id": "coins-holiday", "type": "coins", "name": { "en": "Holiday Coin Pack", "vi": "Gói Xu Lễ" }, "currency": "usd", "price": 1.99, "sku": "coins_hol_4000", "amount": 4000, "discount": 0.3 }
+      ]
+    },
+    {
+      "id": "childrensday-2026",
+      "game": "4pics1word",
+      "name": { "en": "Children's Day", "vi": "Quốc Tế Thiếu Nhi", "ko": "어린이날", "zh": "儿童节" },
+      "category": "holiday",
+      "region": ["vn", "asia"],
+      "start": "2026-05-30",
+      "end": "2026-06-02",
+      "enabled": true,
+      "priority": 11,
+      "art": { "accent": "#4dabf7", "bg": "#e7f5ff", "motif": "🎈", "mascotSkin": "kid",
+        "banner": { "en": "Happy Children's Day!", "vi": "Chúc Mừng Ngày 1/6!" } },
+      "themePacks": ["childrensday"],
+      "features": { "doubleCoins": true, "dailyChallenge": true, "collectible": "childrensday-toys" },
+      "items": [
+        { "id": "booster-kid", "type": "booster", "name": { "en": "Double Coins (1h)", "vi": "Nhân Đôi Xu (1h)" }, "currency": "coin", "price": 150 },
+        { "id": "skin-kid", "type": "skin", "name": { "en": "Playground Skin", "vi": "Giao Diện Sân Chơi" }, "currency": "coin", "price": 400 }
+      ]
+    },
+    {
+      "id": "summer-2026",
+      "game": "4pics1word",
+      "name": { "en": "Summer Splash", "vi": "Hè Rực Rỡ", "ko": "여름", "zh": "夏日" },
+      "category": "seasonal",
+      "region": ["intl"],
+      "start": "2026-06-15",
+      "end": "2026-08-15",
+      "enabled": true,
+      "priority": 3,
+      "art": { "accent": "#15aabf", "bg": "#e3fafc", "motif": "🏖️", "mascotSkin": "summer",
+        "banner": { "en": "Summer Splash!", "vi": "Chào Hè!" } },
+      "themePacks": ["travel"],
+      "features": { "doubleCoins": false, "dailyChallenge": true, "collectible": "summer-shells" },
+      "items": [
+        { "id": "coins-summer", "type": "coins", "name": { "en": "Summer Coin Pack", "vi": "Gói Xu Hè" }, "currency": "usd", "price": 0.99, "sku": "coins_sum_1500", "amount": 1500, "discount": 0.15 },
+        { "id": "skin-summer", "type": "skin", "name": { "en": "Beach Skin", "vi": "Giao Diện Bãi Biển" }, "currency": "coin", "price": 400 }
+      ]
+    },
+    {
+      "id": "nationalday-vn-2026",
+      "game": "4pics1word",
+      "name": { "en": "Vietnam National Day", "vi": "Quốc Khánh 2/9" },
+      "category": "holiday",
+      "region": ["vn"],
+      "start": "2026-08-31",
+      "end": "2026-09-02",
+      "enabled": true,
+      "priority": 9,
+      "art": { "accent": "#e03131", "bg": "#fff5f5", "motif": "🇻🇳", "mascotSkin": "default",
+        "banner": { "en": "Happy National Day!", "vi": "Chúc Mừng Quốc Khánh 2/9!" } },
+      "themePacks": [],
+      "features": { "doubleCoins": true, "dailyChallenge": false, "collectible": null },
+      "items": []
+    },
+    {
+      "id": "midautumn-2026",
+      "game": "4pics1word",
+      "name": { "en": "Mid-Autumn Festival", "vi": "Tết Trung Thu", "ko": "추석", "zh": "中秋节" },
+      "category": "holiday",
+      "region": ["vn", "asia"],
+      "start": "2026-09-20",
+      "end": "2026-09-27",
+      "enabled": true,
+      "priority": 15,
+      "art": { "accent": "#f59f00", "bg": "#fff9db", "motif": "🏮", "mascotSkin": "midautumn",
+        "banner": { "en": "Happy Mid-Autumn!", "vi": "Chúc Trung Thu Vui Vẻ!" } },
+      "themePacks": ["midautumn"],
+      "features": { "doubleCoins": true, "dailyChallenge": true, "collectible": "midautumn-lanterns" },
+      "items": [
+        { "id": "midautumn-lantern", "type": "collectible", "name": { "en": "Lantern", "vi": "Đèn Lồng" }, "currency": "coin", "price": 0 },
+        { "id": "coins-midautumn", "type": "coins", "name": { "en": "Mooncake Coin Pack", "vi": "Gói Xu Trung Thu" }, "currency": "usd", "price": 0.99, "sku": "coins_ma_1800", "amount": 1800, "discount": 0.25 }
+      ]
+    },
+    {
+      "id": "womensday-vn-2026",
+      "game": "4pics1word",
+      "name": { "en": "Vietnamese Women's Day", "vi": "Phụ Nữ Việt Nam 20/10" },
+      "category": "holiday",
+      "region": ["vn"],
+      "start": "2026-10-18",
+      "end": "2026-10-20",
+      "enabled": true,
+      "priority": 10,
+      "art": { "accent": "#cc5de8", "bg": "#f8f0fc", "motif": "🌹", "mascotSkin": "flower",
+        "banner": { "en": "Happy Women's Day!", "vi": "Chúc Mừng 20/10!" } },
+      "themePacks": ["womensday"],
+      "features": { "doubleCoins": true, "dailyChallenge": false, "collectible": null },
+      "items": []
+    },
+    {
+      "id": "halloween-2026",
+      "game": "4pics1word",
+      "name": { "en": "Halloween", "vi": "Lễ Hội Halloween", "ko": "핼러윈", "zh": "万圣节" },
+      "category": "holiday",
+      "region": ["intl"],
+      "start": "2026-10-25",
+      "end": "2026-10-31",
+      "enabled": true,
+      "priority": 14,
+      "art": { "accent": "#e8590c", "bg": "#fff4e6", "motif": "🎃", "mascotSkin": "halloween",
+        "banner": { "en": "Happy Halloween!", "vi": "Halloween Vui Vẻ!" } },
+      "themePacks": ["halloween"],
+      "features": { "doubleCoins": true, "dailyChallenge": true, "collectible": "halloween-candy" },
+      "items": [
+        { "id": "halloween-candy", "type": "collectible", "name": { "en": "Candy", "vi": "Kẹo" }, "currency": "coin", "price": 0 },
+        { "id": "skin-halloween", "type": "skin", "name": { "en": "Spooky Skin", "vi": "Giao Diện Ma Quái" }, "currency": "coin", "price": 500 },
+        { "id": "coins-halloween", "type": "coins", "name": { "en": "Pumpkin Coin Pack", "vi": "Gói Xu Halloween" }, "currency": "usd", "price": 0.99, "sku": "coins_hw_1500", "amount": 1500, "discount": 0.2 }
+      ]
+    },
+    {
+      "id": "diwali-2026",
+      "game": "4pics1word",
+      "name": { "en": "Diwali", "vi": "Lễ Hội Ánh Sáng Diwali", "zh": "排灯节" },
+      "category": "holiday",
+      "region": ["asia", "intl"],
+      "start": "2026-11-05",
+      "end": "2026-11-10",
+      "enabled": true,
+      "priority": 10,
+      "art": { "accent": "#f76707", "bg": "#fff4e6", "motif": "🪔", "mascotSkin": "diwali",
+        "banner": { "en": "Happy Diwali!", "vi": "Chúc Mừng Diwali!" } },
+      "themePacks": ["diwali"],
+      "features": { "doubleCoins": true, "dailyChallenge": true, "collectible": "diwali-lamps" },
+      "items": [
+        { "id": "skin-diwali", "type": "skin", "name": { "en": "Festival of Lights Skin", "vi": "Giao Diện Lễ Ánh Sáng" }, "currency": "coin", "price": 450 }
+      ]
+    },
+    {
+      "id": "teachersday-2026",
+      "game": "4pics1word",
+      "name": { "en": "Teachers' Day", "vi": "Ngày Nhà Giáo 20/11" },
+      "category": "holiday",
+      "region": ["vn"],
+      "start": "2026-11-18",
+      "end": "2026-11-20",
+      "enabled": true,
+      "priority": 10,
+      "art": { "accent": "#4263eb", "bg": "#edf2ff", "motif": "🌻", "mascotSkin": "teacher",
+        "banner": { "en": "Happy Teachers' Day!", "vi": "Chúc Mừng Ngày Nhà Giáo 20/11!" } },
+      "themePacks": ["teachersday"],
+      "features": { "doubleCoins": true, "dailyChallenge": false, "collectible": null },
+      "items": [
+        { "id": "coins-teachers", "type": "coins", "name": { "en": "Gratitude Coin Pack", "vi": "Gói Xu Tri Ân" }, "currency": "usd", "price": 0.99, "sku": "coins_td_1500", "amount": 1500, "discount": 0.2 }
+      ]
+    },
+    {
+      "id": "thanksgiving-2026",
+      "game": "4pics1word",
+      "name": { "en": "Thanksgiving", "vi": "Lễ Tạ Ơn", "ko": "추수감사절", "zh": "感恩节" },
+      "category": "holiday",
+      "region": ["intl"],
+      "start": "2026-11-24",
+      "end": "2026-11-27",
+      "enabled": true,
+      "priority": 10,
+      "art": { "accent": "#d9480f", "bg": "#fff4e6", "motif": "🦃", "mascotSkin": "harvest",
+        "banner": { "en": "Happy Thanksgiving!", "vi": "Chúc Mừng Lễ Tạ Ơn!" } },
+      "themePacks": ["thanksgiving"],
+      "features": { "doubleCoins": false, "dailyChallenge": true, "collectible": null },
+      "items": [
+        { "id": "skin-harvest", "type": "skin", "name": { "en": "Harvest Skin", "vi": "Giao Diện Mùa Gặt" }, "currency": "coin", "price": 400 }
+      ]
+    },
+    {
+      "id": "christmas-2026",
+      "game": "4pics1word",
+      "name": { "en": "Christmas", "vi": "Lễ Giáng Sinh", "ko": "크리스마스", "zh": "圣诞节" },
+      "category": "holiday",
+      "region": ["intl"],
+      "start": "2026-12-20",
+      "end": "2026-12-26",
+      "enabled": true,
+      "priority": 18,
+      "art": { "accent": "#2f9e44", "bg": "#ebfbee", "motif": "🎄", "mascotSkin": "santa",
+        "banner": { "en": "Merry Christmas!", "vi": "Giáng Sinh An Lành!" } },
+      "themePacks": ["christmas"],
+      "features": { "doubleCoins": true, "dailyChallenge": true, "collectible": "christmas-gifts" },
+      "items": [
+        { "id": "christmas-gift", "type": "collectible", "name": { "en": "Gift Box", "vi": "Hộp Quà" }, "currency": "coin", "price": 0 },
+        { "id": "skin-christmas", "type": "skin", "name": { "en": "Winter Wonderland Skin", "vi": "Giao Diện Giáng Sinh" }, "currency": "coin", "price": 600 },
+        { "id": "coins-christmas", "type": "coins", "name": { "en": "Santa Coin Pack", "vi": "Gói Xu Giáng Sinh" }, "currency": "usd", "price": 1.99, "sku": "coins_xmas_4000", "amount": 4000, "discount": 0.35 }
+      ]
+    },
+    {
+      "id": "nye-2026",
+      "game": "4pics1word",
+      "name": { "en": "New Year's Eve", "vi": "Đêm Giao Thừa", "ko": "새해 전야", "zh": "跨年夜" },
+      "category": "holiday",
+      "region": ["intl"],
+      "start": "2026-12-29",
+      "end": "2026-12-31",
+      "enabled": true,
+      "priority": 16,
+      "art": { "accent": "#f59f00", "bg": "#fff9db", "motif": "🎆", "mascotSkin": "party",
+        "banner": { "en": "Countdown to 2027!", "vi": "Đếm Ngược Sang 2027!" } },
+      "themePacks": ["newyear"],
+      "features": { "doubleCoins": true, "dailyChallenge": true, "collectible": "newyear-fireworks" },
+      "items": [
+        { "id": "coins-nye", "type": "coins", "name": { "en": "Countdown Coin Pack", "vi": "Gói Xu Giao Thừa" }, "currency": "usd", "price": 0.99, "sku": "coins_nye_2000", "amount": 2000, "discount": 0.3 }
+      ]
+    }
+  ]
+}

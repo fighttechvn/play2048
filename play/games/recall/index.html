@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Recall</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--acc:#f76707;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  .pill.err{color:#e03131;border-color:#e03131;background:#fff5f5}
+  #lives{color:#e03131;letter-spacing:3px;font-size:17px}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px;position:relative}
+  #grid{display:grid;grid-template-columns:repeat(5,1fr);grid-gap:8px;gap:8px}
+  #grid.n6{grid-template-columns:repeat(6,1fr)}
+  #grid.shake{animation:shake .4s}
+  .cell{position:relative;border:0;border-radius:12px;padding:0;cursor:pointer;background:#eceae4;transition:background .15s,-webkit-transform .12s ease;transition:background .15s,transform .12s ease;outline:none;font-family:inherit}
+  .cell::before{content:"";display:block;padding-top:100%}
+  .cell span{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#fff}
+  #grid.n6 .cell span{font-size:18px}
+  .cell.num{background:var(--acc)}
+  .cell.hid{background:var(--acc)}
+  .cell.hid span{visibility:hidden}
+  .cell.done{background:#d3f9d8}
+  .cell.done span{visibility:visible;color:#2b8a3e}
+  .cell.bad{background:#ffa8a8!important}
+  .cell.bad span{visibility:visible;color:#c92a2a}
+  .cell.press{-webkit-transform:scale(.9);transform:scale(.9)}
+  #banner{position:absolute;top:0;left:0;right:0;bottom:0;display:none;align-items:center;justify-content:center;pointer-events:none;font-size:32px;font-weight:800;color:rgba(26,26,26,.88);text-shadow:0 2px 14px #fff,0 0 6px #fff;z-index:2}
+  #banner.on{display:flex;animation:bpop .9s ease both}
+  @keyframes bpop{0%{opacity:0;-webkit-transform:scale(.6);transform:scale(.6)}22%{opacity:1;-webkit-transform:scale(1.04);transform:scale(1.04)}34%{-webkit-transform:scale(1);transform:scale(1)}78%{opacity:1}100%{opacity:0}}
+  @keyframes shake{0%,100%{-webkit-transform:translateX(0);transform:translateX(0)}20%,60%{-webkit-transform:translateX(-7px);transform:translateX(-7px)}40%,80%{-webkit-transform:translateX(7px);transform:translateX(7px)}}
+  .statusrow{display:flex;justify-content:center}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win p{margin:4px 0}
+  .win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--acc);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* First-run tutorial — simple 2-step centered card */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;background:rgba(0,0,0,.45)}
+  #tut.on{display:block}
+  #tutCard{position:fixed;left:50%;top:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);width:calc(100% - 40px);max-width:320px;background:#fff;border-radius:16px;padding:20px 22px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;min-height:44px;margin:-4px -8px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}#tutCard .row>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">Recall · 4</span><span class="pill" id="lives">♥♥♥</span></div>
+  <div class="board">
+    <div id="grid"></div>
+    <div id="banner"></div>
+  </div>
+  <div class="statusrow"><span class="pill" id="status">…</span></div>
+  <div class="help"><b>How to play.</b> Numbers appear on the grid. Tap 1 first — the rest turn blank the moment you do. Keep tapping in ascending order from memory. Each cleared round adds one number. 3 mistakes ends the run.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Numbers appear on the grid. Tap 1 first — the rest turn blank the moment you do. Keep tapping in ascending order from memory. Each cleared round adds one number. 3 mistakes ends the run.",
+    vi:"<b>Cách chơi.</b> Các số hiện trên lưới. Chạm số 1 trước — các số còn lại sẽ bị che ngay lập tức. Tiếp tục chạm theo thứ tự tăng dần bằng trí nhớ. Mỗi vòng qua sẽ thêm một số. Sai 3 lần là kết thúc.",
+    ko:"<b>플레이 방법.</b> 숫자가 격자에 나타납니다. 1을 먼저 누르세요 — 그 순간 나머지 숫자가 가려집니다. 기억을 더듬어 오름차순으로 계속 누르세요. 라운드를 깰 때마다 숫자가 하나 늘어납니다. 3번 틀리면 종료됩니다.",
+    zh:"<b>玩法。</b> 数字出现在网格上。先点1——其余数字会立刻被遮住。凭记忆按升序继续点击。每过一关多一个数字。错3次游戏结束。",
+    ja:"<b>遊び方。</b> グリッドに数字が現れます。まず1をタップ — その瞬間、残りの数字が隠れます。記憶を頼りに昇順でタップし続けましょう。ラウンドを重ねるごとに数字が1つ増えます。3回ミスで終了です。",
+    ar:"<b>طريقة اللعب.</b> تظهر الأرقام على الشبكة. انقر الرقم 1 أولًا — تختفي بقية الأرقام فورًا. تابع النقر تصاعديًا من الذاكرة. تُضاف خانة كل جولة. ثلاثة أخطاء تنهي الجولة."
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="starto" style="display:grid"><div><h2>Recall</h2><p id="startMsg"></p><button id="startBtn">Play</button></div></div>
+<div class="win" id="wino"><div><h2 id="goTitle">Game over</h2><p id="goScore"></p><p id="goBest"></p><button id="again">Play again</button></div></div>
+<div id="tut">
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script>
+const KEY="recall.best";
+const TUTKEY="recall.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // hub passes ?tut=0 to disable
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Recall is endless/score-based, so it POSTs a fixed `level: 1` with the
+// score — the server ranks score games by score first, then time. Reads the
+// shared player token (set by the hub, same origin). No token → silently skips.
+// Mirrors the GBLB block in games/echo/index.html; keep in sync.
+const GBLB=(function(){
+  var GAME='recall', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+
+// ── UI strings (6 languages) ──────────────────────────────────────────────
+const STR={
+  en:{memo:"Find 1 to start",go:"Tap the rest in order!",wrong:"Oops! Watch the reveal",plus:"+1 number!",nums:"numbers",over:"Game over",score:"Numbers",best:"Best",play:"Play",again:"Play again",tap:"Memorize the numbers, then tap them in order — they hide after your first tap."},
+  vi:{memo:"Tìm số 1 để bắt đầu",go:"Chạm các số còn lại theo thứ tự!",wrong:"Sai rồi! Xem đáp án nhé",plus:"+1 số!",nums:"số",over:"Kết thúc",score:"Số lượng",best:"Kỷ lục",play:"Chơi",again:"Chơi lại",tap:"Ghi nhớ các số rồi chạm theo thứ tự — chúng bị che sau lần chạm đầu tiên."},
+  ko:{memo:"1을 찾아 시작하세요",go:"나머지를 순서대로!",wrong:"틀렸어요! 정답을 확인하세요",plus:"+1 숫자!",nums:"숫자",over:"게임 오버",score:"숫자 개수",best:"최고 기록",play:"플레이",again:"다시 하기",tap:"숫자를 기억한 뒤 순서대로 누르세요 — 첫 탭 이후 숫자가 가려집니다."},
+  zh:{memo:"先找到1",go:"按顺序点其余的！",wrong:"错了！看看答案",plus:"+1个数字！",nums:"个数字",over:"游戏结束",score:"数字数",best:"最佳",play:"开始",again:"再玩一次",tap:"记住数字位置，然后按顺序点击——第一次点击后数字会被遮住。"},
+  ja:{memo:"1を見つけてスタート",go:"残りを順番にタップ！",wrong:"ミス！答えを確認",plus:"+1個!",nums:"個",over:"ゲームオーバー",score:"数字の数",best:"ベスト",play:"プレイ",again:"もう一度",tap:"数字の場所を覚えて順番にタップ — 最初のタップで数字が隠れます。"},
+  ar:{memo:"ابحث عن 1 للبدء",go:"انقر البقية بالترتيب!",wrong:"خطأ! شاهد الإجابة",plus:"+1 رقم!",nums:"أرقام",over:"انتهت اللعبة",score:"الأرقام",best:"الأفضل",play:"العب",again:"العب مجددًا",tap:"احفظ مواقع الأرقام ثم انقرها بالترتيب — تختفي بعد أول نقرة."}
+};
+const S=STR[LANG]||STR.en;
+
+// ── Pure logic (kept in sync with games/recall/logic.mjs — source of truth) ──
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function paramsForRound(round){var count=Math.min(20,3+round);var grid=count>=12?6:5;return {count:count,grid:grid,cells:grid*grid};}
+function placeNumbers(count,cells,rnd){var pool=[];for(var i=0;i<cells;i++)pool.push(i);for(var i2=0;i2<count;i2++){var j=i2+Math.floor(rnd()*(pool.length-i2));var t=pool[i2];pool[i2]=pool[j];pool[j]=t;}return pool.slice(0,count);}
+
+// ── WebAudio beeps — OscillatorNode only, no files; silent-fail if blocked ──
+var actx=null;
+function ensureAudio(){try{var AC=window.AudioContext||window.webkitAudioContext;if(!actx&&AC)actx=new AC();if(actx&&actx.state==="suspended")actx.resume();}catch(e){actx=null;}}
+function tone(freq,dur,type,vol){
+  try{
+    if(!actx)return;
+    var t=actx.currentTime,o=actx.createOscillator(),g=actx.createGain();
+    o.type=type||"sine";o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.linearRampToValueAtTime(vol||0.22,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g);g.connect(actx.destination);
+    o.start(t);o.stop(t+dur+0.05);
+  }catch(e){}
+}
+// Each tapped number climbs a pentatonic ladder — the run "plays a melody".
+const PENTA=[0,2,4,7,9,12,14,16,19,21,24,26,28,31,33,36];
+function stepFreq(k){return 261.63*Math.pow(2,PENTA[k%16]/12);}
+
+// ── Game state ────────────────────────────────────────────────────────────
+let round=1,count=4,gridN=5,cellNum=[],next=1,lives=3,score=0,best=+(localStorage.getItem(KEY)||0),state="idle",timers=[];
+let rnd=mulberry32(((Date.now()%2147483647)>>>0)||1);
+const $=function(id){return document.getElementById(id);};
+const grid=$("grid");
+function later(fn,ms){timers.push(setTimeout(fn,ms));}
+function clearTimers(){for(var i=0;i<timers.length;i++)clearTimeout(timers[i]);timers=[];}
+function hearts(){var s="";for(var i=0;i<3;i++)s+=(i<lives?"♥":"♡");$("lives").textContent=s;}
+function setStatus(t,err){var st=$("status");st.textContent=t;if(err)st.classList.add("err");else st.classList.remove("err");}
+function setPill(){$("lvl").textContent="Recall · "+count;}
+function banner(t,ms){
+  var b=$("banner");b.textContent=t;
+  b.classList.remove("on");void b.offsetWidth;b.classList.add("on");
+  later(function(){b.classList.remove("on");},ms||900);
+}
+// cellNum[i] = number in grid cell i, or 0 if empty.
+function buildRound(){
+  var p=paramsForRound(round);
+  count=p.count;gridN=p.grid;
+  var cellOf=placeNumbers(p.count,p.cells,rnd);
+  cellNum=[];for(var i=0;i<p.cells;i++)cellNum.push(0);
+  for(var k=0;k<cellOf.length;k++)cellNum[cellOf[k]]=k+1;
+  next=1;
+  grid.innerHTML="";
+  if(gridN===6)grid.classList.add("n6");else grid.classList.remove("n6");
+  for(var c=0;c<p.cells;c++){(function(c){
+    var b=document.createElement("button");
+    b.className="cell"+(cellNum[c]?" num":"");
+    var sp=document.createElement("span");
+    sp.textContent=cellNum[c]?String(cellNum[c]):"";
+    b.appendChild(sp);
+    b.addEventListener("pointerdown",function(ev){ev.preventDefault();tapCell(c,b);});
+    grid.appendChild(b);
+  })(c);}
+  setPill();hearts();
+  state="show";setStatus(S.memo);
+}
+function cells(){return grid.children;}
+function hideNumbers(){
+  var cs=cells();
+  for(var i=0;i<cs.length;i++){
+    if(cellNum[i]&&cellNum[i]>1)cs[i].className="cell hid";
+  }
+}
+function revealAll(badIdx){
+  var cs=cells();
+  for(var i=0;i<cs.length;i++){
+    if(!cellNum[i])continue;
+    if(i===badIdx)cs[i].className="cell bad";
+    else if(cellNum[i]<next)cs[i].className="cell done";
+    else cs[i].className="cell num";
+  }
+}
+function tapCell(i,b){
+  if(state!=="show"&&state!=="recall")return;
+  if(!cellNum[i])return; // empty cells are inert
+  ensureAudio();
+  b.classList.add("press");later(function(){b.classList.remove("press");},130);
+  if(cellNum[i]===next){
+    b.className="cell done";
+    tone(stepFreq(next-1),0.14,"sine",0.2);
+    if(state==="show"&&next===1){hideNumbers();state="recall";setStatus(S.go);}
+    next++;
+    if(next>count)roundDone();
+  }else if(state==="show"){
+    // numbers still visible — tapping the wrong one is a mistake too
+    mistake(i);
+  }else{
+    mistake(i);
+  }
+}
+function roundDone(){
+  state="pause";
+  score=count;
+  if(score>best){best=score;try{localStorage.setItem(KEY,String(best));}catch(e){}}
+  later(function(){tone(523.25,0.12,"sine",0.18);},120);
+  later(function(){tone(783.99,0.2,"sine",0.18);},260);
+  round++;
+  later(function(){banner(S.plus,900);later(buildRound,650);},550);
+}
+function mistake(i){
+  state="pause";lives--;hearts();
+  revealAll(i);
+  grid.classList.add("shake");
+  tone(130,0.35,"square",0.14);
+  later(function(){grid.classList.remove("shake");},450);
+  if(lives<=0){later(gameOver,1200);return;}
+  setStatus(S.wrong,true);
+  later(buildRound,1600); // fresh layout, same count
+}
+function gameOver(){
+  state="over";
+  GBLB.report(score);
+  $("goTitle").textContent=S.over;
+  $("goScore").textContent=S.score+": "+score;
+  $("goBest").textContent=S.best+": "+best;
+  $("wino").style.display="grid";
+}
+function startRun(){
+  clearTimers();
+  $("wino").style.display="none";$("starto").style.display="none";
+  round=1;lives=3;score=0;state="pause";
+  rnd=mulberry32(((Date.now()%2147483647)>>>0)||1);
+  GBLB.start();
+  buildRound();
+}
+
+// ── Start / restart ───────────────────────────────────────────────────────
+$("startMsg").textContent=S.tap;
+$("startBtn").textContent=S.play;
+$("again").textContent=S.again;
+if(LANG==="ar"){$("starto").dir="rtl";$("wino").dir="rtl";}
+$("startBtn").onclick=function(){ensureAudio();if(TUT_ON&&!localStorage.getItem(TUTKEY)){$("starto").style.display="none";showTut();}else{startRun();}};
+$("again").onclick=function(){ensureAudio();startRun();};
+
+// ── First-run tutorial (2 steps) ──────────────────────────────────────────
+const TUT_T={
+  en:{t1:"Welcome to Recall",b1:"Numbers flash on the grid. Memorize where each one is.",t2:"Tap in order",b2:"Tap 1 first — the rest go blank. Keep tapping 2, 3, 4… from memory. Each round adds a number. 3 lives.",skip:"Skip",next:"Next",play:"Play"},
+  vi:{t1:"Chào mừng đến Recall",b1:"Các số hiện trên lưới. Hãy ghi nhớ vị trí từng số.",t2:"Chạm theo thứ tự",b2:"Chạm số 1 trước — các số khác bị che. Tiếp tục chạm 2, 3, 4… bằng trí nhớ. Mỗi vòng thêm một số. 3 mạng.",skip:"Bỏ qua",next:"Tiếp",play:"Chơi"},
+  ko:{t1:"Recall에 오신 것을 환영합니다",b1:"숫자가 격자에 나타납니다. 각 위치를 기억하세요.",t2:"순서대로 탭",b2:"1을 먼저 누르면 나머지가 가려집니다. 기억으로 2, 3, 4… 를 이어서 누르세요. 라운드마다 숫자가 늘어납니다. 라이프 3개.",skip:"건너뛰기",next:"다음",play:"플레이"},
+  zh:{t1:"欢迎来到 Recall",b1:"数字出现在网格上。记住每个数字的位置。",t2:"按顺序点击",b2:"先点1——其余会被遮住。凭记忆继续点2、3、4…每回合多一个数字。3条命。",skip:"跳过",next:"下一步",play:"开始玩"},
+  ja:{t1:"Recall へようこそ",b1:"グリッドに数字が現れます。それぞれの場所を覚えましょう。",t2:"順番にタップ",b2:"まず1をタップ — 残りが隠れます。記憶で2、3、4…と続けます。ラウンドごとに1つ増加。ライフは3つ。",skip:"スキップ",next:"次へ",play:"プレイ"},
+  ar:{t1:"مرحبًا بك في Recall",b1:"تظهر الأرقام على الشبكة. احفظ موقع كل رقم.",t2:"انقر بالترتيب",b2:"انقر 1 أولًا — تختفي البقية. تابع 2، 3، 4… من الذاكرة. رقم إضافي كل جولة. لديك 3 محاولات.",skip:"تخطّي",next:"التالي",play:"العب"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+var tutStep=0;
+function showTut(){
+  tutStep=0;
+  if(LANG==="ar")$("tutCard").dir="rtl";
+  renderTut();$("tut").classList.add("on");
+}
+function renderTut(){
+  $("tutTitle").textContent=tutStep===0?M.t1:M.t2;
+  $("tutBody").textContent=tutStep===0?M.b1:M.b2;
+  $("tutSkip").textContent=M.skip;
+  $("tutNext").textContent=tutStep===0?M.next:M.play;
+}
+function endTut(){
+  try{localStorage.setItem(TUTKEY,"1");}catch(e){}
+  $("tut").classList.remove("on");
+  startRun();
+}
+$("tutNext").onclick=function(){if(tutStep===0){tutStep=1;renderTut();}else{endTut();}};
+$("tutSkip").onclick=endTut;
+
+// initial idle board behind the start overlay
+(function(){
+  var p=paramsForRound(1);
+  for(var c=0;c<p.cells;c++){var b=document.createElement("button");b.className="cell";b.appendChild(document.createElement("span"));grid.appendChild(b);}
+  hearts();setStatus(S.memo);setPill();
+})();
+</script>
+</body>
+</html>

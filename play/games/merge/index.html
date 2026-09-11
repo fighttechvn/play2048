@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Merge Drop</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--grid:#edebe4;--accent:#3b5bdb;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  #score{margin:0 auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}
+  .win p{margin:4px 0;color:#444}
+  .win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--accent);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="title">Merge Drop</span><span class="pill" id="score">0</span><span class="pill" id="best">★ 0</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="btns"><button class="btn" id="restart">New game</button></div>
+  <div class="help"><b>How to play.</b> Drag left or right to aim, release to drop the tile. Equal tiles touching merge into their double and chain reactions cascade. Don't let the board fill up!</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Drag left or right to aim, release to drop the tile. Equal tiles touching merge into their double and chain reactions cascade. Don't let the board fill up!",
+    vi:"<b>Cách chơi.</b> Kéo sang trái hoặc phải để ngắm, thả để thả ô số xuống. Các ô bằng nhau chạm nhau sẽ gộp thành gấp đôi và tạo phản ứng dây chuyền. Đừng để bàn chơi đầy!",
+    ko:"<b>플레이 방법.</b> 좌우로 드래그해 위치를 정하고 놓으면 타일이 떨어집니다. 같은 숫자 타일이 닿으면 두 배로 합쳐지고 연쇄 반응이 이어집니다. 보드가 가득 차지 않게 하세요!",
+    zh:"<b>玩法。</b> 左右拖动瞄准，松手让方块落下。相同数字的方块相邻会合并成双倍，并引发连锁反应。别让棋盘填满！",
+    ja:"<b>遊び方。</b> 左右にドラッグして狙いを定め、離すとタイルが落ちます。同じ数字のタイルが触れると2倍に合体し、連鎖が起こります。盤面をいっぱいにしないように！",
+    ar:"<b>طريقة اللعب.</b> اسحب يمينًا أو يسارًا للتصويب، ثم أفلت لإسقاط البلاطة. البلاطات المتساوية المتلامسة تندمج في ضعفها وتتوالى التفاعلات المتسلسلة. لا تدع اللوحة تمتلئ!"
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2 id="overTitle">Game over</h2><p id="overScore"></p><p id="overTile"></p><p id="overBest"></p><button id="again">Play again</button></div></div>
+<script>
+const KEY="merge.best", TKEY="merge.besttile";
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Merge Drop is endless/score-based, so it POSTs a fixed `level: 1` with the
+// score — the server ranks score games by score first, then time. Reads the
+// shared player token (set by the hub, same origin). No token → silently skips.
+// Mirrors the GBLB block in games/zip/index.html; keep in sync.
+const GBLB=(function(){
+  var GAME='merge', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+
+// ── Pure logic (kept in sync with games/merge/logic.mjs — source of truth) ──
+const COLS=5, ROWS=7;
+function emptyBoard(){return new Array(ROWS*COLS).fill(0);}
+function landRow(board,col){for(let r=ROWS-1;r>=0;r--)if(!board[r*COLS+col])return r;return -1;}
+function gravity(board){
+  const moves=[];
+  for(let c=0;c<COLS;c++){
+    let write=ROWS-1;
+    for(let r=ROWS-1;r>=0;r--){
+      const v=board[r*COLS+c];
+      if(v){
+        if(write!==r){board[write*COLS+c]=v;board[r*COLS+c]=0;moves.push([r,c,write]);}
+        write--;
+      }
+    }
+  }
+  return moves;
+}
+function findGroups(board){
+  const seen=new Array(ROWS*COLS).fill(false), groups=[], stack=[];
+  for(let i=0;i<ROWS*COLS;i++){
+    if(seen[i]||!board[i])continue;
+    const v=board[i], cells=[];
+    stack.length=0;stack.push(i);seen[i]=true;
+    while(stack.length){
+      const k=stack.pop();cells.push(k);
+      const r=(k/COLS)|0, c=k%COLS;
+      if(r>0&&!seen[k-COLS]&&board[k-COLS]===v){seen[k-COLS]=true;stack.push(k-COLS);}
+      if(r<ROWS-1&&!seen[k+COLS]&&board[k+COLS]===v){seen[k+COLS]=true;stack.push(k+COLS);}
+      if(c>0&&!seen[k-1]&&board[k-1]===v){seen[k-1]=true;stack.push(k-1);}
+      if(c<COLS-1&&!seen[k+1]&&board[k+1]===v){seen[k+1]=true;stack.push(k+1);}
+    }
+    if(cells.length>=2)groups.push({v:v,cells:cells});
+  }
+  return groups;
+}
+function mergeTarget(cells){
+  let best=cells[0];
+  for(let i=1;i<cells.length;i++){
+    const k=cells[i], br=(best/COLS)|0, kr=(k/COLS)|0;
+    if(kr>br||(kr===br&&k%COLS<best%COLS))best=k;
+  }
+  return best;
+}
+function mergeStep(board){
+  const groups=findGroups(board);
+  if(!groups.length)return null;
+  let score=0;
+  const merges=[];
+  for(let g=0;g<groups.length;g++){
+    const grp=groups[g];
+    const result=grp.v*Math.pow(2,grp.cells.length-1);
+    const target=mergeTarget(grp.cells);
+    for(let i=0;i<grp.cells.length;i++)board[grp.cells[i]]=0;
+    board[target]=result;
+    score+=result;
+    merges.push({value:grp.v,result:result,target:target,cells:grp.cells.slice()});
+  }
+  return {score:score,merges:merges};
+}
+function maxTile(board){let m=0;for(let i=0;i<board.length;i++)if(board[i]>m)m=board[i];return m;}
+function isFull(board){for(let i=0;i<board.length;i++)if(!board[i])return false;return true;}
+function spawnPool(maxAchieved){
+  let hi=8;
+  while(hi*8<=maxAchieved&&hi<256)hi*=2;
+  let lo=2;
+  if(maxAchieved>=512)lo=4;
+  if(maxAchieved>=2048)lo=8;
+  const pool=[];
+  for(let v=lo;v<=hi;v*=2)pool.push(v);
+  return pool;
+}
+function mulberry32(seed){
+  let a=seed>>>0;
+  return function(){a|=0;a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};
+}
+
+// ── Game strings (overlay) ───────────────────────────────────────────────
+const OV={
+  en:{over:"Game over",score:"Score: ",tile:"Best tile: ",best:"Best: ",again:"Play again",nbest:"New best! 🎉",nw:"New game",next:"NEXT",chain:"Chain"},
+  vi:{over:"Hết lượt",score:"Điểm: ",tile:"Ô lớn nhất: ",best:"Kỷ lục: ",again:"Chơi lại",nbest:"Kỷ lục mới! 🎉",nw:"Ván mới",next:"TIẾP",chain:"Chuỗi"},
+  ko:{over:"게임 오버",score:"점수: ",tile:"최고 타일: ",best:"최고: ",again:"다시 하기",nbest:"신기록! 🎉",nw:"새 게임",next:"다음",chain:"연쇄"},
+  zh:{over:"游戏结束",score:"得分：",tile:"最大方块：",best:"最佳：",again:"再玩一次",nbest:"新纪录！🎉",nw:"新游戏",next:"下一个",chain:"连锁"},
+  ja:{over:"ゲームオーバー",score:"スコア: ",tile:"最大タイル: ",best:"ベスト: ",again:"もう一度",nbest:"新記録！🎉",nw:"新しいゲーム",next:"次",chain:"チェイン"},
+  ar:{over:"انتهت اللعبة",score:"النقاط: ",tile:"أكبر بلاطة: ",best:"الأفضل: ",again:"العب مجددًا",nbest:"رقم قياسي جديد! 🎉",nw:"لعبة جديدة",next:"التالي",chain:"سلسلة"}
+};
+const OT=OV[LANG]||OV.en;
+if(LANG==="ar"){var wb=document.querySelector("#wino div");if(wb)wb.dir="rtl";}
+document.getElementById('restart').textContent=OT.nw;
+
+// ── Rendering / state ────────────────────────────────────────────────────
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+// Tile colors cycle by exponent. The hub sends `skin` only when the player owns
+// the Theme Pack (or Plus), so an absent/unknown value just keeps the default
+// muted pastels — this file never checks entitlements itself.
+const SKINS={
+  classic:{pal:['#e08a6d','#e0b152','#8fbb7a','#63b3a4','#6f94d6','#a087cf','#d788a5','#7f9bb0'],ink:'#fff'},
+  neon:{pal:['#1d4ed8','#2563eb','#7c3aed','#a855f7','#db2777','#f43f5e','#f97316','#eab308'],ink:'#fff'},
+  candy:{pal:['#f7a8c4','#f9b384','#e8c65a','#7fc99a','#5fbcc9','#8ea6e8','#b78fd6','#ef8fa0'],ink:'#3d2b33'},
+  mono:{pal:['#9ca3af','#7b828e','#6b7280','#565d69','#4b5563','#374151','#1f2937','#111827'],ink:'#fff'}
+};
+const SKIN=SKINS[new URLSearchParams(location.search).get('skin')]||SKINS.classic;
+const PAL=SKIN.pal;
+function tileColor(v){
+  let e=0, x=v;
+  while(x>2){x/=2;e++;}
+  return PAL[e%PAL.length];
+}
+const rng=mulberry32((Date.now()^(Math.random()*0xffffffff))>>>0);
+
+let board=emptyBoard();
+let score=0, best=+(localStorage.getItem(KEY)||0), bestTile=+(localStorage.getItem(TKEY)||0);
+let maxAch=0, chain=0, over=false;
+let curV=2, nextV=2, aimCol=2;
+let phase='idle';        // idle | drop | pop | fall | over
+let cell=0, ox=0, topH=0, boardY=0, W=0, H=0;
+let raf=0, lastNow=0;
+let dropA=null;          // {col,toR,v,y0,y1,t0,dur}
+let popA=null;           // {merges:[{target,result,cells,value}],t0,dur}
+let fallA=null;          // {moves:[[fromR,c,toR]],t0,dur}
+const popups=[];         // {text,x,y,t0}
+let shakeT0=-1;
+
+function pickSpawn(){
+  const pool=spawnPool(maxAch);
+  return pool[Math.floor(rng()*pool.length)];
+}
+function newGame(){
+  board=emptyBoard(); score=0; maxAch=0; chain=0; over=false;
+  dropA=null; popA=null; fallA=null; popups.length=0; phase='idle';
+  curV=pickSpawn(); nextV=pickSpawn(); aimCol=2;
+  updHud(); layout(); kick(); GBLB.start();
+}
+function updHud(){ $('score').textContent=String(score); $('best').textContent='★ '+best; }
+
+function layout(){
+  const wrap=document.getElementById('wrap');
+  W=Math.min(wrap.clientWidth-60, 420);
+  cell=Math.floor((W-8)/COLS); ox=Math.floor((W-cell*COLS)/2);
+  topH=Math.round(cell*1.45); boardY=topH;
+  H=boardY+cell*ROWS+ox;
+  const dpr=Math.min(window.devicePixelRatio||1,3);
+  cv.width=W*dpr; cv.height=H*dpr; cv.style.width=W+'px'; cv.style.height=H+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+function cellXY(k){ return [ox+(k%COLS)*cell, boardY+((k/COLS)|0)*cell]; }
+
+function rr(x,y,w,h,rad){
+  ctx.beginPath();
+  ctx.moveTo(x+rad,y);
+  ctx.arcTo(x+w,y,x+w,y+h,rad);
+  ctx.arcTo(x+w,y+h,x,y+h,rad);
+  ctx.arcTo(x,y+h,x,y,rad);
+  ctx.arcTo(x,y,x+w,y,rad);
+  ctx.closePath();
+}
+function fontFor(v,s){
+  const n=String(v).length;
+  const f=n<=2?0.44:n===3?0.36:n===4?0.30:0.25;
+  return 'bold '+Math.round(s*f)+'px -apple-system,sans-serif';
+}
+function drawTile(x,y,s,v,scale,alpha){
+  const g=s*(1-scale)/2;
+  ctx.globalAlpha=alpha;
+  ctx.fillStyle=tileColor(v);
+  rr(x+2+g,y+2+g,(s-4)*scale,(s-4)*scale,s*0.2*scale);ctx.fill();
+  ctx.globalAlpha=alpha*0.2;
+  ctx.fillStyle='#fff';
+  rr(x+2+g,y+2+g,(s-4)*scale,(s-4)*scale*0.45,s*0.2*scale);ctx.fill();
+  ctx.globalAlpha=alpha;
+  ctx.fillStyle=SKIN.ink;
+  ctx.font=fontFor(v,s*scale);
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(String(v),x+s/2,y+s/2+1);
+  ctx.globalAlpha=1;
+}
+function ease(t){return t<0?0:t>1?1:t*t*(3-2*t);}
+
+function draw(now){
+  ctx.clearRect(0,0,W,H);
+  let sx=0;
+  if(shakeT0>=0){
+    const e=(now-shakeT0)/280;
+    if(e<1)sx=Math.sin(e*Math.PI*5)*5*(1-e); else shakeT0=-1;
+  }
+  // board cells
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const x=ox+c*cell, y=boardY+r*cell;
+    ctx.fillStyle='#edebe4';
+    rr(x+2,y+2,cell-4,cell-4,cell*0.2);ctx.fill();
+  }
+  // next preview (top-right)
+  const ps=Math.round(cell*0.62);
+  ctx.fillStyle='#9a9a9a';
+  ctx.font='bold '+Math.round(cell*0.2)+'px -apple-system,sans-serif';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(OT.next,W-ps/2-8,topH*0.22);
+  drawTile(W-ps-8,Math.round(topH*0.34),ps,nextV,1,1);
+  // aim tile hovering over its column
+  if(phase==='idle'&&!over){
+    const ax=ox+aimCol*cell+sx;
+    drawTile(ax,Math.round((topH-cell)*0.55),cell,curV,1,1);
+    // landing ghost
+    const lr=landRow(board,aimCol);
+    if(lr>=0){
+      ctx.globalAlpha=0.35;
+      ctx.strokeStyle=tileColor(curV);ctx.lineWidth=3;
+      rr(ox+aimCol*cell+3,boardY+lr*cell+3,cell-6,cell-6,cell*0.2);ctx.stroke();
+      ctx.globalAlpha=1;
+    }
+  }
+  // falling offsets during 'fall'
+  let fp=0;
+  if(fallA)fp=ease((now-fallA.t0)/fallA.dur);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const k=r*COLS+c, v=board[k];
+    if(!v)continue;
+    let y=boardY+r*cell, scale=1;
+    if(fallA){
+      for(let i=0;i<fallA.moves.length;i++){
+        const m=fallA.moves[i];
+        if(m[2]===r&&m[1]===c){y=boardY+(m[0]+(m[2]-m[0])*fp)*cell;break;}
+      }
+    }
+    if(popA&&popA.t0>=0){
+      const pe=ease((now-popA.t0)/popA.dur);
+      for(let i=0;i<popA.merges.length;i++){
+        if(popA.merges[i].target===k){scale=1+0.3*Math.sin(pe*Math.PI);break;}
+      }
+    }
+    drawTile(ox+c*cell,y,cell,v,scale,1);
+  }
+  // merge sources converging toward their target
+  if(popA){
+    const pe=ease((now-popA.t0)/popA.dur);
+    for(let i=0;i<popA.merges.length;i++){
+      const m=popA.merges[i];
+      const tx=cellXY(m.target);
+      for(let j=0;j<m.cells.length;j++){
+        const k=m.cells[j];
+        if(k===m.target)continue;
+        const s=cellXY(k);
+        drawTile(s[0]+(tx[0]-s[0])*pe,s[1]+(tx[1]-s[1])*pe,cell,m.value,1-0.5*pe,1-pe);
+      }
+    }
+  }
+  // dropping tile
+  if(dropA){
+    const e=(now-dropA.t0)/dropA.dur;
+    const t=e<0?0:e>1?1:e*e; // ease-in fall
+    drawTile(ox+dropA.col*cell,dropA.y0+(dropA.y1-dropA.y0)*t,cell,dropA.v,1,1);
+  }
+  // score popups
+  for(let i=popups.length-1;i>=0;i--){
+    const p=popups[i], e=(now-p.t0)/800;
+    if(e>=1){popups.splice(i,1);continue;}
+    ctx.globalAlpha=e<0.15?e/0.15:1-Math.max(0,(e-0.5)/0.5);
+    ctx.fillStyle='#1a1a1a';
+    ctx.font='bold '+Math.round(cell*0.4)+'px -apple-system,sans-serif';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(p.text,p.x,p.y-e*cell*0.8);
+    ctx.globalAlpha=1;
+  }
+}
+function animating(){return (phase!=='idle'&&phase!=='over')||popups.length>0||shakeT0>=0;}
+function tick(now){
+  lastNow=now;
+  stepAnims(now);
+  draw(now);
+  if(animating())raf=requestAnimationFrame(tick); else raf=0;
+}
+// rAF can be throttled/frozen in occluded or in-app webviews; a low-rate
+// watchdog keeps the drop/merge state machine advancing so the game never
+// soft-locks mid-animation. When rAF runs normally the watchdog no-ops.
+let wd=0;
+function watch(){
+  wd=0;
+  if(!animating())return;
+  const now=performance.now();
+  if(now-lastNow>140){ lastNow=now; stepAnims(now); draw(now); }
+  wd=setTimeout(watch,150);
+}
+function kick(){
+  if(!raf)raf=requestAnimationFrame(tick); else draw(lastNow);
+  if(!wd)wd=setTimeout(watch,150);
+}
+
+// ── Animation state machine ──────────────────────────────────────────────
+function stepAnims(now){
+  if(phase==='drop'&&dropA&&now-dropA.t0>=dropA.dur){
+    board[dropA.toR*COLS+dropA.col]=dropA.v;
+    if(dropA.v>maxAch)maxAch=dropA.v;
+    dropA=null; chain=0;
+    nextResolve(now);
+  }else if(phase==='pop'&&popA&&now-popA.t0>=popA.dur){
+    popA=null;
+    const moves=gravity(board);
+    if(moves.length){fallA={moves:moves,t0:now,dur:130};phase='fall';}
+    else nextResolve(now);
+  }else if(phase==='fall'&&fallA&&now-fallA.t0>=fallA.dur){
+    fallA=null;
+    nextResolve(now);
+  }
+}
+function nextResolve(now){
+  const m=mergeStep(board);
+  if(m){
+    chain++;
+    score+=m.score;
+    const mt=maxTile(board);
+    if(mt>maxAch)maxAch=mt;
+    if(score>best){best=score;try{localStorage.setItem(KEY,String(best));}catch(e){}}
+    let biggest=m.merges[0];
+    for(let i=1;i<m.merges.length;i++)if(m.merges[i].result>biggest.result)biggest=m.merges[i];
+    const t=cellXY(biggest.target);
+    let msg='+'+m.score;
+    if(chain>1)msg=OT.chain+' ×'+chain+'! '+msg;
+    popups.push({text:msg,x:Math.max(cell,Math.min(W-cell,t[0]+cell/2)),y:t[1],t0:now});
+    popA={merges:m.merges,t0:now,dur:170};
+    phase='pop';
+    updHud();
+  }else{
+    const moves=gravity(board);
+    if(moves.length){fallA={moves:moves,t0:now,dur:130};phase='fall';return;}
+    finishTurn();
+  }
+}
+function finishTurn(){
+  if(maxAch>bestTile){bestTile=maxAch;try{localStorage.setItem(TKEY,String(bestTile));}catch(e){}}
+  if(isFull(board)){
+    phase='over'; over=true;
+    GBLB.report(score);
+    setTimeout(showOver,500);
+    return;
+  }
+  curV=nextV; nextV=pickSpawn();
+  phase='idle';
+}
+
+// ── Input ────────────────────────────────────────────────────────────────
+function colFromEvent(ev){
+  const rect=cv.getBoundingClientRect();
+  const x=(ev.clientX-rect.left)*(W/rect.width);
+  return Math.max(0,Math.min(COLS-1,Math.floor((x-ox)/cell)));
+}
+let aiming=false;
+function down(ev){
+  ev.preventDefault();
+  if(over||phase!=='idle')return;
+  try{cv.setPointerCapture(ev.pointerId);}catch(e){}
+  aiming=true; aimCol=colFromEvent(ev); kick();
+}
+function move(ev){
+  if(!aiming||phase!=='idle')return;
+  ev.preventDefault();
+  aimCol=colFromEvent(ev); kick();
+}
+function up(ev){
+  if(!aiming)return;
+  aiming=false;
+  try{cv.releasePointerCapture(ev.pointerId);}catch(e){}
+  if(over||phase!=='idle')return;
+  aimCol=colFromEvent(ev);
+  const lr=landRow(board,aimCol);
+  const now=lastNow||performance.now();
+  if(lr<0){shakeT0=now;kick();return;} // column full — nudge, don't drop
+  dropA={col:aimCol,toR:lr,v:curV,y0:Math.round((topH-cell)*0.55),y1:boardY+lr*cell,t0:now,dur:90+42*(lr+1)};
+  phase='drop';
+  kick();
+}
+cv.addEventListener('pointerdown',down);
+cv.addEventListener('pointermove',move);
+cv.addEventListener('pointerup',up);
+cv.addEventListener('pointercancel',function(ev){aiming=false;});
+window.addEventListener('pointerup',function(ev){if(aiming)up(ev);});
+// iOS in-app webviews ignore touch-action:none for scroll suppression —
+// a non-passive touchmove preventDefault is the only reliable way to keep
+// the aim drag from scrolling the page.
+cv.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+
+function showOver(){
+  $('overTitle').textContent=OT.over;
+  $('overScore').textContent=OT.score+score;
+  $('overTile').textContent=OT.tile+maxAch;
+  $('overBest').textContent=(score>=best&&score>0?OT.nbest+' ':'')+OT.best+best;
+  $('again').textContent=OT.again;
+  $('wino').style.display='grid';
+}
+$('again').onclick=function(){$('wino').style.display='none';newGame();};
+$('restart').onclick=function(){
+  if(!over&&score>0)GBLB.report(score); // abandoning a run still records it
+  newGame();
+};
+
+addEventListener('resize',function(){layout();kick();});
+newGame();
+</script>
+</body>
+</html>

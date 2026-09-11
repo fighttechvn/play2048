@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-VCLVPVRXMV');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#faf8ef" />
+  <title>Bounce — Free Brick Breaker Game Online, No Sign-Up</title>
+  <meta name="description" content="Aim a volley of balls at a descending wall of bricks. Learn the pocket shot and the wall-hug angle. Free in your browser, no account, works offline." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://gobrain.fighttech.vn/blog/bounce-brick-breaker/" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Bounce: Aim One Shot, Watch Fifteen Ricochets 🎯" />
+  <meta property="og:description" content="Aim a volley of balls at a descending wall of bricks. Learn the pocket shot and the wall-hug angle. Free in your browser, no account, works offline." />
+  <meta property="og:url" content="https://gobrain.fighttech.vn/blog/bounce-brick-breaker/" />
+  <meta property="og:site_name" content="Go Brain" />
+  <meta property="og:image" content="https://gobrain.fighttech.vn/play/thumbs/bounce.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://gobrain.fighttech.vn/play/thumbs/bounce.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="../../assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="../../assets/app-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem("gobrain.theme")||"system";var d=p==="dark"||(p!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");}catch(e){}})();</script>
+  <link rel="stylesheet" href="../../css/styles.css" />
+  <link rel="stylesheet" href="../../css/legal.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "Bounce: Aim One Shot, Watch Fifteen Ricochets",
+    "description": "Aim a volley of balls at a descending wall of bricks. Learn the pocket shot and the wall-hug angle. Free in your browser, no account, works offline.",
+    "author": {
+      "@type": "Organization",
+      "name": "FightTech"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Go Brain"
+    },
+    "datePublished": "2026-08-10",
+    "mainEntityOfPage": "https://gobrain.fighttech.vn/blog/bounce-brick-breaker/"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What's the best strategy in a brick breaker?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Look for pockets rather than targets. A ball that gets trapped in a channel between bricks racks up ten or more hits per turn, which is worth far more than a precise shot at one brick."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Should I aim high or low?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Shallow, near-horizontal shots travel further and hit more bricks. Steep shots come straight back and waste the turn."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="../../" aria-label="Go Brain"><img class="logo" src="../../assets/app-icon.png" alt="" width="30" height="30" /><span>Go Brain</span></a>
+      <nav class="nav">
+        <div class="nav-links">
+          <a href="../">Blog</a><a href="../../play/">Play online</a><a href="../../sdk/">SDK</a><a href="../../support/">Support</a>
+        </div>
+        <div class="controls">
+          <div class="select-wrap">
+            <select id="themeSelect" class="theme" aria-label="Theme"><option value="system">◐ System</option><option value="light">☀ Light</option><option value="dark">☾ Dark</option></select>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-main">
+    <div class="container">
+      <div class="legal-wrap">
+        <a class="back-link" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> All articles</a>
+
+        <div class="legal-head">
+          <span class="eyebrow">Arcade</span>
+          <h1>Bounce: Aim One Shot, Watch Fifteen Ricochets 🎯</h1>
+          <p class="updated"><strong>Published:</strong> August 10, 2026 · 4 min read</p>
+          <p class="legal-lead">Bounce is a turn-based brick breaker. You aim once, a whole volley of balls fires along that line, and then you watch. The wall creeps down one row per turn, and when it reaches the bottom you're finished.</p>
+        </div>
+
+        <nav class="toc" aria-label="Table of contents">
+          <h2>Contents</h2>
+          <ol>
+            <li><a href="#rules">The rules</a></li>
+            <li><a href="#pocket">The pocket shot</a></li>
+            <li><a href="#angles">Angles that pay</a></li>
+            <li><a href="#ours">About our version</a></li>
+          </ol>
+        </nav>
+
+        <div class="legal-body">
+
+          <h2 id="rules">The rules</h2>
+          <p>Drag to aim, release to fire. Every ball you have travels along that line, bouncing off walls and bricks. Each hit knocks one off a brick's number; at zero it breaks. When all the balls return, the wall drops a row and you aim again.</p>
+
+          <h2 id="pocket">The pocket shot</h2>
+          <p>The instinct is to aim at whatever brick has the highest number. That's a one-hit shot.</p>
+          <p>The high-value play is to find a <strong>pocket</strong> — a gap or channel between bricks where a ball entering at a shallow angle gets caught rattling back and forth. One ball in a good pocket lands ten or fifteen hits before it escapes, and with a volley of twenty balls, a pocket clears a whole section in a single turn.</p>
+          <p>Pockets appear naturally as you break bricks unevenly, which means deliberately leaving an uneven wall is often better than clearing a tidy row.</p>
+
+          <h2 id="angles">Angles that pay</h2>
+          <p><strong>Shallow beats steep.</strong> A near-horizontal shot crosses the entire board and can hit twenty bricks along the way. A vertical shot hits one column and comes straight back.</p>
+          <p><strong>Use the side walls.</strong> Bricks at the far left are often easier to reach by bouncing off the right wall, and the bounce adds hits along the way.</p>
+          <p><strong>Aim at the ceiling gap.</strong> If there's an opening above the wall, a ball that gets through will bounce along the top of the bricks hitting them from above, repeatedly. This is the strongest single shot in the game.</p>
+
+          <h2 id="ours">About our version</h2>
+          <p>Endless, with a ball count that grows as you collect pickups and a wall that speeds up gradually. Aim guide included, and no ad between runs.</p>
+          <p>It runs in your browser, works offline once loaded, needs no account, and costs nothing.</p>
+
+
+          <h2 id="faq">Questions people actually ask</h2>
+          <p><strong>What's the best strategy in a brick breaker?</strong><br />Look for pockets rather than targets. A ball that gets trapped in a channel between bricks racks up ten or more hits per turn, which is worth far more than a precise shot at one brick.</p>
+          <p><strong>Should I aim high or low?</strong><br />Shallow, near-horizontal shots travel further and hit more bricks. Steep shots come straight back and waste the turn.</p>
+
+          <h2 id="more">Keep reading</h2>
+          <ul>
+            <li><a href="../arcade-games/">Arcade Games in Go Brain: Seven One-Thumb Classics 🎮</a> — Snake, a doodle-jumper, brick breaker, a stacker, a tile-merger, flappy and a bubble shooter. No rules to learn, just a score to beat.</li>
+            <li><a href="../stacker-tower-game/">Stacker: One Tap, and the Tower Gets Narrower 🏗️</a> — Tap to drop a block. Miss slightly and the overhang is cut away — so your mistakes are permanent and cumulative, which is the entire game.</li>
+            <li><a href="../snake-game-online/">Snake: Still the Best Difficulty Curve Ever Designed 🐍</a> — Snake gets harder because you got better. That single design idea has kept it alive for fifty years — and there's a strategy for surviving the late game.</li>
+          </ul>
+
+          <div class="legal-contact" id="play">
+            <h2>Play Bounce now</h2>
+            <p>Endless brick breaker with an aim guide and no ads. Free, no account.</p>
+            <p style="margin-top:16px"><a class="btn btn-primary" href="../../play/?open=bounce">▶ Play Bounce</a></p>
+          </div>
+
+          <div class="legal-nav-links">
+            <a href="../">← All articles</a>
+            <a href="../../play/">Play online</a>
+            <a href="../../support/">Support</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="margin-top:0;border-top:none">
+        <span>© <span id="year">2026</span> FightTech. All rights reserved.</span>
+        <span><a href="../../privacy/">Privacy</a> · <a href="../../terms/">Terms</a> · <a href="../../support/">Support</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../../js/main.js"></script>
+  <script src="../../js/app-banner.js"></script>
+</body>
+</html>

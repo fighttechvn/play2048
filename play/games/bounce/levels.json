@@ -1,0 +1,1 @@
+{"count":1,"levels":[{"mode":"endless","cols":7,"rows":10,"startBalls":1,"doubleFromTurn":6,"rampSample":[{"turn":1,"bricks":2,"maxHp":1},{"turn":5,"bricks":1,"maxHp":5},{"turn":10,"bricks":4,"maxHp":10},{"turn":20,"bricks":5,"maxHp":40},{"turn":40,"bricks":3,"maxHp":80}]}]}

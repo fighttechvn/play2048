@@ -1,0 +1,1 @@
+{"game":"math","count":1,"levels":[{"id":1,"mode":"endless-timed+zen","durationMs":60000,"wrongPenaltyMs":2000,"zenLives":3,"phases":[{"fromTrial":0,"kinds":["add1","sub1"]},{"fromTrial":8,"kinds":["add2","sub2"]},{"fromTrial":16,"kinds":["mul"]},{"fromTrial":24,"kinds":["div"]},{"fromTrial":32,"kinds":["mix","add2","sub2","mul","div"],"nearMiss":true}]}]}

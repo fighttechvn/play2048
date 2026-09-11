@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Reflex</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--go:#40c057;--nogo:#e03131;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(14px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(12px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(14px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:12px;height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 14px;font-weight:700;white-space:nowrap;font-size:14px}
+  #score{margin-left:auto}
+  #lives{color:var(--nogo);letter-spacing:2px}
+  #stage{background:var(--card);border:1px solid var(--bd);border-radius:18px;flex:1;min-height:300px;position:relative;overflow:hidden;touch-action:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  #shape{width:150px;height:150px;opacity:0;transform:scale(.6);transition:none}
+  #shape.on{opacity:1;transform:scale(1);transition:transform .12s ease-out}
+  #shape.circle{border-radius:50%;background:var(--go);box-shadow:0 0 0 14px rgba(64,192,87,.18)}
+  #shape.square{border-radius:16px;background:var(--nogo);box-shadow:0 0 0 14px rgba(224,49,49,.14)}
+  #shape.diamond{border-radius:16px;background:#9c36b5;transform:scale(1) rotate(45deg);box-shadow:0 0 0 14px rgba(156,54,181,.14)}
+  #msg{position:absolute;left:0;right:0;bottom:20px;text-align:center;font-weight:800;font-size:20px;min-height:28px;color:#888}
+  #msg.good{color:var(--go)}
+  #msg.bad{color:var(--nogo)}
+  #avg{position:absolute;top:14px;right:16px;font-size:13px;font-weight:700;color:#aaa}
+  #stage.flashbad{animation:fb .3s ease}
+  @keyframes fb{0%{background:#ffe3e3}100%{background:var(--card)}}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px 16px;font-size:13.5px;color:#555;line-height:1.45}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win>div{background:#fff;border-radius:18px;padding:26px 30px;text-align:center;max-width:320px;width:calc(100% - 48px)}
+  .win h2{margin:0 0 10px}
+  .win .stats{display:flex;flex-direction:column;gap:6px;text-align:left;font-size:15px;color:#444}
+  .win .stats b{float:right}
+  .win button{margin-top:16px;padding:12px 26px;border:0;border-radius:999px;background:var(--go);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* 2-step first-run tutorial */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;place-items:center;background:rgba(0,0,0,.46)}
+  #tut.on{display:grid}
+  #tutCard{background:rgba(255,255,255,.92);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-radius:18px;padding:24px 26px;max-width:300px;width:calc(100% - 48px);text-align:center}
+  #tutShape{width:96px;height:96px;margin:4px auto 14px}
+  #tutShape.circle{border-radius:50%;background:var(--go)}
+  #tutShape.square{border-radius:14px;background:var(--nogo)}
+  #tutCard h3{margin:0 0 6px;font-size:19px}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;min-height:44px;margin:-4px -8px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:12px}.top>*+*{margin-left:8px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lives">♥♥♥</span><span class="pill" id="score">0</span><span class="pill" id="best">Best 0</span></div>
+  <div id="stage">
+    <span id="avg"></span>
+    <div id="shape"></div>
+    <div id="msg"></div>
+  </div>
+  <div class="help" id="help"><b>How to play.</b> A shape appears after a random pause. <b>Green circle</b> → tap as fast as you can. <b>Red square</b> (or purple diamond) → don't tap! Faster taps score more, and the time window shrinks as you improve. 3 lives.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> A shape appears after a random pause. <b>Green circle</b> → tap as fast as you can. <b>Red square</b> (or purple diamond) → don't tap! Faster taps score more, and the time window shrinks as you improve. 3 lives.",
+    vi:"<b>Cách chơi.</b> Một hình xuất hiện sau khoảng chờ ngẫu nhiên. <b>Vòng tròn xanh lá</b> → chạm thật nhanh. <b>Ô vuông đỏ</b> (hoặc hình thoi tím) → đừng chạm! Chạm càng nhanh điểm càng cao, và thời gian cho phép sẽ ngắn dần khi bạn giỏi lên. Có 3 mạng.",
+    ko:"<b>플레이 방법.</b> 무작위 대기 후 도형이 나타납니다. <b>초록 원</b> → 최대한 빨리 탭하세요. <b>빨간 사각형</b>(또는 보라 마름모) → 탭하지 마세요! 빠를수록 점수가 높고, 실력이 늘면 제한 시간이 짧아집니다. 생명은 3개.",
+    zh:"<b>玩法。</b> 随机停顿后会出现一个图形。<b>绿色圆形</b> → 尽快点按。<b>红色方块</b>（或紫色菱形）→ 千万别点！点得越快分越高，随着得分提高，时间窗口会越来越短。共3条命。",
+    ja:"<b>遊び方。</b> ランダムな間のあとに図形が現れます。<b>緑の丸</b> → できるだけ速くタップ。<b>赤い四角</b>（または紫のひし形）→ タップしない！速いほど高得点、上達すると制限時間が短くなります。ライフは3つ。",
+    ar:"<b>طريقة اللعب.</b> يظهر شكل بعد توقّف عشوائي. <b>الدائرة الخضراء</b> → اضغط بأسرع ما يمكن. <b>المربع الأحمر</b> (أو المعيّن البنفسجي) → لا تضغط! كلما أسرعت زادت نقاطك، وتضيق نافذة الوقت كلما تحسّنت. لديك 3 أرواح."
+  };
+  var L=pick(),el=document.getElementById("help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div>
+  <h2 id="woTitle">Game over</h2>
+  <div class="stats">
+    <span id="stScore"></span>
+    <span id="stAvg"></span>
+    <span id="stAcc"></span>
+    <span id="stStreak"></span>
+    <span id="stBest"></span>
+  </div>
+  <button id="again">Play again</button>
+</div></div>
+<div id="tut"><div id="tutCard">
+  <div id="tutShape" class="circle"></div>
+  <h3 id="tutTitle"></h3>
+  <p id="tutBody"></p>
+  <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+</div></div>
+<script>
+const KEY="reflex.best";
+const TUTKEY="reflex.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})();
+// Locale — same source order as the help card above.
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Reflex is endless/score-based: POSTs a fixed level:1 with the final score.
+// Reads the shared player token (set by the hub, same origin). No token →
+// silently skips. Mirrors games/zip's GBLB block; keep in sync.
+const GBLB=(function(){
+  var GAME='reflex', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+
+// ── Localized strings ─────────────────────────────────────────────────────
+const STR={
+  en:{wait:"Wait…",ready:"Get ready",tapStart:"Tap to start",early:"Too early!",slow:"Too slow!",wrong:"Don't tap red!",hold:"Nice hold +",best:"Best",over:"Game over",score:"Score",avg:"Avg reaction",acc:"Accuracy",streak:"Best streak",newBest:"New best!",again:"Play again",
+      t1t:"Green = GO",t1b:"When the green circle appears, tap anywhere as fast as you can.",t2t:"Red = STOP",t2b:"If a red square (or purple diamond) appears, don't tap. Wait it out!",next:"Next",play:"Play",skip:"Skip"},
+  vi:{wait:"Chờ…",ready:"Sẵn sàng",tapStart:"Chạm để bắt đầu",early:"Quá sớm!",slow:"Quá chậm!",wrong:"Đừng chạm màu đỏ!",hold:"Giữ tốt +",best:"Kỷ lục",over:"Kết thúc",score:"Điểm",avg:"Phản xạ TB",acc:"Độ chính xác",streak:"Chuỗi dài nhất",newBest:"Kỷ lục mới!",again:"Chơi lại",
+      t1t:"Xanh = CHẠM",t1b:"Khi vòng tròn xanh xuất hiện, chạm vào bất cứ đâu thật nhanh.",t2t:"Đỏ = DỪNG",t2b:"Nếu ô vuông đỏ (hoặc hình thoi tím) xuất hiện, đừng chạm. Cứ chờ!",next:"Tiếp",play:"Chơi",skip:"Bỏ qua"},
+  ko:{wait:"대기…",ready:"준비",tapStart:"탭하여 시작",early:"너무 빨라요!",slow:"너무 늦었어요!",wrong:"빨간색은 탭 금지!",hold:"잘 참았어요 +",best:"최고",over:"게임 오버",score:"점수",avg:"평균 반응",acc:"정확도",streak:"최고 연속",newBest:"신기록!",again:"다시 하기",
+      t1t:"초록 = GO",t1b:"초록 원이 나타나면 최대한 빨리 아무 곳이나 탭하세요.",t2t:"빨강 = STOP",t2b:"빨간 사각형(또는 보라 마름모)이 나타나면 탭하지 마세요. 참으세요!",next:"다음",play:"플레이",skip:"건너뛰기"},
+  zh:{wait:"等待…",ready:"准备",tapStart:"点按开始",early:"太早了！",slow:"太慢了！",wrong:"别点红色！",hold:"忍住了 +",best:"最佳",over:"游戏结束",score:"得分",avg:"平均反应",acc:"准确率",streak:"最长连击",newBest:"新纪录！",again:"再玩一次",
+      t1t:"绿色 = 点",t1b:"绿色圆形出现时，尽快点按任意位置。",t2t:"红色 = 停",t2b:"红色方块（或紫色菱形）出现时，千万别点，等它消失！",next:"下一步",play:"开始玩",skip:"跳过"},
+  ja:{wait:"待って…",ready:"準備",tapStart:"タップで開始",early:"早すぎ！",slow:"遅すぎ！",wrong:"赤はタップしない！",hold:"よく我慢した +",best:"ベスト",over:"ゲームオーバー",score:"スコア",avg:"平均反応",acc:"正確さ",streak:"最長連続",newBest:"新記録！",again:"もう一度",
+      t1t:"緑 = GO",t1b:"緑の丸が出たら、できるだけ速くどこでもタップ。",t2t:"赤 = STOP",t2b:"赤い四角（または紫のひし形）が出たら、タップせずに待ちましょう！",next:"次へ",play:"プレイ",skip:"スキップ"},
+  ar:{wait:"انتظر…",ready:"استعد",tapStart:"اضغط للبدء",early:"مبكر جدًا!",slow:"متأخر جدًا!",wrong:"لا تضغط الأحمر!",hold:"صبر جميل +",best:"الأفضل",over:"انتهت اللعبة",score:"النقاط",avg:"متوسط رد الفعل",acc:"الدقة",streak:"أفضل سلسلة",newBest:"رقم قياسي جديد!",again:"العب مجددًا",
+      t1t:"الأخضر = اضغط",t1b:"عند ظهور الدائرة الخضراء، اضغط في أي مكان بأسرع ما يمكن.",t2t:"الأحمر = توقف",t2b:"إذا ظهر مربع أحمر (أو معيّن بنفسجي)، لا تضغط. انتظر!",next:"التالي",play:"العب",skip:"تخطّي"}
+};
+const MS=STR[LANG]||STR.en;
+if(LANG==="ar"){document.getElementById("tutCard").dir="rtl";document.querySelector("#wino>div").dir="rtl";}
+
+// ── Core tuning (mirrors games/reflex/reflex-core.mjs — keep in sync) ─────
+const WIN_MAX=900,WIN_MIN=450,WIN_SHRINK=0.12,NOGO_POINTS=20,LIVES=3,DELAY_MIN=600,DELAY_MAX=2200,GO_CHANCE=0.6;
+function windowForScore(s){return Math.max(WIN_MIN,Math.round(WIN_MAX-s*WIN_SHRINK));}
+function goPoints(rt,win){var f=Math.max(0,Math.min(1,1-rt/win));return Math.round(60+240*f);}
+function delayFor(u){return Math.round(DELAY_MIN+u*(DELAY_MAX-DELAY_MIN));}
+function accuracy(c,t){return t>0?Math.round(100*c/t):100;}
+function avgMs(a){if(!a.length)return 0;var s=0;for(var i=0;i<a.length;i++)s+=a[i];return Math.round(s/a.length);}
+
+// ── State ─────────────────────────────────────────────────────────────────
+const $=function(id){return document.getElementById(id);};
+const stage=$('stage'),shape=$('shape'),msg=$('msg');
+let state='idle'; // idle | wait | stim | gap | over
+let score=0,lives=LIVES,rts=[],correct=0,total=0,streak=0,bestStreak=0;
+let isGo=false,t0=0,win=WIN_MAX,timer=0;
+let best=+(localStorage.getItem(KEY)||0);
+
+function updHud(){
+  $('score').textContent=String(score);
+  $('best').textContent=MS.best+' '+best;
+  var h='';for(var i=0;i<lives;i++)h+='♥';for(var j=lives;j<LIVES;j++)h+='♡';
+  $('lives').textContent=h;
+  $('avg').textContent=rts.length?avgMs(rts)+'ms':'';
+}
+function setMsg(t,cls){msg.textContent=t;msg.className=cls||'';}
+function hideShape(){shape.className='';}
+
+function startRun(){
+  score=0;lives=LIVES;rts=[];correct=0;total=0;streak=0;bestStreak=0;
+  updHud();GBLB.start();nextRound(700);
+}
+function nextRound(extra){
+  state='wait';hideShape();setMsg(MS.wait,'');
+  var d=delayFor(Math.random())+(extra||0);
+  timer=setTimeout(showStim,d);
+}
+function showStim(){
+  isGo=Math.random()<GO_CHANCE;
+  win=windowForScore(score);
+  if(isGo){shape.className='circle on';}
+  else{shape.className=(Math.random()<0.3?'diamond':'square')+' on';}
+  setMsg('','');
+  state='stim';t0=performance.now();
+  timer=setTimeout(isGo?goTimeout:nogoSuccess,win);
+}
+function resolve(ok){ // one attempt finished
+  total++;
+  if(ok){correct++;streak++;if(streak>bestStreak)bestStreak=streak;}
+  else streak=0;
+}
+function goTimeout(){ // green shown, no tap in time
+  resolve(false);loseLife(MS.slow);
+}
+function nogoSuccess(){ // red shown, held it
+  resolve(true);score+=NOGO_POINTS;
+  afterRound(MS.hold+NOGO_POINTS,'good');
+}
+function tap(ev){
+  ev.preventDefault();
+  if(state==='idle'){startRun();return;}
+  if(state==='wait'){ // premature
+    clearTimeout(timer);resolve(false);loseLife(MS.early);return;
+  }
+  if(state!=='stim')return;
+  clearTimeout(timer);
+  if(isGo){
+    var rt=Math.round(performance.now()-t0);
+    var pts=goPoints(rt,win);
+    score+=pts;rts.push(rt);resolve(true);
+    afterRound('+'+pts+' · '+rt+'ms','good');
+  } else {
+    resolve(false);loseLife(MS.wrong);
+  }
+}
+function loseLife(reason){
+  lives--;
+  setMsg(reason,'bad');hideShape();updHud();
+  stage.classList.remove('flashbad');
+  // restart the css animation
+  void stage.offsetWidth;
+  stage.classList.add('flashbad');
+  if(lives<=0){state='gap';setTimeout(over,700);}
+  else{state='gap';timer=setTimeout(function(){nextRound(0);},800);}
+}
+function afterRound(text,cls){
+  state='gap';hideShape();setMsg(text,cls);updHud();
+  timer=setTimeout(function(){nextRound(0);},650);
+}
+function over(){
+  state='over';hideShape();setMsg('','');
+  var isNew=score>best;
+  if(isNew){best=score;try{localStorage.setItem(KEY,String(best));}catch(e){}}
+  GBLB.report(score);
+  updHud();
+  $('woTitle').textContent=MS.over;
+  $('stScore').innerHTML=MS.score+' <b>'+score+'</b>';
+  $('stAvg').innerHTML=MS.avg+' <b>'+(rts.length?avgMs(rts)+'ms':'–')+'</b>';
+  $('stAcc').innerHTML=MS.acc+' <b>'+accuracy(correct,total)+'%</b>';
+  $('stStreak').innerHTML=MS.streak+' <b>'+bestStreak+'</b>';
+  $('stBest').innerHTML=(isNew?MS.newBest:MS.best)+' <b>'+best+'</b>';
+  $('again').textContent=MS.again;
+  $('wino').style.display='grid';
+}
+$('again').onclick=function(){$('wino').style.display='none';startRun();};
+
+stage.addEventListener('pointerdown',tap);
+stage.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+
+// ── 2-step first-run tutorial (tap green / don't tap red) ─────────────────
+let tutStep=0,tutDone=false;
+function tutRender(){
+  $('tutShape').className=tutStep===0?'circle':'square';
+  $('tutTitle').textContent=tutStep===0?MS.t1t:MS.t2t;
+  $('tutBody').textContent=tutStep===0?MS.t1b:MS.t2b;
+  $('tutNext').textContent=tutStep===0?MS.next:MS.play;
+  $('tutSkip').textContent=MS.skip;
+}
+function tutEnd(){
+  if(tutDone)return;tutDone=true;
+  try{localStorage.setItem(TUTKEY,'1');}catch(e){}
+  $('tut').classList.remove('on');
+  boot();
+}
+$('tutNext').onclick=function(){if(tutStep===0){tutStep=1;tutRender();}else tutEnd();};
+$('tutSkip').onclick=tutEnd;
+
+function boot(){
+  updHud();setMsg(MS.tapStart,'');state='idle';
+}
+if(TUT_ON&&!localStorage.getItem(TUTKEY)){
+  tutRender();$('tut').classList.add('on');
+  updHud();
+}else{
+  boot();
+}
+</script>
+</body>
+</html>

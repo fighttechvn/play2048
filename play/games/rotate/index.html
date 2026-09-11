@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Rotate</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--acc:#0ca678;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  .pill.err{color:#e03131;border-color:#e03131;background:#fff5f5}
+  .pill.ok{color:#2b8a3e;border-color:#2b8a3e;background:#ebfbee}
+  #lives{color:#e03131;letter-spacing:3px;font-size:17px}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:18px 14px;position:relative}
+  .shapes{display:flex;align-items:center;justify-content:space-around;gap:8px}
+  .shapes.shake{animation:shake .4s}
+  .spane{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .spane canvas{width:132px;height:132px;background:#f7f6f2;border:1px solid #e3e1db;border-radius:14px}
+  .slabel{font-size:12px;font-weight:700;color:#9a9a9a;letter-spacing:1px}
+  .qmark{font-size:26px;font-weight:800;color:#c9c7c1}
+  #timerbar{height:8px;border-radius:99px;background:#eceae4;margin-top:16px;overflow:hidden}
+  #timerfill{height:100%;width:100%;border-radius:99px;background:var(--acc);transition:none}
+  #timerfill.low{background:#e03131}
+  #banner{position:absolute;top:0;left:0;right:0;bottom:0;display:none;align-items:center;justify-content:center;pointer-events:none;font-size:32px;font-weight:800;color:rgba(26,26,26,.88);text-shadow:0 2px 14px #fff,0 0 6px #fff;z-index:2}
+  #banner.on{display:flex;animation:bpop .9s ease both}
+  @keyframes bpop{0%{opacity:0;-webkit-transform:scale(.6);transform:scale(.6)}22%{opacity:1;-webkit-transform:scale(1.04);transform:scale(1.04)}34%{-webkit-transform:scale(1);transform:scale(1)}78%{opacity:1}100%{opacity:0}}
+  @keyframes shake{0%,100%{-webkit-transform:translateX(0);transform:translateX(0)}20%,60%{-webkit-transform:translateX(-7px);transform:translateX(-7px)}40%,80%{-webkit-transform:translateX(7px);transform:translateX(7px)}}
+  .answers{display:flex;gap:12px}
+  .answers button{flex:1;padding:16px 0;border:0;border-radius:16px;color:#fff;font-weight:800;font-size:17px;cursor:pointer;transition:-webkit-transform .1s,opacity .15s;transition:transform .1s,opacity .15s;font-family:inherit}
+  .answers button.press{-webkit-transform:scale(.96);transform:scale(.96)}
+  .answers button:disabled{opacity:.5}
+  #sameBtn{background:var(--acc)}
+  #mirrorBtn{background:#f76707}
+  .statusrow{display:flex;justify-content:center}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win p{margin:4px 0}
+  .win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--acc);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* First-run tutorial — simple 2-step centered card */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;background:rgba(0,0,0,.45)}
+  #tut.on{display:block}
+  #tutCard{position:fixed;left:50%;top:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);width:calc(100% - 40px);max-width:320px;background:#fff;border-radius:16px;padding:20px 22px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;min-height:44px;margin:-4px -8px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.answers>*+*{margin-left:12px}.shapes>*+*{margin-left:8px}.spane>*+*{margin-top:8px}#tutCard .row>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">Rotate · 0</span><span class="pill" id="lives">♥♥♥</span></div>
+  <div class="board">
+    <div class="shapes" id="shapes">
+      <div class="spane"><canvas id="cvA" width="264" height="264"></canvas><span class="slabel" id="labA">SHAPE</span></div>
+      <span class="qmark">?</span>
+      <div class="spane"><canvas id="cvB" width="264" height="264"></canvas><span class="slabel" id="labB">ROTATED</span></div>
+    </div>
+    <div id="timerbar"><div id="timerfill"></div></div>
+    <div id="banner"></div>
+  </div>
+  <div class="answers">
+    <button id="sameBtn">SAME</button>
+    <button id="mirrorBtn">MIRROR</button>
+  </div>
+  <div class="statusrow"><span class="pill" id="status">…</span></div>
+  <div class="help"><b>How to play.</b> The right shape is the left one rotated — or its mirror image rotated. Rotate it in your head and answer SAME or MIRROR before time runs out. Shapes grow and the clock shrinks. 3 mistakes ends the run.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> The right shape is the left one rotated — or its mirror image rotated. Rotate it in your head and answer SAME or MIRROR before time runs out. Shapes grow and the clock shrinks. 3 mistakes ends the run.",
+    vi:"<b>Cách chơi.</b> Hình bên phải là hình bên trái đã xoay — hoặc là ảnh gương của nó đã xoay. Hãy xoay trong đầu và chọn SAME hoặc MIRROR trước khi hết giờ. Hình to dần và thời gian ngắn lại. Sai 3 lần là kết thúc.",
+    ko:"<b>플레이 방법.</b> 오른쪽 도형은 왼쪽을 회전한 것 — 또는 거울상을 회전한 것입니다. 머릿속으로 돌려 보고 시간이 끝나기 전에 SAME 또는 MIRROR를 고르세요. 도형은 커지고 시간은 줄어듭니다. 3번 틀리면 종료됩니다.",
+    zh:"<b>玩法。</b> 右边的图形是左边旋转后的样子——或是其镜像旋转后的样子。在脑中旋转它，在时间耗尽前选择SAME或MIRROR。图形越来越大，时间越来越短。错3次游戏结束。",
+    ja:"<b>遊び方。</b> 右の図形は左を回転させたもの — または鏡像を回転させたものです。頭の中で回して、時間切れの前にSAMEかMIRRORを選びましょう。図形は大きく、時間は短くなります。3回ミスで終了です。",
+    ar:"<b>طريقة اللعب.</b> الشكل الأيمن هو الأيسر بعد تدويره — أو صورته المرآتية بعد التدوير. أدره في ذهنك وأجب SAME أو MIRROR قبل نفاد الوقت. تكبر الأشكال ويقصر الوقت. ثلاثة أخطاء تنهي الجولة."
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="starto" style="display:grid"><div><h2>Rotate</h2><p id="startMsg"></p><button id="startBtn">Play</button></div></div>
+<div class="win" id="wino"><div><h2 id="goTitle">Game over</h2><p id="goScore"></p><p id="goBest"></p><button id="again">Play again</button></div></div>
+<div id="tut">
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script>
+const KEY="rotate.best";
+const TUTKEY="rotate.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // hub passes ?tut=0 to disable
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Rotate is endless/score-based, so it POSTs a fixed `level: 1` with the
+// score — the server ranks score games by score first, then time. Reads the
+// shared player token (set by the hub, same origin). No token → silently skips.
+// Mirrors the GBLB block in games/echo/index.html; keep in sync.
+const GBLB=(function(){
+  var GAME='rotate', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+
+// ── UI strings (6 languages) ──────────────────────────────────────────────
+const STR={
+  en:{think:"Rotated or mirrored?",right:"Correct! +1",wrong:"Wrong!",slow:"Time's up!",score:"Score",over:"Game over",best:"Best",play:"Play",again:"Play again",same:"SAME",mirrorb:"MIRROR",shape:"SHAPE",probe:"ROTATED?",tap:"Is the right shape a rotation of the left one — or a mirror image? Answer before the clock runs out."},
+  vi:{think:"Xoay hay ảnh gương?",right:"Chính xác! +1",wrong:"Sai rồi!",slow:"Hết giờ!",score:"Điểm",over:"Kết thúc",best:"Kỷ lục",play:"Chơi",again:"Chơi lại",same:"SAME",mirrorb:"MIRROR",shape:"HÌNH GỐC",probe:"ĐÃ XOAY?",tap:"Hình bên phải là bản xoay của hình bên trái — hay ảnh gương? Trả lời trước khi hết giờ."},
+  ko:{think:"회전? 거울상?",right:"정답! +1",wrong:"오답!",slow:"시간 초과!",score:"점수",over:"게임 오버",best:"최고 기록",play:"플레이",again:"다시 하기",same:"SAME",mirrorb:"MIRROR",shape:"원본",probe:"회전?",tap:"오른쪽 도형이 왼쪽의 회전인가요 — 아니면 거울상인가요? 시간 안에 답하세요."},
+  zh:{think:"旋转还是镜像？",right:"正确！+1",wrong:"错了！",slow:"时间到！",score:"得分",over:"游戏结束",best:"最佳",play:"开始",again:"再玩一次",same:"SAME",mirrorb:"MIRROR",shape:"原形",probe:"旋转？",tap:"右边的图形是左边的旋转——还是镜像？在时间耗尽前作答。"},
+  ja:{think:"回転？鏡像？",right:"正解！+1",wrong:"不正解！",slow:"時間切れ！",score:"スコア",over:"ゲームオーバー",best:"ベスト",play:"プレイ",again:"もう一度",same:"SAME",mirrorb:"MIRROR",shape:"もとの形",probe:"回転？",tap:"右の図形は左の回転？それとも鏡像？時間内に答えましょう。"},
+  ar:{think:"تدوير أم مرآة؟",right:"صحيح! +1",wrong:"خطأ!",slow:"انتهى الوقت!",score:"النقاط",over:"انتهت اللعبة",best:"الأفضل",play:"العب",again:"العب مجددًا",same:"SAME",mirrorb:"MIRROR",shape:"الشكل",probe:"مُدار؟",tap:"هل الشكل الأيمن تدوير للأيسر — أم صورة مرآتية؟ أجب قبل نفاد الوقت."}
+};
+const S=STR[LANG]||STR.en;
+
+// ── Pure logic (kept in sync with games/rotate/logic.mjs — source of truth) ──
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function paramsForRound(round){var cells=Math.min(8,4+Math.floor((round-1)/5));var timeMs=Math.max(3500,8000-(round-1)*180);return {cells:cells,timeMs:timeMs};}
+function normalize(cells){var mx=Infinity,my=Infinity;for(var i=0;i<cells.length;i++){if(cells[i][0]<mx)mx=cells[i][0];if(cells[i][1]<my)my=cells[i][1];}return cells.map(function(c){return [c[0]-mx,c[1]-my];}).sort(function(a,b){return a[0]-b[0]||a[1]-b[1];});}
+function rotate90(cells){return normalize(cells.map(function(c){return [c[1],-c[0]];}));}
+function mirrorS(cells){return normalize(cells.map(function(c){return [-c[0],c[1]];}));}
+function shapeKey(cells){return cells.map(function(c){return c.join(",");}).join(";");}
+function genPolyomino(k,rnd){var set={"0,0":true};var cells=[[0,0]];var DIRS=[[1,0],[-1,0],[0,1],[0,-1]];var guard=0;while(cells.length<k&&guard++<500){var c=cells[Math.floor(rnd()*cells.length)];var d=DIRS[Math.floor(rnd()*4)];var nx=c[0]+d[0],ny=c[1]+d[1],key=nx+","+ny;if(!set[key]){set[key]=true;cells.push([nx,ny]);}}return normalize(cells);}
+function isChiral(cells){var m=shapeKey(mirrorS(cells));var r=normalize(cells);for(var i=0;i<4;i++){if(shapeKey(r)===m)return false;r=rotate90(r);}return true;}
+function genChiral(k,rnd){for(var i=0;i<1000;i++){var s=genPolyomino(k,rnd);if(s.length===k&&isChiral(s))return s;}var f=[[0,0],[0,1],[1,0]];for(var y=2;f.length<k;y++)f.push([0,y]);return normalize(f);}
+function genQuestion(round,rnd){var p=paramsForRound(round);var target=genChiral(p.cells,rnd);var mirrored=rnd()<0.5;var quarters=1+Math.floor(rnd()*3);var probe=mirrored?mirrorS(target):target;for(var i=0;i<quarters;i++)probe=rotate90(probe);return {target:target,probe:probe,mirrored:mirrored,quarters:quarters,timeMs:p.timeMs};}
+
+// ── WebAudio beeps — OscillatorNode only, no files; silent-fail if blocked ──
+var actx=null;
+function ensureAudio(){try{var AC=window.AudioContext||window.webkitAudioContext;if(!actx&&AC)actx=new AC();if(actx&&actx.state==="suspended")actx.resume();}catch(e){actx=null;}}
+function tone(freq,dur,type,vol){
+  try{
+    if(!actx)return;
+    var t=actx.currentTime,o=actx.createOscillator(),g=actx.createGain();
+    o.type=type||"sine";o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.linearRampToValueAtTime(vol||0.22,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g);g.connect(actx.destination);
+    o.start(t);o.stop(t+dur+0.05);
+  }catch(e){}
+}
+
+// ── Canvas shape rendering ────────────────────────────────────────────────
+function drawShape(cv,cells){
+  var ctx=cv.getContext("2d");
+  ctx.clearRect(0,0,cv.width,cv.height);
+  var maxX=0,maxY=0;
+  for(var i=0;i<cells.length;i++){if(cells[i][0]>maxX)maxX=cells[i][0];if(cells[i][1]>maxY)maxY=cells[i][1];}
+  var n=Math.max(maxX,maxY)+1;
+  var pad=28,unit=Math.floor((cv.width-2*pad)/n);
+  var w=(maxX+1)*unit,h=(maxY+1)*unit;
+  var ox=Math.floor((cv.width-w)/2),oy=Math.floor((cv.height-h)/2);
+  ctx.fillStyle="#0ca678";
+  for(var k=0;k<cells.length;k++){
+    var x=ox+cells[k][0]*unit,y=oy+cells[k][1]*unit;
+    var r=Math.max(4,Math.floor(unit*0.18)),g=Math.max(2,Math.floor(unit*0.06));
+    // rounded cell with a small gap so the structure reads clearly
+    var xx=x+g,yy=y+g,ww=unit-2*g,hh=unit-2*g;
+    ctx.beginPath();
+    ctx.moveTo(xx+r,yy);
+    ctx.arcTo(xx+ww,yy,xx+ww,yy+hh,r);
+    ctx.arcTo(xx+ww,yy+hh,xx,yy+hh,r);
+    ctx.arcTo(xx,yy+hh,xx,yy,r);
+    ctx.arcTo(xx,yy,xx+ww,yy,r);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+// ── Game state ────────────────────────────────────────────────────────────
+let round=1,Q=null,deadline=0,timerId=null,lives=3,score=0,best=+(localStorage.getItem(KEY)||0),state="idle",timers=[];
+let rnd=mulberry32(((Date.now()%2147483647)>>>0)||1);
+const $=function(id){return document.getElementById(id);};
+const cvA=$("cvA"),cvB=$("cvB"),fill=$("timerfill");
+function later(fn,ms){timers.push(setTimeout(fn,ms));}
+function clearTimers(){for(var i=0;i<timers.length;i++)clearTimeout(timers[i]);timers=[];if(timerId){clearInterval(timerId);timerId=null;}}
+function hearts(){var s="";for(var i=0;i<3;i++)s+=(i<lives?"♥":"♡");$("lives").textContent=s;}
+function setStatus(t,cls){var st=$("status");st.textContent=t;st.className="pill"+(cls?" "+cls:"");}
+function setPill(){$("lvl").textContent="Rotate · "+score;}
+function banner(t,ms){
+  var b=$("banner");b.textContent=t;
+  b.classList.remove("on");void b.offsetWidth;b.classList.add("on");
+  later(function(){b.classList.remove("on");},ms||900);
+}
+function setBtns(on){$("sameBtn").disabled=!on;$("mirrorBtn").disabled=!on;}
+function startTimer(ms){
+  deadline=Date.now()+ms;
+  fill.style.width="100%";fill.classList.remove("low");
+  if(timerId)clearInterval(timerId);
+  timerId=setInterval(function(){
+    var left=deadline-Date.now();
+    var f=Math.max(0,left/ms);
+    fill.style.width=(f*100)+"%";
+    if(f<0.25)fill.classList.add("low");
+    if(left<=0){clearInterval(timerId);timerId=null;if(state==="play")grade(null);}
+  },50);
+}
+function nextQuestion(){
+  Q=genQuestion(round,rnd);
+  drawShape(cvA,Q.target);
+  drawShape(cvB,Q.probe);
+  setBtns(true);
+  state="play";
+  setStatus(S.think);
+  startTimer(Q.timeMs);
+}
+function grade(saidMirror){
+  if(state!=="play")return;
+  state="pause";
+  if(timerId){clearInterval(timerId);timerId=null;}
+  setBtns(false);
+  var timeout=saidMirror===null;
+  var ok=!timeout&&saidMirror===Q.mirrored;
+  if(ok){
+    score++;round++;
+    if(score>best){best=score;try{localStorage.setItem(KEY,String(best));}catch(e){}}
+    setPill();
+    tone(659.25,0.12,"sine",0.18);
+    setStatus(S.right,"ok");
+    later(nextQuestion,450);
+  }else{
+    lives--;hearts();
+    $("shapes").classList.add("shake");
+    tone(130,0.35,"square",0.14);
+    later(function(){$("shapes").classList.remove("shake");},450);
+    setStatus(timeout?S.slow:S.wrong,"err");
+    if(lives<=0){later(gameOver,900);return;}
+    round++; // move on — no repeats, the ramp itself provides relief
+    later(nextQuestion,1100);
+  }
+}
+function gameOver(){
+  state="over";
+  GBLB.report(score);
+  $("goTitle").textContent=S.over;
+  $("goScore").textContent=S.score+": "+score;
+  $("goBest").textContent=S.best+": "+best;
+  $("wino").style.display="grid";
+}
+function startRun(){
+  clearTimers();
+  $("wino").style.display="none";$("starto").style.display="none";
+  round=1;lives=3;score=0;state="pause";
+  rnd=mulberry32(((Date.now()%2147483647)>>>0)||1);
+  hearts();setPill();
+  GBLB.start();
+  later(nextQuestion,300);
+}
+function press(btn,saidMirror){
+  if(state!=="play")return;
+  ensureAudio();
+  btn.classList.add("press");later(function(){btn.classList.remove("press");},110);
+  grade(saidMirror);
+}
+$("sameBtn").addEventListener("pointerdown",function(ev){ev.preventDefault();press(this,false);});
+$("mirrorBtn").addEventListener("pointerdown",function(ev){ev.preventDefault();press(this,true);});
+
+// ── Start / restart ───────────────────────────────────────────────────────
+$("startMsg").textContent=S.tap;
+$("startBtn").textContent=S.play;
+$("again").textContent=S.again;
+$("sameBtn").textContent=S.same;
+$("mirrorBtn").textContent=S.mirrorb;
+$("labA").textContent=S.shape;
+$("labB").textContent=S.probe;
+if(LANG==="ar"){$("starto").dir="rtl";$("wino").dir="rtl";}
+$("startBtn").onclick=function(){ensureAudio();if(TUT_ON&&!localStorage.getItem(TUTKEY)){$("starto").style.display="none";showTut();}else{startRun();}};
+$("again").onclick=function(){ensureAudio();startRun();};
+
+// ── First-run tutorial (2 steps) ──────────────────────────────────────────
+const TUT_T={
+  en:{t1:"Welcome to Rotate",b1:"Two shapes: the right one is the left one rotated — or a mirror image of it, rotated.",t2:"SAME or MIRROR",b2:"Rotate it in your head. If it lines up, press SAME. If it only matches flipped, press MIRROR. Beat the clock — 3 lives.",skip:"Skip",next:"Next",play:"Play"},
+  vi:{t1:"Chào mừng đến Rotate",b1:"Hai hình: hình bên phải là hình bên trái đã xoay — hoặc ảnh gương của nó đã xoay.",t2:"SAME hay MIRROR",b2:"Xoay trong đầu. Nếu trùng khớp, nhấn SAME. Nếu chỉ khớp khi lật gương, nhấn MIRROR. Nhanh trước khi hết giờ — 3 mạng.",skip:"Bỏ qua",next:"Tiếp",play:"Chơi"},
+  ko:{t1:"Rotate에 오신 것을 환영합니다",b1:"도형 두 개: 오른쪽은 왼쪽을 회전한 것 — 또는 거울상을 회전한 것입니다.",t2:"SAME 또는 MIRROR",b2:"머릿속으로 돌려 보세요. 겹쳐지면 SAME, 뒤집어야만 맞으면 MIRROR. 시간 내에 답하세요 — 라이프 3개.",skip:"건너뛰기",next:"다음",play:"플레이"},
+  zh:{t1:"欢迎来到 Rotate",b1:"两个图形：右边是左边旋转后的样子——或是其镜像旋转后的样子。",t2:"SAME 还是 MIRROR",b2:"在脑中旋转。能重合就按SAME；只有翻转才能重合就按MIRROR。抢在时间前作答——3条命。",skip:"跳过",next:"下一步",play:"开始玩"},
+  ja:{t1:"Rotate へようこそ",b1:"2つの図形：右は左を回転させたもの — または鏡像を回転させたものです。",t2:"SAMEかMIRRORか",b2:"頭の中で回転。重なればSAME、裏返さないと合わないならMIRROR。時間内に答えよう — ライフは3つ。",skip:"スキップ",next:"次へ",play:"プレイ"},
+  ar:{t1:"مرحبًا بك في Rotate",b1:"شكلان: الأيمن هو الأيسر بعد التدوير — أو صورته المرآتية بعد التدوير.",t2:"SAME أم MIRROR",b2:"أدره في ذهنك. إن تطابق فاضغط SAME، وإن لم يتطابق إلا مقلوبًا فاضغط MIRROR. اسبق الوقت — لديك 3 محاولات.",skip:"تخطّي",next:"التالي",play:"العب"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+var tutStep=0;
+function showTut(){
+  tutStep=0;
+  if(LANG==="ar")$("tutCard").dir="rtl";
+  renderTut();$("tut").classList.add("on");
+}
+function renderTut(){
+  $("tutTitle").textContent=tutStep===0?M.t1:M.t2;
+  $("tutBody").textContent=tutStep===0?M.b1:M.b2;
+  $("tutSkip").textContent=M.skip;
+  $("tutNext").textContent=tutStep===0?M.next:M.play;
+}
+function endTut(){
+  try{localStorage.setItem(TUTKEY,"1");}catch(e){}
+  $("tut").classList.remove("on");
+  startRun();
+}
+$("tutNext").onclick=function(){if(tutStep===0){tutStep=1;renderTut();}else{endTut();}};
+$("tutSkip").onclick=endTut;
+
+// initial idle board behind the start overlay — a sample question, buttons off
+(function(){
+  var q=genQuestion(1,mulberry32(7));
+  drawShape(cvA,q.target);drawShape(cvB,q.probe);
+  setBtns(false);hearts();setStatus(S.think);setPill();
+})();
+</script>
+</body>
+</html>

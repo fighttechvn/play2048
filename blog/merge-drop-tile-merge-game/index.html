@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-VCLVPVRXMV');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#faf8ef" />
+  <title>Merge Drop — Free Tile Merging Game Online, No Sign-Up</title>
+  <meta name="description" content="Drop numbered tiles into five columns; equal tiles merge into their double and cascade. Free in your browser, no account, works offline. Premium tile skins." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://gobrain.fighttech.vn/blog/merge-drop-tile-merge-game/" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Merge Drop: Chain the Doubles, Watch It Cascade 🔷" />
+  <meta property="og:description" content="Drop numbered tiles into five columns; equal tiles merge into their double and cascade. Free in your browser, no account, works offline. Premium tile skins." />
+  <meta property="og:url" content="https://gobrain.fighttech.vn/blog/merge-drop-tile-merge-game/" />
+  <meta property="og:site_name" content="Go Brain" />
+  <meta property="og:image" content="https://gobrain.fighttech.vn/play/thumbs/merge.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://gobrain.fighttech.vn/play/thumbs/merge.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="../../assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="../../assets/app-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem("gobrain.theme")||"system";var d=p==="dark"||(p!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");}catch(e){}})();</script>
+  <link rel="stylesheet" href="../../css/styles.css" />
+  <link rel="stylesheet" href="../../css/legal.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "Merge Drop: Chain the Doubles, Watch It Cascade",
+    "description": "Drop numbered tiles into five columns; equal tiles merge into their double and cascade. Free in your browser, no account, works offline. Premium tile skins.",
+    "author": {
+      "@type": "Organization",
+      "name": "FightTech"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Go Brain"
+    },
+    "datePublished": "2026-08-10",
+    "mainEntityOfPage": "https://gobrain.fighttech.vn/blog/merge-drop-tile-merge-game/"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How do you get a high score in Merge Drop?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Sort each column with large tiles at the bottom and small at the top, so a single well-placed tile collapses the whole stack. And keep one column relatively empty as a release valve."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Do the tile skins change the gameplay?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. They change the board's colours and nothing else. There is no advantage to any of them."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="../../" aria-label="Go Brain"><img class="logo" src="../../assets/app-icon.png" alt="" width="30" height="30" /><span>Go Brain</span></a>
+      <nav class="nav">
+        <div class="nav-links">
+          <a href="../">Blog</a><a href="../../play/">Play online</a><a href="../../sdk/">SDK</a><a href="../../support/">Support</a>
+        </div>
+        <div class="controls">
+          <div class="select-wrap">
+            <select id="themeSelect" class="theme" aria-label="Theme"><option value="system">◐ System</option><option value="light">☀ Light</option><option value="dark">☾ Dark</option></select>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-main">
+    <div class="container">
+      <div class="legal-wrap">
+        <a class="back-link" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> All articles</a>
+
+        <div class="legal-head">
+          <span class="eyebrow">Arcade</span>
+          <h1>Merge Drop: Chain the Doubles, Watch It Cascade 🔷</h1>
+          <p class="updated"><strong>Published:</strong> August 10, 2026 · 4 min read</p>
+          <p class="legal-lead">If you've played one of the tile-merging puzzles where equal numbers combine into their double, Merge Drop is that idea with gravity. Instead of sliding a whole grid, you drop one tile at a time into five columns, and the merges cascade downward on their own.</p>
+        </div>
+
+        <nav class="toc" aria-label="Table of contents">
+          <h2>Contents</h2>
+          <ol>
+            <li><a href="#rules">The rules</a></li>
+            <li><a href="#strategy">Building a cascade</a></li>
+            <li><a href="#skins">Tile skins</a></li>
+            <li><a href="#ours">About our version</a></li>
+          </ol>
+        </nav>
+
+        <div class="legal-body">
+
+          <h2 id="rules">The rules</h2>
+          <p>A numbered tile waits at the top. Choose a column and drop it. When it lands on a tile of the same number, the two merge into their double — and if <em>that</em> matches what's underneath, the merge continues. Fill a column to the top and the run ends.</p>
+          <p>You can see the next tile, which is more important than it sounds.</p>
+
+          <h2 id="strategy">Building a cascade</h2>
+          <p><strong>Sort by size, low at the top.</strong> The ideal column reads large at the bottom and small at the top — 32, 16, 8, 4 — because then a matching 4 dropped on top collapses the entire stack in one chain. Building the reverse gives you a column you can never clear.</p>
+          <p><strong>Keep one column free.</strong> The most common way to lose isn't a full board, it's having nowhere to put a tile that doesn't match anything. A deliberately empty or low column is a release valve — the same idea as a free tube in a sorting puzzle.</p>
+          <p><strong>Use the preview.</strong> If the next tile is a 2 and you have a lone 2 sitting on a 4, drop the current tile somewhere else and let the 2 land on it for a double merge.</p>
+          <p><strong>Don't chase the big number.</strong> Working towards one enormous tile leaves the rest of the board full of orphaned small ones. Two mid-size clean columns outlive one impressive column and four disasters.</p>
+
+          <h2 id="skins">Tile skins</h2>
+          <p>Merge Drop is where the premium tile skins apply — Neon, Candy and Mono, alongside the default palette. They come with the Theme Pack, which you can buy with coins earned in the hub, or with Plus. It's a cosmetic change to the board colours and nothing else; there's no gameplay advantage to any of them.</p>
+
+          <h2 id="ours">About our version</h2>
+          <p>Five columns, endless, with a next-tile preview and instant restart. Best score is kept on your device and posts to the shared leaderboard if you've set a name.</p>
+          <p>It runs in your browser, works offline once loaded, needs no account, and costs nothing.</p>
+
+
+          <h2 id="faq">Questions people actually ask</h2>
+          <p><strong>How do you get a high score in Merge Drop?</strong><br />Sort each column with large tiles at the bottom and small at the top, so a single well-placed tile collapses the whole stack. And keep one column relatively empty as a release valve.</p>
+          <p><strong>Do the tile skins change the gameplay?</strong><br />No. They change the board's colours and nothing else. There is no advantage to any of them.</p>
+
+          <h2 id="more">Keep reading</h2>
+          <ul>
+            <li><a href="../arcade-games/">Arcade Games in Go Brain: Seven One-Thumb Classics 🎮</a> — Snake, a doodle-jumper, brick breaker, a stacker, a tile-merger, flappy and a bubble shooter. No rules to learn, just a score to beat.</li>
+            <li><a href="../block-fit-puzzle/">Block Fit: No Gravity, No Rotation, No Excuses 🧱</a> — Three pieces at a time on an 8×8 board. You can't rotate them, which means bad boards are always something you did three moves ago.</li>
+            <li><a href="../stacker-tower-game/">Stacker: One Tap, and the Tower Gets Narrower 🏗️</a> — Tap to drop a block. Miss slightly and the overhang is cut away — so your mistakes are permanent and cumulative, which is the entire game.</li>
+          </ul>
+
+          <div class="legal-contact" id="play">
+            <h2>Play Merge Drop now</h2>
+            <p>Five columns, endless cascades, next-tile preview. Free, no ads, no account.</p>
+            <p style="margin-top:16px"><a class="btn btn-primary" href="../../play/?open=merge">▶ Play Merge Drop</a></p>
+          </div>
+
+          <div class="legal-nav-links">
+            <a href="../">← All articles</a>
+            <a href="../../play/">Play online</a>
+            <a href="../../support/">Support</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="margin-top:0;border-top:none">
+        <span>© <span id="year">2026</span> FightTech. All rights reserved.</span>
+        <span><a href="../../privacy/">Privacy</a> · <a href="../../terms/">Terms</a> · <a href="../../support/">Support</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../../js/main.js"></script>
+  <script src="../../js/app-banner.js"></script>
+</body>
+</html>

@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Stacker</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--accent:#5b8def;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(14px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(12px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(14px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:12px;height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  #score{margin-left:auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:8px;flex:1;min-height:300px;position:relative;overflow:hidden}
+  canvas{display:block;width:100%;height:100%;touch-action:none;border-radius:12px}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px 16px;font-size:13.5px;color:#555;line-height:1.45}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}
+  .win p{margin:4px 0;color:#444}
+  .win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--accent);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:12px}.top>*+*{margin-left:8px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="title">Stacker</span><span class="pill" id="score">0</span><span class="pill" id="best">Best 0</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="help" id="help"><b>How to play.</b> Tap to drop the sliding block on the tower. Any overhang is sliced off — line it up! A perfect drop keeps the full width, and 3 perfects in a row grow the block back. How high can you stack?</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Tap to drop the sliding block on the tower. Any overhang is sliced off — line it up! A perfect drop keeps the full width, and 3 perfects in a row grow the block back. How high can you stack?",
+    vi:"<b>Cách chơi.</b> Chạm để thả khối đang trượt lên tháp. Phần thừa ra ngoài sẽ bị cắt bỏ — hãy canh thật chuẩn! Thả hoàn hảo giữ nguyên chiều rộng, 3 lần hoàn hảo liên tiếp sẽ nới rộng khối trở lại. Bạn xếp cao được bao nhiêu?",
+    ko:"<b>플레이 방법.</b> 탭해서 움직이는 블록을 탑 위에 떨어뜨리세요. 튀어나온 부분은 잘려나갑니다 — 정확히 맞추세요! 완벽한 드롭은 폭을 그대로 유지하고, 3연속 퍼펙트면 블록이 다시 넓어집니다. 얼마나 높이 쌓을 수 있나요?",
+    zh:"<b>玩法。</b> 点按放下滑动的方块，叠到塔上。超出的部分会被切掉 — 对准了再放！完美落下保持全宽，连续3次完美方块会变宽回来。你能叠多高？",
+    ja:"<b>遊び方。</b> タップして滑るブロックをタワーに落とします。はみ出た部分は切り落とされます — ぴったり合わせて！パーフェクトなら幅そのまま、3連続パーフェクトで幅が少し戻ります。どこまで高く積める？",
+    ar:"<b>طريقة اللعب.</b> اضغط لإسقاط الكتلة المنزلقة على البرج. أي جزء بارز سيُقطع — صوّب جيدًا! الإسقاط المثالي يحافظ على العرض كاملًا، و3 إسقاطات مثالية متتالية تعيد توسيع الكتلة. إلى أي ارتفاع يمكنك البناء؟"
+  };
+  var L=pick(),el=document.getElementById("help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2 id="woTitle">Game over</h2><p id="woScore"></p><p id="woBest"></p><button id="again">Play again</button></div></div>
+<script>
+const KEY="stacker.best";
+// Locale — same source order as the help card above.
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Stacker is endless/score-based: POSTs a fixed level:1 with the final score.
+// Reads the shared player token (set by the hub, same origin). No token →
+// silently skips. Mirrors games/zip's GBLB block; keep in sync.
+const GBLB=(function(){
+  var GAME='stacker', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+
+// Small localized strings for HUD / game-over card.
+const STR={
+  en:{best:"Best",over:"Game over",height:"Height",newBest:"New best!",again:"Play again",perfect:"PERFECT"},
+  vi:{best:"Kỷ lục",over:"Kết thúc",height:"Độ cao",newBest:"Kỷ lục mới!",again:"Chơi lại",perfect:"HOÀN HẢO"},
+  ko:{best:"최고",over:"게임 오버",height:"높이",newBest:"신기록!",again:"다시 하기",perfect:"퍼펙트"},
+  zh:{best:"最佳",over:"游戏结束",height:"高度",newBest:"新纪录！",again:"再玩一次",perfect:"完美"},
+  ja:{best:"ベスト",over:"ゲームオーバー",height:"高さ",newBest:"新記録！",again:"もう一度",perfect:"パーフェクト"},
+  ar:{best:"الأفضل",over:"انتهت اللعبة",over2:"",height:"الارتفاع",newBest:"رقم قياسي جديد!",again:"العب مجددًا",perfect:"مثالي"}
+};
+const MS=STR[LANG]||STR.en;
+
+// ── Core tuning (mirrors games/stacker/stacker-core.mjs — keep in sync) ───
+const PERFECT_PX=4, MIN_W=12, REGROW_PX=9, REGROW_EVERY=3, SPEED_RAMP=0.055, SPEED_CAP_MUL=2.8;
+
+function slice(prevX,prevW,curX,curW,perfectPx){
+  const offset=curX-prevX;
+  const left=Math.max(prevX,curX), right=Math.min(prevX+prevW,curX+curW);
+  const overlap=right-left;
+  if(overlap<=0) return {hit:false,perfect:false,newX:curX,newW:0,cutX:curX,cutW:curW,offset:offset};
+  if(Math.abs(offset)<=perfectPx) return {hit:true,perfect:true,newX:prevX,newW:curW,cutX:0,cutW:0,offset:offset};
+  var cutX,cutW;
+  if(offset>0){cutX=right;cutW=(curX+curW)-right;} else {cutX=curX;cutW=left-curX;}
+  return {hit:true,perfect:false,newX:left,newW:overlap,cutX:cutX,cutW:cutW,offset:offset};
+}
+function speedForFloor(f,base){return Math.min(base*SPEED_CAP_MUL, base*(1+f*SPEED_RAMP));}
+
+// ── State ─────────────────────────────────────────────────────────────────
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=function(id){return document.getElementById(id);};
+let W=0,H=0,bh=26,groundH=0,margin=8;
+let blocks=[],cur=null,state='play',floors=0,bonus=0,combo=0,score=0;
+let best=+(localStorage.getItem(KEY)||0);
+let cam=0,camT=0,spdBase=200,spd=200,maxW=280,startW=280;
+let effects=[],popups=[],flash=0,shake=0;
+let skyTop=null,skyBot=null,skyFloor=-1,grad=null;
+let last=0,raf=0;
+
+function layout(){
+  const board=document.querySelector('.board');
+  const w=board.clientWidth-16, h=board.clientHeight-16;
+  W=Math.max(200,w); H=Math.max(280,h);
+  cv.width=Math.round(W*devicePixelRatio); cv.height=Math.round(H*devicePixelRatio);
+  cv.style.width=W+'px'; cv.style.height=H+'px';
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  bh=Math.max(22,Math.round(H/22));
+  groundH=Math.round(H*0.07);
+  startW=Math.min(Math.round(W*0.62),300); maxW=startW;
+  spdBase=Math.max(150,Math.round(W*0.55));
+  skyFloor=-1; // force gradient rebuild at new size
+}
+
+// Pastel hue ramp per floor — tasteful, slowly cycling.
+function hueFor(i){return (205+i*14)%360;}
+function fillFor(i){return 'hsl('+hueFor(i)+',48%,74%)';}
+function edgeFor(i){return 'hsl('+hueFor(i)+',42%,58%)';}
+
+// Sky gradient shifts with altitude: paper → pale blue → lavender → dusk.
+const SKY=[[242,240,235],[219,234,250],[227,221,247],[209,199,236]];
+function lerpC(a,b,t){return [Math.round(a[0]+(b[0]-a[0])*t),Math.round(a[1]+(b[1]-a[1])*t),Math.round(a[2]+(b[2]-a[2])*t)];}
+function skyAt(t){ // t 0..1 altitude
+  const seg=Math.min(SKY.length-2,Math.floor(t*(SKY.length-1)));
+  const f=t*(SKY.length-1)-seg;
+  return lerpC(SKY[seg],SKY[seg+1],Math.min(1,f));
+}
+function rebuildSky(){
+  const t=Math.min(1,floors/70);
+  const a=skyAt(Math.min(1,t+0.25)), b=skyAt(t);
+  grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'rgb('+a[0]+','+a[1]+','+a[2]+')');
+  grad.addColorStop(1,'rgb('+b[0]+','+b[1]+','+b[2]+')');
+  skyFloor=floors;
+}
+
+function reset(){
+  blocks=[{x:Math.round((W-startW)/2),w:startW}];
+  floors=0;bonus=0;combo=0;score=0;cam=0;camT=0;
+  effects.length=0;popups.length=0;flash=0;shake=0;skyFloor=-1;
+  spd=spdBase;
+  spawn();
+  state='play';
+  updHud();
+  GBLB.start();
+}
+function spawn(){
+  const topB=blocks[blocks.length-1];
+  const fromLeft=blocks.length%2===1;
+  cur={x:fromLeft?-topB.w+margin:W-margin,w:topB.w,dir:fromLeft?1:-1};
+  spd=speedForFloor(floors,spdBase);
+}
+function rowY(i){return H-groundH-(i+1)*bh+cam;}
+
+function drop(){
+  if(state!=='play'||!cur)return;
+  const prev=blocks[blocks.length-1];
+  const r=slice(prev.x,prev.w,Math.round(cur.x),cur.w,PERFECT_PX);
+  const y=rowY(blocks.length);
+  if(!r.hit){ // total miss: whole block tumbles
+    effects.push({x:cur.x,y:y,w:cur.w,h:bh-2,vy:-40,vx:cur.dir*60,rot:0,vr:cur.dir*2.4,a:1,i:blocks.length});
+    cur=null; over(); return;
+  }
+  let newW=r.newW, newX=r.newX;
+  if(r.perfect){
+    combo++; bonus+=combo;
+    flash=1;
+    popups.push({t:MS.perfect,x:newX+newW/2,y:y-6,a:1,vy:-46,big:combo>=3});
+    if(combo%REGROW_EVERY===0){ // width regrowth reward
+      const grown=Math.min(maxW,newW+REGROW_PX);
+      newX=Math.max(2,Math.round(newX-(grown-newW)/2));
+      if(newX+grown>W-2)newX=W-2-grown;
+      newW=grown;
+      popups.push({t:'+'+REGROW_PX,x:newX+newW/2,y:y-26,a:1,vy:-38,big:false});
+    }
+  } else {
+    combo=0;
+    if(r.cutW>0.5) effects.push({x:r.cutX,y:y,w:r.cutW,h:bh-2,vy:-10,vx:(r.offset>0?1:-1)*30,rot:0,vr:(r.offset>0?1:-1)*1.8,a:1,i:blocks.length});
+  }
+  blocks.push({x:newX,w:newW});
+  floors++; score=floors+bonus;
+  camT=Math.max(0,(floors+1)*bh-Math.round(H*0.55));
+  updHud();
+  if(newW<MIN_W){ cur=null; over(); return; }
+  spawn();
+}
+
+function over(){
+  state='over'; shake=1;
+  if(score>best){best=score; try{localStorage.setItem(KEY,String(best));}catch(e){}
+    $('woBest').textContent=MS.newBest;
+  } else {
+    $('woBest').textContent=MS.best+': '+best;
+  }
+  GBLB.report(score);
+  $('woTitle').textContent=MS.over;
+  $('woScore').textContent=MS.height+': '+floors+' · '+score;
+  updHud();
+  setTimeout(function(){$('wino').style.display='grid';},550);
+}
+
+function updHud(){
+  $('score').textContent=String(score);
+  $('best').textContent=MS.best+' '+best;
+}
+
+// ── Loop ──────────────────────────────────────────────────────────────────
+function tick(ts){
+  raf=requestAnimationFrame(tick);
+  const dt=Math.min(0.05,(ts-last)/1000||0.016); last=ts;
+  // move current block
+  if(state==='play'&&cur){
+    cur.x+=cur.dir*spd*dt;
+    if(cur.x<margin-2&&cur.dir<0){cur.x=margin-2;cur.dir=1;}
+    if(cur.x+cur.w>W-margin+2&&cur.dir>0){cur.x=W-margin+2-cur.w;cur.dir=-1;}
+  }
+  // camera ease
+  cam+=(camT-cam)*Math.min(1,dt*7);
+  // effects
+  for(let i=effects.length-1;i>=0;i--){
+    const e=effects[i];
+    e.vy+=1400*dt; e.y+=e.vy*dt; e.x+=e.vx*dt; e.rot+=e.vr*dt; e.a-=dt*1.1;
+    if(e.a<=0||e.y>H+80)effects.splice(i,1);
+  }
+  for(let i=popups.length-1;i>=0;i--){
+    const p=popups[i]; p.y+=p.vy*dt; p.a-=dt*1.3;
+    if(p.a<=0)popups.splice(i,1);
+  }
+  if(flash>0)flash=Math.max(0,flash-dt*2.4);
+  if(shake>0)shake=Math.max(0,shake-dt*2.2);
+  draw();
+}
+
+function draw(){
+  if(skyFloor!==floors)rebuildSky();
+  ctx.save();
+  if(shake>0)ctx.translate((Math.random()-0.5)*8*shake,(Math.random()-0.5)*8*shake);
+  ctx.fillStyle=grad; ctx.fillRect(-8,-8,W+16,H+16);
+  // ground
+  const gy=H-groundH+cam;
+  if(gy<H+10){ctx.fillStyle='#d6cfc4';ctx.fillRect(-8,gy,W+16,H-gy+16);}
+  // tower
+  for(let i=0;i<blocks.length;i++){
+    const b=blocks[i], y=rowY(i);
+    if(y>H+bh||y<-bh)continue;
+    drawBlock(b.x,y,b.w,i);
+  }
+  // perfect flash on the top block
+  if(flash>0&&blocks.length>1){
+    const t=blocks[blocks.length-1], y=rowY(blocks.length-1);
+    ctx.save();ctx.globalAlpha=flash*0.85;ctx.fillStyle='#fff';
+    ctx.fillRect(t.x-2,y-2,t.w+4,bh+2);ctx.restore();
+  }
+  // moving block
+  if(state==='play'&&cur)drawBlock(cur.x,rowY(blocks.length),cur.w,blocks.length);
+  // falling slices
+  for(let i=0;i<effects.length;i++){
+    const e=effects[i];
+    ctx.save();ctx.globalAlpha=Math.max(0,e.a);
+    ctx.translate(e.x+e.w/2,e.y+e.h/2);ctx.rotate(e.rot);
+    ctx.fillStyle=fillFor(e.i);ctx.fillRect(-e.w/2,-e.h/2,e.w,e.h);
+    ctx.restore();
+  }
+  // popups
+  for(let i=0;i<popups.length;i++){
+    const p=popups[i];
+    ctx.save();ctx.globalAlpha=Math.max(0,p.a);
+    ctx.fillStyle='#1a1a1a';ctx.font='800 '+(p.big?22:17)+'px -apple-system,sans-serif';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(p.t,p.x,p.y);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function drawBlock(x,y,w,i){
+  ctx.fillStyle=fillFor(i);
+  ctx.fillRect(x,y,w,bh-2);
+  ctx.fillStyle=edgeFor(i);
+  ctx.globalAlpha=0.45;ctx.fillRect(x,y,w,3);
+  ctx.globalAlpha=0.3;ctx.fillRect(x,y+bh-5,w,3);
+  ctx.globalAlpha=1;
+}
+
+// ── Input: tap anywhere on the board drops the block ──────────────────────
+function down(ev){
+  ev.preventDefault();
+  try{cv.setPointerCapture(ev.pointerId);}catch(e){}
+  if(state==='play')drop();
+}
+cv.addEventListener('pointerdown',down);
+cv.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+window.addEventListener('keydown',function(e){if(e.keyCode===32){e.preventDefault();if(state==='play')drop();}});
+
+$('again').onclick=function(){$('wino').style.display='none';reset();};
+
+addEventListener('resize',function(){layout();});
+layout();
+reset();
+raf=requestAnimationFrame(tick);
+</script>
+</body>
+</html>

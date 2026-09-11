@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Bounce</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--accent:#3b5bdb;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 14px;font-weight:700;white-space:nowrap;font-size:14px}
+  #hScore{margin-left:auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:10px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:10px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win p{margin:4px 0;color:#444}
+  .win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--accent);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  @supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="hTurn">Bounce · 1</span><span class="pill" id="hBalls">● ×1</span><span class="pill" id="hScore">0</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="btns"><button class="btn" id="restart">Restart</button></div>
+  <div class="help"><b>How to play.</b> Drag anywhere and release to launch your stream of balls — pull back like a slingshot to aim. Balls bounce off walls and chip numbered bricks (the number is the hits left). Grab the small dots to add balls. When bricks reach the bottom line, it's over.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Drag anywhere and release to launch your stream of balls — pull back like a slingshot to aim. Balls bounce off walls and chip numbered bricks (the number is the hits left). Grab the small dots to add balls. When bricks reach the bottom line, it's over.",
+    vi:"<b>Cách chơi.</b> Kéo bất kỳ đâu rồi thả để bắn loạt bóng — kéo ngược như ná cao su để ngắm. Bóng nảy trên tường và bào mòn gạch có số (số là số lần chạm còn lại). Nhặt các chấm nhỏ để thêm bóng. Khi gạch chạm vạch đáy là thua.",
+    ko:"<b>플레이 방법.</b> 아무 곳이나 드래그한 뒤 놓아 공 줄기를 발사하세요 — 새총처럼 뒤로 당겨 조준합니다. 공은 벽에 튕기며 숫자 벽돌을 깎아냅니다(숫자는 남은 타격 수). 작은 점을 모아 공을 늘리세요. 벽돌이 바닥 선에 닿으면 게임 오버입니다.",
+    zh:"<b>玩法。</b> 在任意位置拖动并松开来发射连串小球——像弹弓一样向后拉来瞄准。小球在墙上反弹并削减数字砖块（数字是剩余的击打次数）。收集小圆点可增加小球。砖块到达底线即游戏结束。",
+    ja:"<b>遊び方。</b> 画面をドラッグして離すとボールの連射が発射されます。パチンコのように後ろへ引いて狙いましょう。ボールは壁で跳ね返り、数字ブロックを削ります（数字は残り耐久）。小さな点を集めるとボールが増えます。ブロックが下のラインに達するとゲームオーバー。",
+    ar:"<b>طريقة اللعب.</b> اسحب في أي مكان ثم أفلت لإطلاق سيل الكرات — اسحب للخلف كالمقلاع للتصويب. ترتد الكرات عن الجدران وتُنقص الطوب المرقّم (الرقم هو الضربات المتبقية). التقط النقاط الصغيرة لزيادة الكرات. عندما يصل الطوب إلى الخط السفلي تنتهي اللعبة."
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="over"><div><h2 id="ovT">Game over</h2><p id="ovScore"></p><p id="ovBest"></p><button id="again">Play again</button></div></div>
+<script>
+const KEY="bounce.best";
+// Locale — same source order as the help card above.
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Bounce is endless/score-based: POSTs a fixed `level: 1` with the score on
+// game over. Reads the shared player token (set by the hub, same origin).
+// No token → silently skips. Mirrors games/zip/index.html; keep in sync.
+const GBLB=(function(){
+  var GAME='bounce', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+
+// Small localized UI strings (overlay).
+const UI={
+  en:{over:"Game over",score:"Bricks broken: ",best:"Best: ",nb:"New best! 🎉",again:"Play again"},
+  vi:{over:"Kết thúc",score:"Gạch đã phá: ",best:"Kỷ lục: ",nb:"Kỷ lục mới! 🎉",again:"Chơi lại"},
+  ko:{over:"게임 오버",score:"부순 벽돌: ",best:"최고 기록: ",nb:"신기록! 🎉",again:"다시 하기"},
+  zh:{over:"游戏结束",score:"打碎砖块：",best:"最佳：",nb:"新纪录！🎉",again:"再玩一次"},
+  ja:{over:"ゲームオーバー",score:"壊したブロック: ",best:"ベスト: ",nb:"新記録！🎉",again:"もう一度"},
+  ar:{over:"انتهت اللعبة",score:"الطوب المكسور: ",best:"الأفضل: ",nb:"رقم قياسي جديد! 🎉",again:"العب مجددًا"}
+};
+const MSG=UI[LANG]||UI.en;
+if(LANG==='ar'){var ovd=document.getElementById('over');if(ovd)ovd.dir='rtl';}
+
+// ── Pure logic (inlined copy of logic.mjs — keep in sync) ─────────────────
+const COLS=7, ROWS=10;
+function genRow(turn, rand){
+  const cells=new Array(COLS).fill(0);
+  const density=Math.min(0.62, 0.34+turn*0.012);
+  const hp=Math.max(1, Math.floor(turn));
+  let bricks=0;
+  for(let c=0;c<COLS;c++){ if(rand()<density){ cells[c]=(turn>=6&&rand()<0.12)?hp*2:hp; bricks++; } }
+  if(bricks===0){ cells[Math.floor(rand()*COLS)]=hp; bricks=1; }
+  while(bricks>COLS-2){ const c=Math.floor(rand()*COLS); if(cells[c]>0){ cells[c]=0; bricks--; } }
+  const empties=[]; for(let c=0;c<COLS;c++) if(cells[c]===0) empties.push(c);
+  cells[empties[Math.floor(rand()*empties.length)]]=-1;
+  return cells;
+}
+function hitRect(cx,cy,r,bx,by,bw,bh){
+  const px=Math.max(bx,Math.min(cx,bx+bw)), py=Math.max(by,Math.min(cy,by+bh));
+  const dx=cx-px, dy=cy-py, d2=dx*dx+dy*dy;
+  if(d2>r*r) return null;
+  if(d2>1e-9){ const d=Math.sqrt(d2); HITN.nx=dx/d; HITN.ny=dy/d; HITN.depth=r-d; return HITN; }
+  const l=cx-bx, rr=bx+bw-cx, t=cy-by, b=by+bh-cy, m=Math.min(l,rr,t,b);
+  if(m===l){HITN.nx=-1;HITN.ny=0;HITN.depth=r+l;}
+  else if(m===rr){HITN.nx=1;HITN.ny=0;HITN.depth=r+rr;}
+  else if(m===t){HITN.nx=0;HITN.ny=-1;HITN.depth=r+t;}
+  else {HITN.nx=0;HITN.ny=1;HITN.depth=r+b;}
+  return HITN;
+}
+const HITN={nx:0,ny:0,depth:0}; // reused contact — no per-frame allocations
+function reflect(v,n){ const d=v.vx*n.nx+v.vy*n.ny; if(d>=0) return; v.vx-=2*d*n.nx; v.vy-=2*d*n.ny; }
+function antiStuck(v,speed){
+  const min=speed*0.04;
+  if(Math.abs(v.vy)<min) v.vy=v.vy<0?-min*1.5:min*1.5;
+  const m=Math.hypot(v.vx,v.vy);
+  if(m>1e-9){ const s=speed/m; v.vx*=s; v.vy*=s; }
+}
+
+// ── State ─────────────────────────────────────────────────────────────────
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=function(id){return document.getElementById(id);};
+let W=0,H=0,CS=0,R=0,SPEED=0;
+let FONT_BRICK='',FONT_SMALL='',FONT_FLT='';
+let bricks=[], pickups=[], turn=1, score=0;
+let best=+(localStorage.getItem(KEY)||0);
+let ballCount=1, state='aim';           // aim | fire | over
+let launchX=0, nextX=0, firstLand=false;
+let aiming=false, ax0=0, ay0=0, adx=0, ady=-1, aimOk=false;
+let toFire=0, fired=0, fireT=0, flying=0;
+let nudge=0, acc=0, lastT=0, tNow=0;
+// Ball pool — fixed, zero allocation during play.
+const MAXB=80;
+const balls=[];
+for(let i=0;i<MAXB;i++) balls.push({x:0,y:0,vx:0,vy:0,st:0,tr:new Float64Array(12),ti:0,tn:0}); // st: 0 idle, 1 flying, 2 sliding home
+// Floating "+1" texts pool.
+const FLT=[]; for(let i=0;i<8;i++) FLT.push({x:0,y:0,t:0,on:false});
+
+function layout(){
+  const wrap=document.getElementById('wrap');
+  const availW=Math.min(wrap.clientWidth-52, 520);
+  const availH=Math.max(320, window.innerHeight-235);
+  CS=Math.floor(Math.min(availW/COLS, availH/ROWS));
+  const oldCS=W?W/COLS:CS;
+  W=CS*COLS; H=CS*ROWS; R=Math.max(5,CS*0.13); SPEED=CS*17;
+  cv.width=W*devicePixelRatio; cv.height=H*devicePixelRatio;
+  cv.style.width=W+'px'; cv.style.height=H+'px';
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  FONT_BRICK='bold '+Math.round(CS*0.34)+'px -apple-system,sans-serif';
+  FONT_SMALL='bold '+Math.round(CS*0.24)+'px -apple-system,sans-serif';
+  FONT_FLT='bold '+Math.round(CS*0.3)+'px -apple-system,sans-serif';
+  // rescale in-flight positions on rotate/resize
+  const k=CS/oldCS;
+  if(k!==1&&isFinite(k)){ launchX*=k; nextX*=k;
+    for(let i=0;i<MAXB;i++){ const b=balls[i]; b.x*=k; b.y*=k; b.vx*=k; b.vy*=k; b.tn=0; } }
+}
+
+function brickColor(hp){ return 'hsl('+((165+hp*24)%360)+',62%,52%)'; }
+function spawnRow(){
+  const cells=genRow(turn, Math.random);
+  for(let c=0;c<COLS;c++){
+    if(cells[c]>0) bricks.push({c:c,r:0,hp:cells[c],flash:0,txt:String(cells[c]),col:brickColor(cells[c])});
+    else if(cells[c]===-1) pickups.push({c:c,r:0,dead:false});
+  }
+}
+function reset(){
+  bricks.length=0; pickups.length=0; turn=1; score=0; ballCount=1;
+  launchX=W/2; nextX=W/2; state='aim'; nudge=0; flying=0;
+  for(let i=0;i<MAXB;i++) balls[i].st=0;
+  for(let i=0;i<FLT.length;i++) FLT[i].on=false;
+  spawnRow(); hud(); GBLB.start();
+}
+function hud(){
+  $('hTurn').textContent='Bounce · '+turn;
+  $('hBalls').textContent='● ×'+ballCount;
+  $('hScore').textContent=score+(best?' · ★'+Math.max(best,score):'');
+}
+
+// ── Input: pull-back slingshot aiming ─────────────────────────────────────
+function pos(ev){ const rc=cv.getBoundingClientRect(); AIMP.x=(ev.clientX-rc.left)*(W/rc.width); AIMP.y=(ev.clientY-rc.top)*(H/rc.height); return AIMP; }
+const AIMP={x:0,y:0};
+function down(ev){ ev.preventDefault();
+  try{cv.setPointerCapture(ev.pointerId);}catch(e){}
+  if(state!=='aim') return;
+  const p=pos(ev); aiming=true; aimOk=false; ax0=p.x; ay0=p.y;
+}
+function move(ev){ if(!aiming) return; ev.preventDefault();
+  const p=pos(ev);
+  const dx=ax0-p.x, dy=ay0-p.y;              // pull back → aim the opposite way
+  const len=Math.hypot(dx,dy);
+  if(len<18){ aimOk=false; return; }
+  adx=dx/len; ady=dy/len;
+  if(ady>-0.08){ // clamp: must aim upward at least a little
+    const sg=adx<0?-1:1; adx=sg*Math.sqrt(1-0.08*0.08); ady=-0.08;
+    aimOk=len>=18;
+    return;
+  }
+  aimOk=true;
+}
+function up(ev){
+  try{cv.releasePointerCapture(ev.pointerId);}catch(e){}
+  if(!aiming) return; aiming=false;
+  if(state==='aim'&&aimOk){ state='fire'; toFire=Math.min(ballCount,MAXB); fired=0; fireT=0; firstLand=false; flying=0; }
+  aimOk=false;
+}
+cv.addEventListener('pointerdown',down); cv.addEventListener('pointermove',move);
+cv.addEventListener('pointerup',up); cv.addEventListener('pointercancel',up); window.addEventListener('pointerup',up);
+// iOS in-app webviews ignore touch-action:none for scroll suppression — a
+// non-passive touchmove preventDefault is the only reliable way to keep the
+// board drag from scrolling the page.
+cv.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+
+// ── Simulation (fixed timestep) ───────────────────────────────────────────
+const STEP=1/240;
+function phys(dt){
+  if(state!=='fire') return;
+  // stagger-launch the stream
+  fireT-=dt;
+  while(fired<toFire&&fireT<=0){
+    const b=balls[fired];
+    b.x=launchX; b.y=H-R-1; b.vx=adx*SPEED; b.vy=ady*SPEED; b.st=1; b.tn=0; b.ti=0;
+    fired++; flying++; fireT+=0.055;
+  }
+  let broke=0;
+  for(let i=0;i<toFire;i++){
+    const b=balls[i];
+    if(b.st===2){ // landed — speed-collect: slide home to the new launch point
+      b.x+=(nextX-b.x)*Math.min(1,16*dt);
+      if(Math.abs(nextX-b.x)<1.5){ b.st=0; flying--; }
+      continue;
+    }
+    if(b.st!==1) continue;
+    b.x+=b.vx*dt; b.y+=b.vy*dt;
+    // walls + ceiling
+    if(b.x<R){ b.x=R; if(b.vx<0)b.vx=-b.vx; antiStuck(b,SPEED); }
+    else if(b.x>W-R){ b.x=W-R; if(b.vx>0)b.vx=-b.vx; antiStuck(b,SPEED); }
+    if(b.y<R){ b.y=R; if(b.vy<0)b.vy=-b.vy; }
+    // floor → land
+    if(b.y>H-R&&b.vy>0){
+      b.y=H-R;
+      if(!firstLand){ firstLand=true; nextX=Math.max(R,Math.min(W-R,b.x)); }
+      b.st=2;
+      continue;
+    }
+    // bricks (few dozen — brute force is cheap and allocation-free)
+    for(let j=0;j<bricks.length;j++){
+      const k=bricks[j];
+      const n=hitRect(b.x,b.y,R,k.c*CS+1,k.r*CS+1,CS-2,CS-2);
+      if(!n) continue;
+      b.x+=n.nx*n.depth; b.y+=n.ny*n.depth;
+      reflect(b,n); antiStuck(b,SPEED);
+      k.hp--; k.flash=1;
+      if(k.hp<=0){ bricks.splice(j,1); score++; broke++; }
+      else { k.txt=String(k.hp); k.col=brickColor(k.hp); }
+      break; // one brick per step
+    }
+    // ball pickups
+    for(let j=0;j<pickups.length;j++){
+      const p=pickups[j];
+      if(p.dead) continue;
+      const dx=b.x-(p.c*CS+CS/2), dy=b.y-(p.r*CS+CS/2);
+      if(dx*dx+dy*dy<(R+CS*0.18)*(R+CS*0.18)){ p.dead=true; collect(p.c*CS+CS/2,p.r*CS+CS/2); }
+    }
+  }
+  if(broke>=2) nudge=Math.min(7,nudge+2.5+broke);   // screen nudge on multi-break
+  if(broke>0) hud();
+  if(fired===toFire&&flying===0) endTurn();
+}
+function collect(x,y){
+  ballCount++;
+  for(let i=0;i<FLT.length;i++){ const f=FLT[i]; if(!f.on){ f.on=true; f.x=x; f.y=y; f.t=0; break; } }
+  hud();
+}
+function endTurn(){
+  // sweep dead pickups (allocation-free swap-pop)
+  for(let i=pickups.length-1;i>=0;i--) if(pickups[i].dead) pickups.splice(i,1);
+  // descend
+  for(let i=0;i<bricks.length;i++) bricks[i].r++;
+  for(let i=pickups.length-1;i>=0;i--){
+    const p=pickups[i]; p.r++;
+    if(p.r>=ROWS-1){ collect(p.c*CS+CS/2,p.r*CS+CS/2); pickups.splice(i,1); } // auto-collect at the line
+  }
+  for(let i=0;i<bricks.length;i++) if(bricks[i].r>=ROWS-1) { gameOver(); return; }
+  turn++; launchX=nextX; spawnRow(); state='aim'; hud();
+}
+function gameOver(){
+  state='over';
+  const nb=score>best;
+  if(nb){ best=score; try{localStorage.setItem(KEY,String(best));}catch(e){} }
+  GBLB.report(score);
+  $('ovT').textContent=MSG.over;
+  $('ovScore').textContent=MSG.score+score;
+  $('ovBest').textContent=nb?MSG.nb:(MSG.best+best);
+  $('again').textContent=MSG.again;
+  $('over').style.display='grid';
+}
+$('again').onclick=function(){ $('over').style.display='none'; reset(); };
+$('restart').onclick=function(){ $('over').style.display='none'; reset(); };
+
+// ── Rendering ─────────────────────────────────────────────────────────────
+function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.save();
+  if(nudge>0.3){ ctx.translate((Math.random()-0.5)*nudge,(Math.random()-0.5)*nudge); nudge*=0.86; }
+  // danger line
+  const dy=(ROWS-1)*CS;
+  const close=bricksNearDanger();
+  ctx.strokeStyle=close?'rgba(224,49,49,'+(0.45+0.4*Math.sin(tNow*6))+')':'#d8d5ce';
+  ctx.lineWidth=2; ctx.setLineDash(DASH);
+  ctx.beginPath(); ctx.moveTo(0,dy); ctx.lineTo(W,dy); ctx.stroke(); ctx.setLineDash(NODASH);
+  // bricks
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font=FONT_BRICK;
+  for(let i=0;i<bricks.length;i++){
+    const k=bricks[i], x=k.c*CS+2, y=k.r*CS+2, s=CS-4;
+    ctx.fillStyle=k.col; rr(x,y,s,s,Math.max(4,CS*0.12)); ctx.fill();
+    if(k.flash>0){ ctx.fillStyle='rgba(255,255,255,'+(k.flash*0.85)+')'; rr(x,y,s,s,Math.max(4,CS*0.12)); ctx.fill(); k.flash-=0.08; }
+    ctx.fillStyle='#fff'; ctx.fillText(k.txt,x+s/2,y+s/2+1);
+  }
+  // pickups (bobbing dot + ring)
+  for(let i=0;i<pickups.length;i++){
+    const p=pickups[i];
+    if(p.dead) continue;
+    const x=p.c*CS+CS/2, y=p.r*CS+CS/2+Math.sin(tNow*4+p.c)*CS*0.05;
+    ctx.strokeStyle='#3b5bdb'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(x,y,CS*0.2,0,7); ctx.stroke();
+    ctx.fillStyle='#3b5bdb'; ctx.beginPath(); ctx.arc(x,y,R*0.9,0,7); ctx.fill();
+  }
+  // balls + trails
+  for(let i=0;i<MAXB;i++){
+    const b=balls[i];
+    if(b.st===0) continue;
+    // record into ring buffer (draw-rate, allocation-free)
+    b.tr[b.ti*2]=b.x; b.tr[b.ti*2+1]=b.y; b.ti=(b.ti+1)%6; if(b.tn<6)b.tn++;
+    for(let t=0;t<b.tn;t++){
+      const idx=((b.ti-1-t)+12)%6;
+      ctx.fillStyle='rgba(59,91,219,'+(0.28*(1-t/6))+')';
+      ctx.beginPath(); ctx.arc(b.tr[idx*2],b.tr[idx*2+1],R*(1-t*0.12),0,7); ctx.fill();
+    }
+    ctx.fillStyle='#1a1a1a'; ctx.beginPath(); ctx.arc(b.x,b.y,R,0,7); ctx.fill();
+  }
+  // launch marker + aim preview
+  if(state==='aim'){
+    ctx.fillStyle='#1a1a1a'; ctx.beginPath(); ctx.arc(launchX,H-R-1,R,0,7); ctx.fill();
+    if(aiming&&aimOk) preview();
+  } else if(state==='fire'&&fired<toFire){
+    ctx.fillStyle='#666'; ctx.font=FONT_SMALL;
+    ctx.fillText('×'+(toFire-fired),launchX,H-CS*0.55);
+  }
+  // floating +1
+  for(let i=0;i<FLT.length;i++){
+    const f=FLT[i];
+    if(!f.on) continue;
+    f.t+=0.02;
+    if(f.t>=1){ f.on=false; continue; }
+    ctx.fillStyle='rgba(59,91,219,'+(1-f.t)+')';
+    ctx.font=FONT_FLT;
+    ctx.fillText('+1',f.x,f.y-f.t*CS*0.9);
+  }
+  ctx.restore();
+}
+const DASH=[6,7], NODASH=[];
+function bricksNearDanger(){ for(let i=0;i<bricks.length;i++) if(bricks[i].r>=ROWS-3) return true; return false; }
+// Dotted trajectory with one wall bounce.
+function preview(){
+  let px=launchX, py=H-R-1, dx=adx, dy=ady, bounced=false, n=0;
+  ctx.fillStyle='rgba(26,26,26,0.55)';
+  for(let i=0;i<260;i++){
+    px+=dx*5; py+=dy*5;
+    if(px<R||px>W-R){ if(bounced) break; bounced=true; dx=-dx; px=px<R?R:W-R; }
+    if(py<R) break;
+    const c=Math.floor(px/CS), r=Math.floor(py/CS);
+    if(brickAt(c,r)) break;
+    if((i&3)===0){ ctx.beginPath(); ctx.arc(px,py,3,0,7); ctx.fill(); n++; if(n>44) break; }
+  }
+}
+function brickAt(c,r){ for(let i=0;i<bricks.length;i++) if(bricks[i].c===c&&bricks[i].r===r) return true; return false; }
+
+// ── Main loop ─────────────────────────────────────────────────────────────
+function tick(ts){
+  tNow=ts/1000;
+  let dt=(ts-lastT)/1000; lastT=ts;
+  if(dt>0.05) dt=0.05;
+  acc+=dt;
+  while(acc>=STEP){ phys(STEP); acc-=STEP; }
+  draw();
+  requestAnimationFrame(tick);
+}
+addEventListener('resize',function(){ layout(); });
+layout(); reset();
+requestAnimationFrame(function(ts){ lastT=ts; requestAnimationFrame(tick); });
+</script>
+</body>
+</html>

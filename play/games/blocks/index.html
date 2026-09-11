@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Block Fit</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--grid:#edebe4;--accent:#3b5bdb;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  #score{margin:0 auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}
+  .win p{margin:4px 0;color:#444}
+  .win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--accent);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="title">Block Fit</span><span class="pill" id="score">0</span><span class="pill" id="best">★ 0</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="btns"><button class="btn" id="restart">New game</button></div>
+  <div class="help"><b>How to play.</b> Drag the pieces onto the 8×8 board. Fill a whole row or column to clear it — clear several at once for bonus points. When no piece fits, the game is over.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Drag the pieces onto the 8×8 board. Fill a whole row or column to clear it — clear several at once for bonus points. When no piece fits, the game is over.",
+    vi:"<b>Cách chơi.</b> Kéo các mảnh ghép vào bàn cờ 8×8. Lấp đầy cả hàng hoặc cột để xoá nó — xoá nhiều đường cùng lúc để nhận điểm thưởng. Khi không còn mảnh nào vừa, trò chơi kết thúc.",
+    ko:"<b>플레이 방법.</b> 조각을 8×8 보드로 드래그하세요. 행이나 열을 가득 채우면 지워집니다 — 한 번에 여러 줄을 지우면 보너스 점수를 받습니다. 놓을 수 있는 조각이 없으면 게임이 끝납니다.",
+    zh:"<b>玩法。</b> 将方块拖到 8×8 棋盘上。填满整行或整列即可消除 — 一次消除多条可获得奖励分。当没有方块能放下时，游戏结束。",
+    ja:"<b>遊び方。</b> ピースを8×8の盤面にドラッグします。行や列をすべて埋めると消えます — 一度に複数消すとボーナス点。置けるピースがなくなるとゲーム終了です。",
+    ar:"<b>طريقة اللعب.</b> اسحب القطع إلى لوحة 8×8. املأ صفًا أو عمودًا كاملًا لمسحه — امسح عدة خطوط دفعة واحدة لنقاط إضافية. عندما لا تتسع أي قطعة، تنتهي اللعبة."
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2 id="overTitle">Game over</h2><p id="overScore"></p><p id="overBest"></p><button id="again">Play again</button></div></div>
+<script>
+const KEY="blocks.best";
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Block Fit is endless/score-based, so it POSTs a fixed `level: 1` with the
+// score — the server ranks score games by score first, then time. Reads the
+// shared player token (set by the hub, same origin). No token → silently skips.
+// Mirrors the GBLB block in games/zip/index.html; keep in sync.
+const GBLB=(function(){
+  var GAME='blocks', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+
+// ── Pure logic (kept in sync with games/blocks/logic.mjs — source of truth) ──
+const SIZE=8;
+const SHAPES=[
+  {cells:[[0,0]],w:1,h:1,weight:1},
+  {cells:[[0,0],[0,1]],w:2,h:1,weight:3},
+  {cells:[[0,0],[1,0]],w:1,h:2,weight:3},
+  {cells:[[0,0],[0,1],[0,2]],w:3,h:1,weight:3},
+  {cells:[[0,0],[1,0],[2,0]],w:1,h:3,weight:3},
+  {cells:[[0,0],[0,1],[1,0]],w:2,h:2,weight:2},
+  {cells:[[0,0],[0,1],[1,1]],w:2,h:2,weight:2},
+  {cells:[[0,0],[1,0],[1,1]],w:2,h:2,weight:2},
+  {cells:[[0,1],[1,0],[1,1]],w:2,h:2,weight:2},
+  {cells:[[0,0],[0,1],[1,0],[1,1]],w:2,h:2,weight:3},
+  {cells:[[0,0],[0,1],[0,2],[0,3]],w:4,h:1,weight:2},
+  {cells:[[0,0],[1,0],[2,0],[3,0]],w:1,h:4,weight:2},
+  {cells:[[0,0],[0,1],[0,2],[0,3],[0,4]],w:5,h:1,weight:1},
+  {cells:[[0,0],[1,0],[2,0],[3,0],[4,0]],w:1,h:5,weight:1},
+  {cells:[[0,0],[1,0],[2,0],[2,1]],w:2,h:3,weight:2},
+  {cells:[[0,1],[1,1],[2,1],[2,0]],w:2,h:3,weight:2},
+  {cells:[[0,0],[0,1],[0,2],[1,1]],w:3,h:2,weight:2},
+  {cells:[[0,1],[1,0],[1,1],[1,2]],w:3,h:2,weight:2},
+  {cells:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]],w:3,h:2,weight:2},
+  {cells:[[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]],w:2,h:3,weight:2},
+  {cells:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]],w:3,h:3,weight:1}
+];
+function emptyGrid(){return new Array(SIZE*SIZE).fill(0);}
+function canPlace(grid,shape,r,c){
+  for(let i=0;i<shape.cells.length;i++){
+    const rr=r+shape.cells[i][0],cc=c+shape.cells[i][1];
+    if(rr<0||cc<0||rr>=SIZE||cc>=SIZE)return false;
+    if(grid[rr*SIZE+cc])return false;
+  }
+  return true;
+}
+function anyFit(grid,shape){
+  for(let r=0;r<=SIZE-shape.h;r++)for(let c=0;c<=SIZE-shape.w;c++)if(canPlace(grid,shape,r,c))return true;
+  return false;
+}
+function place(grid,shape,r,c,color){
+  for(let i=0;i<shape.cells.length;i++)grid[(r+shape.cells[i][0])*SIZE+(c+shape.cells[i][1])]=color;
+}
+function findClears(grid){
+  const rows=[],cols=[];
+  for(let r=0;r<SIZE;r++){let full=true;for(let c=0;c<SIZE;c++)if(!grid[r*SIZE+c]){full=false;break;}if(full)rows.push(r);}
+  for(let c=0;c<SIZE;c++){let full=true;for(let r=0;r<SIZE;r++)if(!grid[r*SIZE+c]){full=false;break;}if(full)cols.push(c);}
+  return {rows:rows,cols:cols};
+}
+function clearLines(grid,rows,cols){
+  let n=0;
+  for(let i=0;i<rows.length;i++)for(let c=0;c<SIZE;c++){const k=rows[i]*SIZE+c;if(grid[k]){grid[k]=0;n++;}}
+  for(let i=0;i<cols.length;i++)for(let r=0;r<SIZE;r++){const k=r*SIZE+cols[i];if(grid[k]){grid[k]=0;n++;}}
+  return n;
+}
+function isGameOver(grid,shapes){
+  for(let i=0;i<shapes.length;i++)if(anyFit(grid,shapes[i]))return false;
+  return true;
+}
+function scoreFor(cells,lines,combo){
+  let s=cells;
+  if(lines>0){s+=lines*80;if(lines>1)s+=(lines-1)*40;if(combo>1)s+=(combo-1)*30;}
+  return s;
+}
+function mulberry32(seed){
+  let a=seed>>>0;
+  return function(){a|=0;a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};
+}
+function pickTray(rng){
+  let total=0;
+  for(let i=0;i<SHAPES.length;i++)total+=SHAPES[i].weight;
+  const out=[];
+  for(let k=0;k<3;k++){
+    let x=rng()*total,i=0;
+    while(i<SHAPES.length-1&&x>=SHAPES[i].weight){x-=SHAPES[i].weight;i++;}
+    out.push(i);
+  }
+  return out;
+}
+
+// ── Game strings (overlay) ───────────────────────────────────────────────
+const OV={
+  en:{over:"Game over",score:"Score: ",best:"Best: ",again:"Play again",nbest:"New best! 🎉",nw:"New game"},
+  vi:{over:"Hết lượt",score:"Điểm: ",best:"Kỷ lục: ",again:"Chơi lại",nbest:"Kỷ lục mới! 🎉",nw:"Ván mới"},
+  ko:{over:"게임 오버",score:"점수: ",best:"최고: ",again:"다시 하기",nbest:"신기록! 🎉",nw:"새 게임"},
+  zh:{over:"游戏结束",score:"得分：",best:"最佳：",again:"再玩一次",nbest:"新纪录！🎉",nw:"新游戏"},
+  ja:{over:"ゲームオーバー",score:"スコア: ",best:"ベスト: ",again:"もう一度",nbest:"新記録！🎉",nw:"新しいゲーム"},
+  ar:{over:"انتهت اللعبة",score:"النقاط: ",best:"الأفضل: ",again:"العب مجددًا",nbest:"رقم قياسي جديد! 🎉",nw:"لعبة جديدة"}
+};
+const OT=OV[LANG]||OV.en;
+if(LANG==="ar"){var wb=document.querySelector("#wino div");if(wb)wb.dir="rtl";}
+document.getElementById('restart').textContent=OT.nw;
+
+// ── Rendering / state ────────────────────────────────────────────────────
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+// muted pastel accents that sit on the hub's paper palette
+const PAL=['', '#e08a6d','#e0b152','#8fbb7a','#63b3a4','#6f94d6','#a087cf','#d788a5','#7f9bb0'];
+const rng=mulberry32((Date.now()^(Math.random()*0xffffffff))>>>0);
+
+let grid=emptyGrid();
+let tray=[];            // [{shape:idx,color:1..8,used:false}]
+let score=0, best=+(localStorage.getItem(KEY)||0), combo=0, over=false;
+let cell=0, ox=0, oy=0, boardPx=0, trayY=0, trayCellH=0, W=0, H=0;
+let drag=null;          // {slot,x,y} finger pos in canvas coords
+let raf=0, lastNow=0;
+const flashes=[];       // {r,c,color,t0} clear animation
+const pops=[];          // {r,c,t0} placement pop
+const popups=[];        // {text,x,y,t0} combo/score floats
+let shakeSlot=-1, shakeT0=0;
+
+function newTray(){
+  const idx=pickTray(rng);
+  tray=[];
+  for(let i=0;i<3;i++)tray.push({shape:idx[i],color:1+Math.floor(rng()*(PAL.length-1)),used:false});
+}
+function newGame(){
+  grid=emptyGrid(); score=0; combo=0; over=false; drag=null;
+  flashes.length=0; pops.length=0; popups.length=0;
+  newTray(); updHud(); layout(); kick(); GBLB.start();
+}
+function updHud(){ $('score').textContent=String(score); $('best').textContent='★ '+best; }
+
+function layout(){
+  const wrap=document.getElementById('wrap');
+  W=Math.min(wrap.clientWidth-60, 460);
+  cell=Math.floor(W/SIZE); ox=Math.floor((W-cell*SIZE)/2); oy=ox;
+  boardPx=cell*SIZE+2*oy;
+  trayCellH=Math.round(cell*0.52);
+  trayY=boardPx+Math.round(cell*0.25);
+  H=trayY+trayCellH*5+Math.round(cell*0.4);
+  const dpr=Math.min(window.devicePixelRatio||1,3);
+  cv.width=W*dpr; cv.height=H*dpr; cv.style.width=W+'px'; cv.style.height=H+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+
+function rr(x,y,w,h,rad){ // rounded-rect path
+  ctx.beginPath();
+  ctx.moveTo(x+rad,y);
+  ctx.arcTo(x+w,y,x+w,y+h,rad);
+  ctx.arcTo(x+w,y+h,x,y+h,rad);
+  ctx.arcTo(x,y+h,x,y,rad);
+  ctx.arcTo(x,y,x+w,y,rad);
+  ctx.closePath();
+}
+function drawCell(x,y,s,color,alpha){
+  ctx.globalAlpha=alpha;
+  ctx.fillStyle=color;
+  rr(x+1.5,y+1.5,s-3,s-3,s*0.18); ctx.fill();
+  ctx.globalAlpha=alpha*0.22;
+  ctx.fillStyle='#fff';
+  rr(x+1.5,y+1.5,s-3,(s-3)*0.45,s*0.18); ctx.fill();
+  ctx.globalAlpha=1;
+}
+// tray slot geometry: 3 slots across the tray strip
+function slotRect(i){
+  const sw=W/3;
+  return {x:i*sw, y:trayY, w:sw, h:trayCellH*5};
+}
+function trayScaleFor(sh){ // fit piece in slot at ~half cell size
+  const s=slotRect(0);
+  const m=Math.min((s.w-14)/sh.w,(s.h-14)/sh.h);
+  return Math.min(trayCellH,m);
+}
+function drawTrayPiece(i,now){
+  const t=tray[i]; if(!t||t.used)return;
+  if(drag&&drag.slot===i)return; // being dragged
+  const sh=SHAPES[t.shape], s=slotRect(i), ts=trayScaleFor(sh);
+  let dx=0;
+  if(shakeSlot===i){
+    const e=(now-shakeT0)/300;
+    if(e<1)dx=Math.sin(e*Math.PI*6)*6*(1-e); else shakeSlot=-1;
+  }
+  const px=s.x+(s.w-sh.w*ts)/2+dx, py=s.y+(s.h-sh.h*ts)/2;
+  const fits=anyFit(grid,sh);
+  for(let k=0;k<sh.cells.length;k++)
+    drawCell(px+sh.cells[k][1]*ts,py+sh.cells[k][0]*ts,ts,PAL[t.color],fits?1:0.35);
+}
+function dragTopLeft(){ // dragged piece's top-left in canvas px (lifted above finger)
+  const t=tray[drag.slot], sh=SHAPES[t.shape];
+  return {x:drag.x-sh.w*cell/2, y:drag.y-sh.h*cell-cell*0.8};
+}
+function dragBoardCell(){ // snapped board cell for the drag, or null
+  const t=tray[drag.slot], sh=SHAPES[t.shape], p=dragTopLeft();
+  const c=Math.round((p.x-ox)/cell), r=Math.round((p.y-oy)/cell);
+  if(r<-1||c<-1||r>SIZE-sh.h+1||c>SIZE-sh.w+1)return null;
+  return [Math.max(0,Math.min(SIZE-sh.h,r)),Math.max(0,Math.min(SIZE-sh.w,c))];
+}
+
+function draw(now){
+  ctx.clearRect(0,0,W,H);
+  // board cells
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+    const v=grid[r*SIZE+c], x=ox+c*cell, y=oy+r*cell;
+    if(v)drawCell(x,y,cell,PAL[v],1);
+    else{ctx.fillStyle='#edebe4';rr(x+1.5,y+1.5,cell-3,cell-3,cell*0.18);ctx.fill();}
+  }
+  // ghost preview under the dragged piece
+  if(drag&&!over){
+    const t=tray[drag.slot], sh=SHAPES[t.shape], rc=dragBoardCell();
+    if(rc){
+      const ok=canPlace(grid,sh,rc[0],rc[1]);
+      for(let k=0;k<sh.cells.length;k++){
+        const r2=rc[0]+sh.cells[k][0], c2=rc[1]+sh.cells[k][1];
+        if(r2<0||c2<0||r2>=SIZE||c2>=SIZE)continue;
+        ctx.globalAlpha=ok?0.45:0.3;
+        ctx.fillStyle=ok?PAL[t.color]:'#e03131';
+        rr(ox+c2*cell+1.5,oy+r2*cell+1.5,cell-3,cell-3,cell*0.18);ctx.fill();
+        ctx.globalAlpha=1;
+      }
+    }
+  }
+  // clear flashes
+  for(let i=flashes.length-1;i>=0;i--){
+    const f=flashes[i], e=(now-f.t0)/360;
+    if(e>=1){flashes.splice(i,1);continue;}
+    const x=ox+f.c*cell, y=oy+f.r*cell;
+    drawCell(x,y,cell,f.color,1-e);
+    ctx.globalAlpha=(1-e)*0.9;
+    ctx.fillStyle='#fff';
+    const g=cell*0.5*e;
+    rr(x+1.5+g/2,y+1.5+g/2,cell-3-g,cell-3-g,cell*0.18);ctx.fill();
+    ctx.globalAlpha=1;
+  }
+  // placement pops
+  for(let i=pops.length-1;i>=0;i--){
+    const p=pops[i], e=(now-p.t0)/180;
+    if(e>=1){pops.splice(i,1);continue;}
+    const s=1+0.18*Math.sin(e*Math.PI);
+    const x=ox+p.c*cell+cell/2, y=oy+p.r*cell+cell/2;
+    ctx.globalAlpha=0.35*(1-e);
+    ctx.fillStyle='#fff';
+    rr(x-cell*s/2+1.5,y-cell*s/2+1.5,cell*s-3,cell*s-3,cell*0.18);ctx.fill();
+    ctx.globalAlpha=1;
+  }
+  // tray divider
+  ctx.fillStyle='#edebe4';
+  ctx.fillRect(ox,boardPx+2,W-2*ox,2);
+  for(let i=0;i<3;i++)drawTrayPiece(i,now);
+  // dragged piece (with drop shadow), drawn last so it floats above all
+  if(drag){
+    const t=tray[drag.slot], sh=SHAPES[t.shape], p=dragTopLeft();
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,0.28)'; ctx.shadowBlur=14; ctx.shadowOffsetY=8;
+    for(let k=0;k<sh.cells.length;k++)
+      drawCell(p.x+sh.cells[k][1]*cell,p.y+sh.cells[k][0]*cell,cell,PAL[t.color],1);
+    ctx.restore();
+  }
+  // combo/score popups
+  for(let i=popups.length-1;i>=0;i--){
+    const p=popups[i], e=(now-p.t0)/750;
+    if(e>=1){popups.splice(i,1);continue;}
+    ctx.globalAlpha=e<0.15?e/0.15:1-Math.max(0,(e-0.5)/0.5);
+    ctx.fillStyle='#1a1a1a';
+    ctx.font='bold '+Math.round(cell*0.55)+'px -apple-system,sans-serif';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(p.text,p.x,p.y-e*cell*0.9);
+    ctx.globalAlpha=1;
+  }
+}
+function animating(){return drag||flashes.length||pops.length||popups.length||shakeSlot>=0;}
+function tick(now){
+  lastNow=now; draw(now);
+  if(animating())raf=requestAnimationFrame(tick); else raf=0;
+}
+// rAF can be throttled/frozen in occluded or in-app webviews; a low-rate
+// watchdog keeps animations draining (and the drag preview live) regardless.
+// When rAF runs normally the watchdog no-ops.
+let wd=0;
+function watch(){
+  wd=0;
+  if(!animating())return;
+  const now=performance.now();
+  if(now-lastNow>140){ lastNow=now; draw(now); }
+  wd=setTimeout(watch,150);
+}
+function kick(){
+  if(!raf)raf=requestAnimationFrame(tick); else draw(lastNow);
+  if(!wd)wd=setTimeout(watch,150);
+}
+
+// ── Input ────────────────────────────────────────────────────────────────
+function canvasXY(ev){
+  const rect=cv.getBoundingClientRect();
+  return [ev.clientX-rect.left,ev.clientY-rect.top];
+}
+function down(ev){
+  ev.preventDefault();
+  if(over)return;
+  try{cv.setPointerCapture(ev.pointerId);}catch(e){}
+  const p=canvasXY(ev);
+  if(p[1]<trayY-cell*0.2)return;
+  for(let i=0;i<3;i++){
+    const t=tray[i]; if(!t||t.used)continue;
+    const s=slotRect(i);
+    if(p[0]>=s.x&&p[0]<s.x+s.w){drag={slot:i,x:p[0],y:p[1]};kick();return;}
+  }
+}
+function move(ev){
+  if(!drag)return;
+  ev.preventDefault();
+  const p=canvasXY(ev);
+  drag.x=p[0]; drag.y=p[1];
+  kick(); // immediate redraw keeps the preview live even when rAF is throttled
+}
+function up(ev){
+  if(!drag)return;
+  try{cv.releasePointerCapture(ev.pointerId);}catch(e){}
+  const slot=drag.slot, t=tray[slot], sh=SHAPES[t.shape];
+  const rc=dragBoardCell();
+  drag=null;
+  if(rc&&canPlace(grid,sh,rc[0],rc[1])){
+    doPlace(slot,sh,rc[0],rc[1],t.color);
+  }else{
+    shakeSlot=slot; shakeT0=lastNow||performance.now();
+  }
+  kick();
+}
+cv.addEventListener('pointerdown',down);
+cv.addEventListener('pointermove',move);
+cv.addEventListener('pointerup',up);
+cv.addEventListener('pointercancel',up);
+window.addEventListener('pointerup',function(ev){if(drag)up(ev);});
+// iOS in-app webviews ignore touch-action:none for scroll suppression —
+// a non-passive touchmove preventDefault is the only reliable way to keep
+// the board drag from scrolling the page.
+cv.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+
+// ── Placement / scoring / game-over ──────────────────────────────────────
+function doPlace(slot,sh,r,c,color){
+  const now=performance.now();
+  place(grid,sh,r,c,color);
+  for(let k=0;k<sh.cells.length;k++)pops.push({r:r+sh.cells[k][0],c:c+sh.cells[k][1],t0:now});
+  const cl=findClears(grid);
+  const lines=cl.rows.length+cl.cols.length;
+  if(lines>0){
+    combo++;
+    // remember colors for the flash before clearing
+    for(let i=0;i<cl.rows.length;i++)for(let cc2=0;cc2<SIZE;cc2++){
+      const v=grid[cl.rows[i]*SIZE+cc2];
+      if(v)flashes.push({r:cl.rows[i],c:cc2,color:PAL[v],t0:now});
+    }
+    for(let i=0;i<cl.cols.length;i++)for(let rr2=0;rr2<SIZE;rr2++){
+      const v=grid[rr2*SIZE+cl.cols[i]];
+      if(v)flashes.push({r:rr2,c:cl.cols[i],color:PAL[v],t0:now});
+    }
+    clearLines(grid,cl.rows,cl.cols);
+    let msg=(lines>1?'×'+lines+' ':'')+'+'+String(scoreFor(0,lines,combo));
+    if(combo>1)msg='Combo '+combo+'! '+msg;
+    popups.push({text:msg,x:W/2,y:oy+cell*3.5,t0:now});
+  }else{
+    combo=0;
+  }
+  score+=scoreFor(sh.cells.length,lines,combo);
+  if(score>best){best=score;try{localStorage.setItem(KEY,String(best));}catch(e){}}
+  tray[slot].used=true;
+  let left=0;
+  for(let i=0;i<3;i++)if(tray[i]&&!tray[i].used)left++;
+  if(left===0)newTray();
+  updHud();
+  // game over: none of the remaining pieces fits
+  const rem=[];
+  for(let i=0;i<3;i++)if(tray[i]&&!tray[i].used)rem.push(SHAPES[tray[i].shape]);
+  if(isGameOver(grid,rem)){
+    over=true;
+    GBLB.report(score);
+    setTimeout(showOver,550);
+  }
+}
+function showOver(){
+  $('overTitle').textContent=OT.over;
+  $('overScore').textContent=OT.score+score;
+  $('overBest').textContent=(score>=best&&score>0?OT.nbest+' ':'')+OT.best+best;
+  $('again').textContent=OT.again;
+  $('wino').style.display='grid';
+}
+$('again').onclick=function(){$('wino').style.display='none';newGame();};
+$('restart').onclick=function(){
+  if(!over&&score>0)GBLB.report(score); // abandoning a run still records it
+  newGame();
+};
+
+addEventListener('resize',function(){layout();kick();});
+newGame();
+</script>
+</body>
+</html>

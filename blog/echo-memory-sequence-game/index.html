@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-VCLVPVRXMV');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#faf8ef" />
+  <title>Echo Memory Game Online Free — Simon-Style Sequence Test</title>
+  <meta name="description" content="A sequence lights up and grows by one every round. How far can you get? A memory-span game with growing grids. Free, no sign-up, works offline." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://gobrain.fighttech.vn/blog/echo-memory-sequence-game/" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Echo: How Long a Sequence Can You Hold? 🔊" />
+  <meta property="og:description" content="A sequence lights up and grows by one every round. How far can you get? A memory-span game with growing grids. Free, no sign-up, works offline." />
+  <meta property="og:url" content="https://gobrain.fighttech.vn/blog/echo-memory-sequence-game/" />
+  <meta property="og:site_name" content="Go Brain" />
+  <meta property="og:image" content="https://gobrain.fighttech.vn/play/thumbs/echo.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://gobrain.fighttech.vn/play/thumbs/echo.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="../../assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="../../assets/app-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem("gobrain.theme")||"system";var d=p==="dark"||(p!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");}catch(e){}})();</script>
+  <link rel="stylesheet" href="../../css/styles.css" />
+  <link rel="stylesheet" href="../../css/legal.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "Echo: How Long a Sequence Can You Hold?",
+    "description": "A sequence lights up and grows by one every round. How far can you get? A memory-span game with growing grids. Free, no sign-up, works offline.",
+    "author": {
+      "@type": "Organization",
+      "name": "FightTech"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Go Brain"
+    },
+    "datePublished": "2026-08-10",
+    "mainEntityOfPage": "https://gobrain.fighttech.vn/blog/echo-memory-sequence-game/"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What's a good score in a memory sequence game?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Most people stall between 7 and 10 steps. Getting past 12 reliably means you've found a chunking strategy, whether or not you set out to."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I remember longer sequences?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Group them. Remember three tiles as a shape rather than three positions, or as a rhythm rather than a list. Capacity is measured in chunks, and you control how big a chunk is."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <a class="brand" href="../../" aria-label="Go Brain"><img class="logo" src="../../assets/app-icon.png" alt="" width="30" height="30" /><span>Go Brain</span></a>
+      <nav class="nav">
+        <div class="nav-links">
+          <a href="../">Blog</a><a href="../../play/">Play online</a><a href="../../sdk/">SDK</a><a href="../../support/">Support</a>
+        </div>
+        <div class="controls">
+          <div class="select-wrap">
+            <select id="themeSelect" class="theme" aria-label="Theme"><option value="system">◐ System</option><option value="light">☀ Light</option><option value="dark">☾ Dark</option></select>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-main">
+    <div class="container">
+      <div class="legal-wrap">
+        <a class="back-link" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> All articles</a>
+
+        <div class="legal-head">
+          <span class="eyebrow">Brain Training</span>
+          <h1>Echo: How Long a Sequence Can You Hold? 🔊</h1>
+          <p class="updated"><strong>Published:</strong> August 10, 2026 · 4 min read</p>
+          <p class="legal-lead">Echo is Simon, essentially: tiles light up in a sequence, you repeat it, and each round adds one more step. It is also a fair approximation of the digit-span tasks psychologists use to probe working memory, which makes the point where you fail genuinely interesting.</p>
+        </div>
+
+        <nav class="toc" aria-label="Table of contents">
+          <h2>Contents</h2>
+          <ol>
+            <li><a href="#rules">The rules</a></li>
+            <li><a href="#chunk">Chunking: how to get past 7</a></li>
+            <li><a href="#span">Why everyone stalls around the same place</a></li>
+            <li><a href="#ours">About our version</a></li>
+          </ol>
+        </nav>
+
+        <div class="legal-body">
+
+          <h2 id="rules">The rules</h2>
+          <p>Tiles flash in a sequence. Tap them back in the same order. Get it right and the next round adds a step. Get it wrong and the run ends.</p>
+
+          <h2 id="chunk">Chunking: how to get past 7</h2>
+          <p>You will not brute-force your way past about seven steps by trying harder. What works is <strong>chunking</strong> — recoding several items as one.</p>
+          <p>Three approaches, in rough order of how well they hold up:</p>
+          <p><strong>Spatial shapes.</strong> Don't remember "top-left, top-right, bottom-right" — remember a shape. An L, a zigzag, a clockwise sweep. Three items become one, and a nine-step sequence becomes three shapes.</p>
+          <p><strong>Rhythm.</strong> Group the sequence into beats: <em>dum-dum-DUM, dum-DUM</em>. Motor and auditory memory are separate from visual working memory, so this gives you a second channel rather than crowding the first.</p>
+          <p><strong>Naming.</strong> Assign each tile a syllable and hold the sequence as a nonsense word. Effective, but it collapses fastest under pressure.</p>
+          <p>The reason chunking works isn't that your capacity grows — it's that capacity is measured in chunks, and you get to decide how big a chunk is.</p>
+
+          <h2 id="span">Why everyone stalls around the same place</h2>
+          <p>Most people fail somewhere between 7 and 10 steps, and that's not a coincidence — it's roughly where estimates of short-term memory span land. Miller's famous "seven, plus or minus two" from 1956 is the version everybody's heard; later work suggests the number for genuinely unchunkable items is closer to four.</p>
+          <p>Which is another way of saying: if you're getting past ten, you are definitely chunking, whether or not you noticed doing it.</p>
+
+          <h2 id="ours">About our version</h2>
+          <p>The grid grows from 3×3 to 4×4 as you climb, which stops the sequence turning into pure muscle memory. Best runs are kept on your device.</p>
+          <p>It runs in your browser, works offline once loaded, needs no account, and costs nothing.</p>
+
+
+          <h2 id="faq">Questions people actually ask</h2>
+          <p><strong>What's a good score in a memory sequence game?</strong><br />Most people stall between 7 and 10 steps. Getting past 12 reliably means you've found a chunking strategy, whether or not you set out to.</p>
+          <p><strong>How do I remember longer sequences?</strong><br />Group them. Remember three tiles as a shape rather than three positions, or as a rhythm rather than a list. Capacity is measured in chunks, and you control how big a chunk is.</p>
+
+          <h2 id="more">Keep reading</h2>
+          <ul>
+            <li><a href="../reaction-time-test-game/">Reflex: What's Your Reaction Time? ⚡</a> — Wait for green, tap. Typical is around 250ms, good is under 200, and anything under 120 means you guessed — here's why.</li>
+            <li><a href="../brain-training-games/">Brain Training Games: Focus, Memory and Reaction 🧠</a> — A Schulte table, a Stroop test, a memory sequence, a reaction timer and mental arithmetic — five games built around a number you can try to beat tomorrow.</li>
+            <li><a href="../schulte-table-scan-25/">Scan 25: The Schulte Table, and How to Get Faster at It 👁️</a> — Twenty-five numbers, one grid, find them in order. The people who go fast aren't looking harder — they're looking less.</li>
+          </ul>
+
+          <div class="legal-contact" id="play">
+            <h2>Play Echo now</h2>
+            <p>Growing sequences, growing grids, best runs saved locally. Free, no account.</p>
+            <p style="margin-top:16px"><a class="btn btn-primary" href="../../play/?open=echo">▶ Play Echo</a></p>
+          </div>
+
+          <div class="legal-nav-links">
+            <a href="../">← All articles</a>
+            <a href="../../play/">Play online</a>
+            <a href="../../support/">Support</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-bottom" style="margin-top:0;border-top:none">
+        <span>© <span id="year">2026</span> FightTech. All rights reserved.</span>
+        <span><a href="../../privacy/">Privacy</a> · <a href="../../terms/">Terms</a> · <a href="../../support/">Support</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../../js/main.js"></script>
+  <script src="../../js/app-banner.js"></script>
+</body>
+</html>

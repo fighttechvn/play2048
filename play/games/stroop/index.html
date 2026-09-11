@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Color Clash</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--btn:#fff;--bd:#d0d0d0;--good:#009e73;--bad:#d62839;--gold:#f2b705}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  #time{margin:0 auto;font-variant-numeric:tabular-nums;min-width:86px;text-align:center}
+  #time.low{color:var(--bad);border-color:var(--bad);background:#fff5f5}
+  .bar{height:6px;border-radius:3px;background:#e2dfd8;overflow:hidden}
+  #fill{height:100%;width:100%;background:#1a1a1a;border-radius:3px;transform-origin:left center}
+  .stage{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:18px;display:flex;flex-direction:column;align-items:center;gap:10px;min-height:270px;justify-content:center;position:relative;transition:box-shadow .12s ease}
+  .stage.hit{box-shadow:0 0 0 3px var(--good) inset}
+  .stage.miss{box-shadow:0 0 0 3px var(--bad) inset}
+  .stage.gold{border-color:var(--gold);background:#fffaea}
+  #prompt{font-size:14px;color:#777;font-weight:600;text-align:center;min-height:20px}
+  .stage.gold #prompt{color:#8a6d00;font-weight:800}
+  #scoreRow{display:flex;align-items:baseline;gap:10px;font-variant-numeric:tabular-nums}
+  #score{font-size:30px;font-weight:800}
+  #comboPill{font-size:13px;font-weight:800;color:#fff;background:#1a1a1a;border-radius:999px;padding:3px 10px;display:none}
+  #gain{font-size:14px;font-weight:800;color:var(--good);opacity:0;transition:opacity .5s ease}
+  #gain.neg{color:var(--bad)}
+  #word{font-weight:800;font-size:64px;line-height:76px;white-space:nowrap;width:100%;text-align:center;letter-spacing:.02em;text-shadow:0 1px 2px rgba(0,0,0,.12);min-height:76px;overflow:hidden}
+  .answers{display:flex;gap:12px}
+  .ans{flex:1;min-height:76px;border-radius:18px;border:2px solid var(--bd);background:var(--btn);font-weight:800;font-size:21px;cursor:pointer;font-family:inherit}
+  #noBtn{color:var(--bad);border-color:#efb9bf}
+  #yesBtn{color:var(--good);border-color:#a8dcc9}
+  .ans:active{transform:scale(.97)}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win>div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:320px;width:calc(100% - 48px)}
+  .win h2{margin:0 0 6px}
+  .win button{margin-top:16px;padding:13px 30px;border:0;border-radius:999px;background:#1a1a1a;color:#fff;font-weight:700;font-size:16px;cursor:pointer;font-family:inherit}
+  .stats{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .stat{flex:1 1 45%;background:#f6f4ef;border-radius:12px;padding:10px 6px}
+  .stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+  .stat span{font-size:12px;color:#777;font-weight:600}
+  #newBest{color:var(--good);font-weight:800;min-height:18px;margin:6px 0 0;font-size:14px}
+  #startO p{color:#555;font-size:14.5px;line-height:1.5;margin:8px 0 0}
+  /* First-run 2-step tutorial (static cards) */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;place-items:center;background:rgba(0,0,0,.5)}
+  #tut.on{display:grid}
+  #tutCard{background:rgba(255,255,255,.94);border-radius:16px;padding:20px 22px;width:calc(100% - 48px);max-width:320px;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  #tutCard h3{margin:0 0 7px;font-size:18px}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutDemo{display:none;text-align:center;font-size:34px;font-weight:800;margin:12px 0 2px;text-shadow:0 1px 2px rgba(0,0,0,.12)}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;min-height:44px;margin:-4px -8px;font-family:inherit}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit}
+  @supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.answers>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="ttl">Color Clash</span><span class="pill" id="time">60.0s</span><span class="pill" id="bestPill">★ 0</span></div>
+  <div class="bar"><div id="fill"></div></div>
+  <div class="stage" id="stage">
+    <div id="prompt"></div>
+    <div id="word">&nbsp;</div>
+    <div id="scoreRow"><span id="score">0</span><span id="comboPill">×1</span><span id="gain"></span></div>
+  </div>
+  <div class="answers">
+    <button class="ans" id="noBtn">✗</button>
+    <button class="ans" id="yesBtn">✓</button>
+  </div>
+  <div class="help" id="help"></div>
+</div>
+
+<div class="win" id="startO"><div><h2 id="stTitle">Color Clash</h2><p id="stBody"></p><button id="playBtn">Play</button></div></div>
+<div class="win" id="overO"><div><h2 id="ovTitle"></h2>
+  <div class="stats">
+    <div class="stat"><b id="svScore">0</b><span id="slScore"></span></div>
+    <div class="stat"><b id="svAcc">0%</b><span id="slAcc"></span></div>
+    <div class="stat"><b id="svRt">0</b><span id="slRt"></span></div>
+    <div class="stat"><b id="svCombo">0</b><span id="slCombo"></span></div>
+  </div>
+  <p id="newBest"></p>
+  <button id="againBtn"></button>
+</div></div>
+<div id="tut">
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div id="tutDemo"></div>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> A color word appears painted in some ink. Tap <b>✓</b> if the ink color matches the word's meaning, <b>✗</b> if not. 60 seconds: fast answers and streaks score more; a mistake breaks your combo and costs 1 second. Watch for the golden <b>reverse</b> round — answers flip!",
+    vi:"<b>Cách chơi.</b> Một từ chỉ màu hiện ra với màu mực bất kỳ. Chạm <b>✓</b> nếu màu mực khớp với nghĩa của từ, <b>✗</b> nếu không. 60 giây: trả lời nhanh và chuỗi đúng được nhiều điểm hơn; sai sẽ mất chuỗi và −1 giây. Chú ý vòng <b>đảo ngược</b> vàng — đáp án bị lật!",
+    ko:"<b>플레이 방법.</b> 색 이름 단어가 임의의 잉크색으로 나타납니다. 잉크색이 단어의 뜻과 일치하면 <b>✓</b>, 아니면 <b>✗</b>를 누르세요. 60초: 빠른 답과 연속 정답은 더 높은 점수! 틀리면 콤보가 끊기고 1초를 잃습니다. 황금 <b>반전</b> 라운드에서는 정답이 뒤집힙니다!",
+    zh:"<b>玩法。</b> 屏幕上出现一个颜色词，字的颜色可能不同。字色与词义相符按 <b>✓</b>，不符按 <b>✗</b>。60 秒限时：答得快、连对多得分更高；答错清空连击并扣 1 秒。小心金色<b>反转</b>回合——答案要反着来！",
+    ja:"<b>遊び方。</b> 色の単語がさまざまなインク色で表示されます。インク色が単語の意味と一致すれば <b>✓</b>、違えば <b>✗</b>。60秒間：速い解答と連続正解で高得点。ミスするとコンボが切れて1秒減ります。金色の<b>逆転</b>ラウンドでは答えが反転！",
+    ar:"<b>طريقة اللعب.</b> تظهر كلمة لون بحبر قد يكون مختلفًا. اضغط <b>✓</b> إذا طابق لون الحبر معنى الكلمة، و<b>✗</b> إذا لم يطابق. 60 ثانية: الإجابات السريعة والسلاسل تمنح نقاطًا أكثر؛ الخطأ يقطع السلسلة ويخصم ثانية. انتبه لجولة <b>الانعكاس</b> الذهبية — الإجابات تنقلب!"
+  };
+  var L=pick(),el=document.getElementById("help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<script>
+const KEY="stroop.best";
+const TUTKEY="stroop.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // hub passes ?tut=0 to disable
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Color Clash is endless/score-based, so it POSTs a fixed `level: 1` with the
+// score — the server ranks score games by score first, then time. Reads the
+// shared player token (set by the hub, same origin). No token → silently skips.
+// Mirrors the GBLB block in games/zip/index.html; keep in sync.
+const GBLB=(function(){
+  var GAME='stroop', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+
+// ── Pure logic (kept in sync with games/stroop/logic.mjs — source of truth) ──
+const COLOR_COUNT=6;
+const INKS=["#d62839","#0072b2","#009e73","#f2b705","#8a3ffc","#e8590c"];
+const REVERSE_START_MS=30000, REVERSE_LEN_MS=10000;
+function matchRate(i){ return i<10 ? 0.5 : 0.35; }
+function makeTrial(i,rnd,prev){
+  const isMatch=rnd()<matchRate(i);
+  let word=Math.floor(rnd()*COLOR_COUNT), ink;
+  if(isMatch) ink=word;
+  else { ink=Math.floor(rnd()*(COLOR_COUNT-1)); if(ink>=word) ink++; }
+  if(prev && prev.word===word && prev.ink===ink){
+    word=(word+1)%COLOR_COUNT;
+    if(isMatch) ink=word;
+    else if(ink===word) ink=(ink+1)%COLOR_COUNT;
+  }
+  return {word:word, ink:ink, match:word===ink};
+}
+function reverseActive(elapsedMs){ return elapsedMs>=REVERSE_START_MS && elapsedMs<REVERSE_START_MS+REVERSE_LEN_MS; }
+function correctAnswer(trial,reversed){ return reversed? !trial.match : trial.match; }
+function points(rtMs,combo,golden){
+  const speed=Math.max(0,Math.min(100,Math.round((1500-rtMs)/10)));
+  const mult=1+Math.min(combo,10)*0.1;
+  const p=Math.round((100+speed)*mult);
+  return golden? p*2 : p;
+}
+
+// ── The Stroop effect needs the player's own language: localized color words ──
+const WORDS={
+  en:["RED","BLUE","GREEN","YELLOW","PURPLE","ORANGE"],
+  vi:["ĐỎ","XANH DƯƠNG","XANH LÁ","VÀNG","TÍM","CAM"],
+  ko:["빨강","파랑","초록","노랑","보라","주황"],
+  zh:["红色","蓝色","绿色","黄色","紫色","橙色"],
+  ja:["赤","青","緑","黄色","紫","オレンジ"],
+  ar:["أحمر","أزرق","أخضر","أصفر","بنفسجي","برتقالي"]
+};
+const UI={
+  en:{prompt:"Does the INK color match the word?",rev:"⚡ FLIPPED! ✓ when they DON'T match",yes:"✓ Match",no:"✗ No",
+      start:"Judge the ink color, not the word. 60-second sprint — how high can you score?",play:"Play",
+      over:"Time's up!",score:"Score",acc:"Accuracy",rt:"Avg speed",comboL:"Best combo",again:"Play again",nbest:"New best! 🎉",best:"Best: "},
+  vi:{prompt:"MÀU MỰC có khớp với nghĩa của từ?",rev:"⚡ ĐẢO NGƯỢC! ✓ khi KHÔNG khớp",yes:"✓ Khớp",no:"✗ Không",
+      start:"Nhìn màu mực, đừng đọc chữ. 60 giây nước rút — bạn ghi được bao nhiêu điểm?",play:"Chơi",
+      over:"Hết giờ!",score:"Điểm",acc:"Chính xác",rt:"Tốc độ TB",comboL:"Chuỗi cao nhất",again:"Chơi lại",nbest:"Kỷ lục mới! 🎉",best:"Kỷ lục: "},
+  ko:{prompt:"잉크색이 단어의 뜻과 일치하나요?",rev:"⚡ 반전! 일치하지 않을 때 ✓",yes:"✓ 일치",no:"✗ 불일치",
+      start:"글자가 아니라 잉크색을 보세요. 60초 스프린트 — 몇 점까지 가능할까요?",play:"플레이",
+      over:"시간 종료!",score:"점수",acc:"정확도",rt:"평균 속도",comboL:"최고 콤보",again:"다시 하기",nbest:"신기록! 🎉",best:"최고: "},
+  zh:{prompt:"字的颜色和词义相符吗？",rev:"⚡ 反转！不相符时按 ✓",yes:"✓ 相符",no:"✗ 不符",
+      start:"看字的颜色，别读字。60 秒冲刺——你能得多少分？",play:"开始玩",
+      over:"时间到！",score:"得分",acc:"准确率",rt:"平均速度",comboL:"最高连击",again:"再玩一次",nbest:"新纪录！🎉",best:"最佳："},
+  ja:{prompt:"インクの色は単語の意味と一致していますか？",rev:"⚡ 逆転！一致しない時に ✓",yes:"✓ 一致",no:"✗ 不一致",
+      start:"文字ではなくインクの色で判断。60秒スプリント — 何点取れる？",play:"プレイ",
+      over:"タイムアップ！",score:"スコア",acc:"正確さ",rt:"平均速度",comboL:"最大コンボ",again:"もう一度",nbest:"新記録！🎉",best:"ベスト: "},
+  ar:{prompt:"هل لون الحبر يطابق معنى الكلمة؟",rev:"⚡ انعكاس! اضغط ✓ عندما لا يتطابقان",yes:"✓ مطابق",no:"✗ غير مطابق",
+      start:"احكم على لون الحبر لا على النص. سباق 60 ثانية — كم نقطة تستطيع أن تحرز؟",play:"العب",
+      over:"انتهى الوقت!",score:"النقاط",acc:"الدقة",rt:"متوسط السرعة",comboL:"أفضل سلسلة",again:"العب مجددًا",nbest:"رقم قياسي جديد! 🎉",best:"الأفضل: "}
+};
+const U=UI[LANG]||UI.en, W=WORDS[LANG]||WORDS.en;
+const $=function(id){return document.getElementById(id);};
+
+const DUR=60000, WRONG_PENALTY=1000;
+let running=false, lock=false, endAt=0, startT=0, rafId=0;
+let trial=null, prevTrial=null, trialIdx=0, shownAt=0;
+let score=0, combo=0, bestCombo=0, nCorrect=0, nWrong=0, sumRt=0;
+let best=+(localStorage.getItem(KEY)||0);
+let lastTimeTxt="", wasRev=false, reported=false;
+
+$('yesBtn').textContent=U.yes; $('noBtn').textContent=U.no;
+$('prompt').textContent=U.prompt;
+$('stBody').textContent=U.start; $('playBtn').textContent=U.play;
+$('slScore').textContent=U.score; $('slAcc').textContent=U.acc; $('slRt').textContent=U.rt; $('slCombo').textContent=U.comboL;
+$('againBtn').textContent=U.again; $('ovTitle').textContent=U.over;
+$('bestPill').textContent='★ '+best;
+if(LANG==='ar'){ $('startO').dir='rtl'; $('overO').dir='rtl'; }
+
+function fitWord(){
+  const el=$('word'); let fs=64; el.style.fontSize=fs+'px';
+  while(el.scrollWidth>el.clientWidth && fs>22){ fs-=4; el.style.fontSize=fs+'px'; }
+}
+function showTrial(){
+  trial=makeTrial(trialIdx, Math.random, prevTrial); prevTrial=trial; trialIdx++;
+  const el=$('word');
+  el.textContent=W[trial.word]; el.style.color=INKS[trial.ink];
+  fitWord();
+  shownAt=performance.now(); lock=false;
+}
+function setCombo(){
+  const p=$('comboPill');
+  if(combo>=2){ p.style.display='inline-block'; p.textContent='×'+(1+Math.min(combo,10)*0.1).toFixed(1); }
+  else p.style.display='none';
+}
+let gainT=0;
+function flashGain(txt,neg){
+  const g=$('gain'); g.textContent=txt; g.className=neg?'neg':''; g.style.opacity='1';
+  clearTimeout(gainT); gainT=setTimeout(function(){ g.style.opacity='0'; },450);
+}
+let flashT=0;
+function flashStage(cls){
+  const s=$('stage'); s.classList.remove('hit','miss'); void s.offsetWidth; s.classList.add(cls);
+  clearTimeout(flashT); flashT=setTimeout(function(){ s.classList.remove('hit','miss'); },160);
+}
+function answer(saidMatch){
+  if(!running||lock||!trial) return;
+  lock=true;
+  const now=performance.now(), rt=now-shownAt;
+  const rev=reverseActive(now-startT);
+  if(saidMatch===correctAnswer(trial,rev)){
+    const p=points(rt,combo,rev);
+    score+=p; combo++; if(combo>bestCombo)bestCombo=combo;
+    nCorrect++; sumRt+=rt;
+    $('score').textContent=String(score);
+    flashGain('+'+p,false); flashStage('hit');
+  } else {
+    nWrong++; combo=0; endAt-=WRONG_PENALTY;
+    flashGain('-1s',true); flashStage('miss');
+  }
+  setCombo();
+  setTimeout(function(){ if(running) showTrial(); },150);
+}
+$('yesBtn').addEventListener('pointerdown',function(e){e.preventDefault();answer(true);});
+$('noBtn').addEventListener('pointerdown',function(e){e.preventDefault();answer(false);});
+
+function tick(){
+  if(!running) return;
+  const now=performance.now();
+  const left=Math.max(0,endAt-now);
+  const txt=(left/1000).toFixed(1)+'s';
+  if(txt!==lastTimeTxt){ lastTimeTxt=txt; $('time').textContent=txt; $('time').classList.toggle('low',left<10000); }
+  $('fill').style.transform='scaleX('+(left/DUR)+')';
+  const rev=reverseActive(now-startT);
+  if(rev!==wasRev){
+    wasRev=rev;
+    $('stage').classList.toggle('gold',rev);
+    $('prompt').textContent=rev?U.rev:U.prompt;
+  }
+  if(left<=0){ endRun(); return; }
+  rafId=requestAnimationFrame(tick);
+}
+function startRun(){
+  $('startO').style.display='none'; $('overO').style.display='none';
+  running=true; lock=false; reported=false;
+  score=0; combo=0; bestCombo=0; nCorrect=0; nWrong=0; sumRt=0; trialIdx=0; prevTrial=null; trial=null;
+  wasRev=false; lastTimeTxt="";
+  $('score').textContent='0'; setCombo();
+  $('stage').classList.remove('gold'); $('prompt').textContent=U.prompt;
+  startT=performance.now(); endAt=startT+DUR;
+  GBLB.start();
+  showTrial();
+  cancelAnimationFrame(rafId); rafId=requestAnimationFrame(tick);
+}
+function endRun(){
+  running=false; cancelAnimationFrame(rafId);
+  $('word').textContent=' ';
+  const total=nCorrect+nWrong;
+  const acc=total?Math.round(100*nCorrect/total):0;
+  const avg=nCorrect?Math.round(sumRt/nCorrect):0;
+  $('svScore').textContent=String(score);
+  $('svAcc').textContent=acc+'%';
+  $('svRt').textContent=avg+'ms';
+  $('svCombo').textContent=String(bestCombo);
+  const isBest=score>best&&score>0;
+  if(isBest){ best=score; try{localStorage.setItem(KEY,String(best));}catch(e){} $('bestPill').textContent='★ '+best; }
+  $('newBest').textContent=isBest?U.nbest:(U.best+best);
+  $('overO').style.display='grid';
+  reported=true;
+  GBLB.report(score);
+}
+$('playBtn').onclick=startRun;
+$('againBtn').onclick=startRun;
+// Abandoning a run mid-way still records it.
+addEventListener('pagehide',function(){ if(running&&!reported&&score>0){reported=true;GBLB.report(score);} });
+
+/* ── First-run 2-step tutorial ──────────────────────────────────────────── */
+const TUT_T={
+  en:{s1t:"Ink vs. word",s1b:"The word can lie! Judge the INK color, not the text. This one says BLUE but the ink is red — tap ✗.",
+      s2t:"Beat the clock",s2b:"60 seconds. Fast answers and streaks score big. When the golden reverse round hits, answers flip!",next:"Next",play:"Play",skip:"Skip"},
+  vi:{s1t:"Mực và từ",s1b:"Chữ có thể đánh lừa! Hãy nhìn MÀU MỰC, đừng đọc chữ. Từ này ghi XANH DƯƠNG nhưng mực màu đỏ — chạm ✗.",
+      s2t:"Đua với thời gian",s2b:"60 giây. Trả lời nhanh và chuỗi đúng được nhiều điểm. Khi vòng đảo ngược vàng xuất hiện, đáp án bị lật!",next:"Tiếp",play:"Chơi",skip:"Bỏ qua"},
+  ko:{s1t:"잉크 vs 단어",s1b:"글자는 속일 수 있어요! 글자가 아니라 잉크색을 보세요. 이 단어는 '파랑'이지만 잉크는 빨간색 — ✗를 누르세요.",
+      s2t:"시간과의 승부",s2b:"60초. 빠른 답과 연속 정답이 고득점. 황금 반전 라운드가 오면 정답이 뒤집힙니다!",next:"다음",play:"플레이",skip:"건너뛰기"},
+  zh:{s1t:"字色 vs 词义",s1b:"字会骗人！看字的颜色，别读字。这个词写着“蓝色”，但字是红色的——按 ✗。",
+      s2t:"与时间赛跑",s2b:"60 秒。答得快、连击高就得分多。金色反转回合来临时，答案要反着来！",next:"下一步",play:"开始玩",skip:"跳过"},
+  ja:{s1t:"インク vs 単語",s1b:"文字はうそをつく！文字ではなくインクの色で判断。これは「青」ですがインクは赤 — ✗ をタップ。",
+      s2t:"時間との勝負",s2b:"60秒。速い解答と連続正解で高得点。金色の逆転ラウンドが来たら答えが反転！",next:"次へ",play:"プレイ",skip:"スキップ"},
+  ar:{s1t:"الحبر مقابل الكلمة",s1b:"قد تخدعك الكلمة! احكم على لون الحبر لا على النص. هذه الكلمة تقول أزرق لكن الحبر أحمر — اضغط ✗.",
+      s2t:"سابق الزمن",s2b:"60 ثانية. السرعة والسلاسل تمنح نقاطًا أكثر. عند جولة الانعكاس الذهبية تنقلب الإجابات!",next:"التالي",play:"العب",skip:"تخطّي"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+let tutStep=0;
+function renderTutStep(){
+  if(LANG==='ar')$('tutCard').dir='rtl';
+  $('tutSkip').textContent=M.skip;
+  if(tutStep===0){
+    $('tutTitle').textContent=M.s1t; $('tutBody').textContent=M.s1b;
+    const d=$('tutDemo'); d.style.display='block'; d.textContent=W[1]; d.style.color=INKS[0];
+    $('tutNext').textContent=M.next;
+  } else {
+    $('tutTitle').textContent=M.s2t; $('tutBody').textContent=M.s2b;
+    $('tutDemo').style.display='none';
+    $('tutNext').textContent=M.play;
+  }
+}
+function endTut(play){
+  try{localStorage.setItem(TUTKEY,'1');}catch(e){}
+  $('tut').classList.remove('on');
+  if(play) startRun();
+}
+$('tutNext').onclick=function(){ if(tutStep===0){tutStep=1;renderTutStep();} else endTut(true); };
+$('tutSkip').onclick=function(){ endTut(false); };
+
+if(TUT_ON && !localStorage.getItem(TUTKEY)){
+  renderTutStep(); $('tut').classList.add('on');
+}
+$('startO').style.display='grid';
+</script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+{
+  "brand": "BrewLab",
+  "logo": "☕",
+  "name": "BrewLab — Lật thẻ đoán món",
+  "tagline": "Tìm hết các cặp để mở mã giảm giá. Càng ít lượt & càng nhanh, điểm càng cao!",
+  "colors": {
+    "primary": "#6F4E37",
+    "accent": "#C8A06B",
+    "bg": "#FFF8F0",
+    "card": "#ffffff",
+    "ink": "#2b231c",
+    "muted": "#8a7d6e",
+    "bd": "#e7dccd",
+    "gold": "#e0b015"
+  },
+  "reward": { "code": "BREW10", "label": "Giảm 10% cho đơn tiếp theo" },
+  "goldenPair": true,
+  "pairs": [
+    { "img": "☕", "usp": "Espresso — 100% Arabica, đậm vị" },
+    { "img": "🥛", "usp": "Latte — sữa tươi mịn, ít đắng" },
+    { "img": "🧊", "usp": "Cold Brew — ủ lạnh 18h, êm dịu" },
+    { "img": "🍫", "usp": "Mocha — cacao Bỉ nguyên chất" },
+    { "img": "🍮", "usp": "Affogato — kem vani + shot nóng" },
+    { "img": "🥐", "usp": "Croissant — bơ Pháp, nướng mỗi sáng" },
+    { "img": "🫖", "usp": "Trà Ô Long — hái tay Bảo Lộc" },
+    { "img": "🍰", "usp": "Tiramisu — công thức Ý chuẩn vị" },
+    { "img": "🧇", "usp": "Waffle — giòn ngoài, mềm trong" },
+    { "img": "🍪", "usp": "Cookie — socola chip nhập khẩu" },
+    { "img": "🍵", "usp": "Matcha — bột trà xanh Uji" },
+    { "img": "🧁", "usp": "Cupcake — kem tươi không béo ngậy" },
+    { "img": "🍩", "usp": "Donut — phủ đường tự nhiên" },
+    { "img": "🥤", "usp": "Soda Ý — vị trái cây thật" },
+    { "img": "🍯", "usp": "Honey Latte — mật ong rừng" },
+    { "img": "🌰", "usp": "Hazelnut — hạt dẻ rang thơm" },
+    { "img": "🫐", "usp": "Blueberry — việt quất tươi" },
+    { "img": "🥧", "usp": "Apple Pie — táo nướng quế" }
+  ]
+}

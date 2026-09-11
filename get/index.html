@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Universal "get the app" link (shared QR target): auto-detects the OS and
+       sends the visitor straight to the right store. iOS -> App Store, Android
+       -> Google Play, desktop/other -> the chooser below. This runs BEFORE the
+       page paints so phone visitors never see the chooser flash.
+       Escape hatch: ?stay=1 (or ?noredirect) keeps the chooser for QA. -->
+  <script>
+    (function () {
+      try {
+        var p = new URLSearchParams(location.search);
+        if (p.has("stay") || p.has("noredirect")) return;
+        var ua = navigator.userAgent || "";
+        var isAndroid = /Android/i.test(ua);
+        var isIOS =
+          /iPad|iPhone|iPod/i.test(ua) ||
+          (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+        var PLAY = "https://play.google.com/store/apps/details?id=vn.fighttech.go2048";
+        var APP_STORE = "https://apps.apple.com/app/id6782550523";
+        // location.replace keeps this interstitial out of history so Back won't trap.
+        if (isAndroid) location.replace(PLAY);
+        else if (isIOS) location.replace(APP_STORE);
+      } catch (e) { }
+    })();
+  </script>
+  <meta name="theme-color" content="#0e0e10" />
+  <meta name="robots" content="noindex,follow" />
+  <title>Get Go Brain</title>
+  <meta name="description"
+    content="Download Go Brain — free brain puzzles for iOS and Android. One link, opens the right store automatically." />
+  <link rel="canonical" href="https://gobrain.fighttech.vn/get/" />
+  <link rel="icon" type="image/png" sizes="512x512" href="../assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="../assets/app-icon.png" />
+  <script>(function () { try { var p = localStorage.getItem("go2048.theme") || "system"; var d = p === "dark" || (p !== "light" && matchMedia("(prefers-color-scheme: dark)").matches); document.documentElement.setAttribute("data-theme", d ? "dark" : "light"); } catch (e) { } })();</script>
+  <link rel="stylesheet" href="../css/styles.css" />
+  <style>
+    .get {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 20px;
+      box-sizing: border-box;
+    }
+
+    .get-card {
+      width: 100%;
+      max-width: 380px;
+      text-align: center;
+    }
+
+    .get-icon {
+      width: 84px;
+      height: 84px;
+      border-radius: 20px;
+      box-shadow: var(--shadow-sm);
+      display: block;
+      margin: 0 auto 20px;
+    }
+
+    .get-card h1 {
+      font-size: 28px;
+      margin: 0 0 6px;
+    }
+
+    .get-sub {
+      color: var(--body-subtle);
+      margin: 0 0 28px;
+      font-size: 16px;
+    }
+
+    .get-btns {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .get-btns .btn {
+      width: 100%;
+      justify-content: center;
+      padding: 14px 18px;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+
+    .get-btns .btn svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .get-alt {
+      margin: 22px 0 0;
+      font-size: 15px;
+    }
+
+    .get-alt a {
+      color: var(--heading);
+      font-weight: 600;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .get-note {
+      margin: 18px 0 0;
+      font-size: 12px;
+      color: var(--body-subtle);
+    }
+  </style>
+</head>
+
+<body>
+  <main class="get">
+    <div class="get-card">
+      <img class="get-icon" src="../assets/app-icon.png" alt="Go Brain" width="84" height="84" />
+      <h1>Get Go Brain</h1>
+      <p class="get-sub">Brain puzzles — free &amp; offline</p>
+      <div class="get-btns">
+        <a class="btn btn-primary" id="get-ios" href="https://apps.apple.com/app/id6782550523" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path
+              d="M16.5 1.5c.1 1-.3 2-.9 2.8-.7.8-1.7 1.4-2.7 1.3-.1-1 .4-2 1-2.7.6-.8 1.7-1.4 2.6-1.4zM19 17.3c-.5 1.2-.8 1.7-1.4 2.7-.9 1.4-2.2 3.1-3.8 3.1-1.4 0-1.8-.9-3.7-.9s-2.3.9-3.7.9c-1.6 0-2.8-1.6-3.7-3-2.5-3.9-2.8-8.5-1.2-11 1.1-1.7 2.8-2.7 4.4-2.7 1.6 0 2.7 1 4 1 1.3 0 2-1 4-1 1.4 0 3 .8 4 2.2-3.6 2-3 7.1.8 8.7z" />
+          </svg>
+          App Store
+        </a>
+        <a class="btn btn-primary" id="get-android"
+          href="https://play.google.com/store/apps/details?id=vn.fighttech.go2048" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path
+              d="M3.6 2.2c-.3.3-.5.7-.5 1.3v17c0 .6.2 1 .5 1.3l.1.1L13 13.1v-.2L3.7 2.1zm10.7 11.4 3 3 .1-.1c1.5-.8 1.5-.8 1.5-1.6s0-.8-1.5-1.6l-.1-.1-3 .4zm-.7-.5L4.3 2.5l8.5 4.9 1.8 1.8-1 1zm-9.3 9.4 9.3-9.4 1 1-1.8 1.8L4.3 21.5z" />
+          </svg>
+          Google Play
+        </a>
+      </div>
+      <p class="get-alt"><a href="../play/">▶ Or play in your browser</a></p>
+      <p class="get-note">Free · no ads · works offline</p>
+    </div>
+  </main>
+</body>
+
+</html>

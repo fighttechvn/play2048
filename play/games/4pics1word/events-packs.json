@@ -1,0 +1,206 @@
+{
+  "version": 1,
+  "packs": [
+    {
+      "id": "newyear",
+      "holiday": "new-year",
+      "title": { "en": "New Year", "vi": "Tết Dương Lịch", "ko": "새해", "zh": "元旦" },
+      "puzzles": [
+        { "id": "newyear-firework", "emojis": ["🎆","🎇","✨","🌃"], "answers": { "en": "FIREWORK", "vi": "PHÁO HOA", "ko": "불꽃놀이", "zh": "烟花" }, "difficulty": 0.6, "poolExtra": 5 },
+        { "id": "newyear-countdown", "emojis": ["🔟","⏱️","🕛","🎉"], "answers": { "en": "COUNTDOWN", "vi": "ĐẾM NGƯỢC", "ko": "카운트다운", "zh": "倒计时" }, "difficulty": 0.68, "poolExtra": 6 },
+        { "id": "newyear-champagne", "emojis": ["🍾","🥂","✨","🎉"], "answers": { "en": "CHAMPAGNE", "vi": "SÂM BANH", "ko": "샴페인", "zh": "香槟" }, "difficulty": 0.68, "poolExtra": 6 },
+        { "id": "newyear-party", "emojis": ["🎉","🎊","🥳","🎈"], "answers": { "en": "PARTY", "vi": "TIỆC", "ko": "파티", "zh": "派对" }, "difficulty": 0.3, "poolExtra": 4 },
+        { "id": "newyear-midnight", "emojis": ["🕛","🌃","🔔","🎆"], "answers": { "en": "MIDNIGHT", "vi": "NỬA ĐÊM", "ko": "자정", "zh": "午夜" }, "difficulty": 0.6, "poolExtra": 5 },
+        { "id": "newyear-calendar", "emojis": ["📅","🗓️","🎊","✨"], "answers": { "en": "CALENDAR", "vi": "LỊCH", "ko": "달력", "zh": "日历" }, "difficulty": 0.6, "poolExtra": 5 },
+        { "id": "newyear-confetti", "emojis": ["🎊","🎉","🥳","✨"], "answers": { "en": "CONFETTI", "vi": "HOA GIẤY" }, "difficulty": 0.6, "poolExtra": 5 },
+        { "id": "newyear-balloon", "emojis": ["🎈","🥳","🎉","🎁"], "answers": { "en": "BALLOON", "vi": "BÓNG BAY", "ko": "풍선", "zh": "气球" }, "difficulty": 0.5, "poolExtra": 5 },
+        { "id": "newyear-newyear", "emojis": ["🎆","🗓️","🥳","🍾"], "answers": { "en": "NEW YEAR", "vi": "NĂM MỚI", "ko": "새해", "zh": "新年" }, "difficulty": 0.55, "poolExtra": 5 },
+        { "id": "newyear-clock", "emojis": ["⏰","🕛","🕐","🔔"], "answers": { "en": "CLOCK", "vi": "ĐỒNG HỒ", "ko": "시계", "zh": "钟" }, "difficulty": 0.3, "poolExtra": 4 }
+      ]
+    },
+    {
+      "id": "tet",
+      "holiday": "lunar-new-year",
+      "title": { "en": "Lunar New Year", "vi": "Tết Nguyên Đán", "ko": "설날", "zh": "春节" },
+      "puzzles": [
+        { "id": "tet-banhchung", "emojis": ["🍚","🍃","🟩","🎋"], "answers": { "en": "BANH CHUNG", "vi": "BÁNH CHƯNG" }, "difficulty": 0.7, "poolExtra": 6 },
+        { "id": "tet-lixi", "emojis": ["🧧","💰","👶","😄"], "answers": { "en": "LUCKY MONEY", "vi": "LÌ XÌ", "ko": "세뱃돈", "zh": "压岁钱" }, "difficulty": 0.75, "poolExtra": 6 },
+        { "id": "tet-redenvelope", "emojis": ["🧧","✉️","🎊","🟥"], "answers": { "en": "RED ENVELOPE", "vi": "BAO LÌ XÌ", "zh": "红包" }, "difficulty": 0.8, "poolExtra": 7 },
+        { "id": "tet-hoadao", "emojis": ["🌸","🌳","🍑","🧧"], "answers": { "en": "PEACH BLOSSOM", "vi": "HOA ĐÀO", "ko": "복숭아꽃", "zh": "桃花" }, "difficulty": 0.82, "poolExtra": 7 },
+        { "id": "tet-hoamai", "emojis": ["🌼","🌳","🟡","🎋"], "answers": { "en": "APRICOT BLOSSOM", "vi": "HOA MAI" }, "difficulty": 0.85, "poolExtra": 8 },
+        { "id": "tet-dragon", "emojis": ["🐉","🎊","🧧","🥁"], "answers": { "en": "DRAGON", "vi": "RỒNG", "ko": "용", "zh": "龙" }, "difficulty": 0.42, "poolExtra": 4 },
+        { "id": "tet-lantern", "emojis": ["🏮","🌃","🧧","✨"], "answers": { "en": "LANTERN", "vi": "ĐÈN LỒNG", "ko": "등불", "zh": "灯笼" }, "difficulty": 0.5, "poolExtra": 5 },
+        { "id": "tet-firecracker", "emojis": ["🧨","🔥","🎊","🧧"], "answers": { "en": "FIRECRACKER", "vi": "PHÁO", "ko": "폭죽", "zh": "鞭炮" }, "difficulty": 0.8, "poolExtra": 7 },
+        { "id": "tet-kumquat", "emojis": ["🌳","🍊","🟠","🧧"], "answers": { "en": "KUMQUAT", "vi": "QUẤT", "zh": "金桔" }, "difficulty": 0.55, "poolExtra": 5 },
+        { "id": "tet-watermelon", "emojis": ["🍉","🟥","🌱","🧧"], "answers": { "en": "WATERMELON", "vi": "DƯA HẤU", "ko": "수박", "zh": "西瓜" }, "difficulty": 0.75, "poolExtra": 6 },
+        { "id": "tet-spring", "emojis": ["🌸","🌱","🦋","🧧"], "answers": { "en": "SPRING", "vi": "MÙA XUÂN", "ko": "봄", "zh": "春天" }, "difficulty": 0.42, "poolExtra": 4 }
+      ]
+    },
+    {
+      "id": "valentine",
+      "holiday": "valentines-day",
+      "title": { "en": "Valentine's Day", "vi": "Lễ Tình Nhân", "ko": "발렌타인데이", "zh": "情人节" },
+      "puzzles": [
+        { "id": "valentine-heart", "emojis": ["❤️","💕","💗","😍"], "answers": { "en": "HEART", "vi": "TRÁI TIM", "ko": "하트", "zh": "心" }, "difficulty": 0.3, "poolExtra": 4 },
+        { "id": "valentine-rose", "emojis": ["🌹","💐","❤️","😍"], "answers": { "en": "ROSE", "vi": "HOA HỒNG", "ko": "장미", "zh": "玫瑰" }, "difficulty": 0.22, "poolExtra": 3 },
+        { "id": "valentine-love", "emojis": ["❤️","😍","💌","💑"], "answers": { "en": "LOVE", "vi": "TÌNH YÊU", "ko": "사랑", "zh": "爱" }, "difficulty": 0.22, "poolExtra": 3 },
+        { "id": "valentine-gift", "emojis": ["🎁","🎀","❤️","😊"], "answers": { "en": "GIFT", "vi": "QUÀ", "ko": "선물", "zh": "礼物" }, "difficulty": 0.22, "poolExtra": 3 },
+        { "id": "valentine-chocolate", "emojis": ["🍫","❤️","🎁","😋"], "answers": { "en": "CHOCOLATE", "vi": "SÔ CÔ LA", "ko": "초콜릿", "zh": "巧克力" }, "difficulty": 0.68, "poolExtra": 6 },
+        { "id": "valentine-cupid", "emojis": ["💘","🏹","👼","❤️"], "answers": { "en": "CUPID", "vi": "THẦN TÌNH YÊU", "ko": "큐피드", "zh": "丘比特" }, "difficulty": 0.35, "poolExtra": 4 },
+        { "id": "valentine-kiss", "emojis": ["💋","😘","❤️","😚"], "answers": { "en": "KISS", "vi": "NỤ HÔN", "ko": "키스", "zh": "吻" }, "difficulty": 0.25, "poolExtra": 3 },
+        { "id": "valentine-ring", "emojis": ["💍","💎","❤️","👰"], "answers": { "en": "RING", "vi": "NHẪN", "ko": "반지", "zh": "戒指" }, "difficulty": 0.22, "poolExtra": 3 },
+        { "id": "valentine-card", "emojis": ["💌","✉️","❤️","😍"], "answers": { "en": "CARD", "vi": "THIỆP", "ko": "카드", "zh": "卡片" }, "difficulty": 0.22, "poolExtra": 3 },
+        { "id": "valentine-teddy", "emojis": ["🧸","❤️","🎀","🎁"], "answers": { "en": "TEDDY BEAR", "vi": "GẤU BÔNG", "ko": "곰인형", "zh": "泰迪熊" }, "difficulty": 0.68, "poolExtra": 6 }
+      ]
+    },
+    {
+      "id": "womensday",
+      "holiday": "womens-day",
+      "title": { "en": "Women's Day", "vi": "Ngày Quốc Tế Phụ Nữ", "ko": "여성의 날", "zh": "妇女节" },
+      "puzzles": [
+        { "id": "womensday-flower", "emojis": ["💐","🌸","🌷","👩"], "answers": { "en": "FLOWER", "vi": "HOA", "ko": "꽃", "zh": "花" }, "difficulty": 0.42, "poolExtra": 4 },
+        { "id": "womensday-rose", "emojis": ["🌹","💝","😊","👩"], "answers": { "en": "ROSE", "vi": "HOA HỒNG", "ko": "장미", "zh": "玫瑰" }, "difficulty": 0.22, "poolExtra": 3 },
+        { "id": "womensday-gift", "emojis": ["🎁","🎀","👩","💝"], "answers": { "en": "GIFT", "vi": "QUÀ", "ko": "선물", "zh": "礼物" }, "difficulty": 0.22, "poolExtra": 3 },
+        { "id": "womensday-card", "emojis": ["💌","✉️","👩","❤️"], "answers": { "en": "CARD", "vi": "THIỆP", "ko": "카드", "zh": "卡片" }, "difficulty": 0.22, "poolExtra": 3 },
+        { "id": "womensday-mother", "emojis": ["👩","👧","👦","❤️"], "answers": { "en": "MOTHER", "vi": "MẸ", "ko": "엄마", "zh": "妈妈" }, "difficulty": 0.42, "poolExtra": 4 },
+        { "id": "womensday-perfume", "emojis": ["🌸","💧","✨","👩"], "answers": { "en": "PERFUME", "vi": "NƯỚC HOA", "ko": "향수", "zh": "香水" }, "difficulty": 0.5, "poolExtra": 5 },
+        { "id": "womensday-tulip", "emojis": ["🌷","🌷","💐","🌱"], "answers": { "en": "TULIP", "vi": "HOA TULIP", "ko": "튤립", "zh": "郁金香" }, "difficulty": 0.35, "poolExtra": 4 },
+        { "id": "womensday-dress", "emojis": ["👗","👠","💃","✨"], "answers": { "en": "DRESS", "vi": "VÁY", "ko": "드레스", "zh": "裙子" }, "difficulty": 0.3, "poolExtra": 4 },
+        { "id": "womensday-lipstick", "emojis": ["💄","💋","👛","✨"], "answers": { "en": "LIPSTICK", "vi": "SON MÔI", "ko": "립스틱", "zh": "口红" }, "difficulty": 0.6, "poolExtra": 5 }
+      ]
+    },
+    {
+      "id": "easter",
+      "holiday": "easter",
+      "title": { "en": "Easter", "vi": "Lễ Phục Sinh", "ko": "부활절", "zh": "复活节" },
+      "puzzles": [
+        { "id": "easter-egg", "emojis": ["🥚","🎨","🌷","🐰"], "answers": { "en": "EGG", "vi": "TRỨNG" }, "difficulty": 0.15, "poolExtra": 3 },
+        { "id": "easter-bunny", "emojis": ["🐰","🥚","🌸","🧺"], "answers": { "en": "BUNNY", "vi": "THỎ", "ko": "토끼", "zh": "兔子" }, "difficulty": 0.3, "poolExtra": 4 },
+        { "id": "easter-chick", "emojis": ["🐤","🐣","🥚","🌼"], "answers": { "en": "CHICK", "vi": "GÀ CON", "ko": "병아리", "zh": "小鸡" }, "difficulty": 0.3, "poolExtra": 4 },
+        { "id": "easter-basket", "emojis": ["🧺","🥚","🐰","🌷"], "answers": { "en": "BASKET", "vi": "GIỎ", "ko": "바구니", "zh": "篮子" }, "difficulty": 0.42, "poolExtra": 4 },
+        { "id": "easter-spring", "emojis": ["🌷","🌱","🦋","🐝"], "answers": { "en": "SPRING", "vi": "MÙA XUÂN", "ko": "봄", "zh": "春天" }, "difficulty": 0.42, "poolExtra": 4 },
+        { "id": "easter-lamb", "emojis": ["🐑","🌿","🌷","🐰"], "answers": { "en": "LAMB", "vi": "CỪU", "ko": "양", "zh": "羊" }, "difficulty": 0.25, "poolExtra": 3 },
+        { "id": "easter-cross", "emojis": ["✝️","⛪","🙏","🕊️"], "answers": { "en": "CROSS", "vi": "THẬP GIÁ", "ko": "십자가", "zh": "十字架" }, "difficulty": 0.3, "poolExtra": 4 },
+        { "id": "easter-carrot", "emojis": ["🥕","🐰","🌱","🟠"], "answers": { "en": "CARROT", "vi": "CÀ RỐT", "ko": "당근", "zh": "胡萝卜" }, "difficulty": 0.42, "poolExtra": 4 }
+      ]
+    },
+    {
+      "id": "childrensday",
+      "holiday": "childrens-day",
+      "title": { "en": "Children's Day", "vi": "Ngày Quốc Tế Thiếu Nhi", "ko": "어린이날", "zh": "儿童节" },
+      "puzzles": [
+        { "id": "child-balloon", "emojis": ["🎈","🥳","🎉","😄"], "answers": { "en": "BALLOON", "vi": "BÓNG BAY", "ko": "풍선", "zh": "气球" }, "difficulty": 0.5, "poolExtra": 5 },
+        { "id": "child-toy", "emojis": ["🧸","🚂","🪀","🎁"], "answers": { "en": "TOY", "vi": "ĐỒ CHƠI", "ko": "장난감", "zh": "玩具" }, "difficulty": 0.15, "poolExtra": 3 },
+        { "id": "child-kite", "emojis": ["🪁","🌤️","💨","🏃"], "answers": { "en": "KITE", "vi": "DIỀU", "ko": "연", "zh": "风筝" }, "difficulty": 0.25, "poolExtra": 3 },
+        { "id": "child-candy", "emojis": ["🍬","🍭","🍫","😄"], "answers": { "en": "CANDY", "vi": "KẸO", "ko": "사탕", "zh": "糖果" }, "difficulty": 0.3, "poolExtra": 4 },
+        { "id": "child-game", "emojis": ["🎮","🕹️","👾","😄"], "answers": { "en": "GAME", "vi": "TRÒ CHƠI", "ko": "게임", "zh": "游戏" }, "difficulty": 0.25, "poolExtra": 3 },
+        { "id": "child-icecream", "emojis": ["🍦","🍨","🍧","😋"], "answers": { "en": "ICE CREAM", "vi": "KEM", "ko": "아이스크림", "zh": "冰淇淋" }, "difficulty": 0.62, "poolExtra": 5 },
+        { "id": "child-bubble", "emojis": ["🫧","🧼","💨","😊"], "answers": { "en": "BUBBLE", "vi": "BONG BÓNG", "ko": "비눗방울", "zh": "泡泡" }, "difficulty": 0.42, "poolExtra": 4 },
+        { "id": "child-crayon", "emojis": ["🖍️","🎨","🌈","📄"], "answers": { "en": "CRAYON", "vi": "BÚT MÀU", "ko": "크레용", "zh": "蜡笔" }, "difficulty": 0.45, "poolExtra": 4 },
+        { "id": "child-playground", "emojis": ["🛝","🎠","🎡","🏃"], "answers": { "en": "PLAYGROUND", "vi": "SÂN CHƠI", "ko": "놀이터", "zh": "游乐场" }, "difficulty": 0.78, "poolExtra": 6 },
+        { "id": "child-teddy", "emojis": ["🧸","🎀","🛏️","😴"], "answers": { "en": "TEDDY BEAR", "vi": "GẤU BÔNG", "ko": "곰인형", "zh": "泰迪熊" }, "difficulty": 0.68, "poolExtra": 6 }
+      ]
+    },
+    {
+      "id": "midautumn",
+      "holiday": "mid-autumn",
+      "title": { "en": "Mid-Autumn Festival", "vi": "Tết Trung Thu", "ko": "추석", "zh": "中秋节" },
+      "puzzles": [
+        { "id": "mid-mooncake", "emojis": ["🥮","🌕","🍵","🎑"], "answers": { "en": "MOONCAKE", "vi": "BÁNH TRUNG THU", "ko": "월병", "zh": "月饼" }, "difficulty": 0.62, "poolExtra": 5 },
+        { "id": "mid-lantern", "emojis": ["🏮","🎇","🌃","🎑"], "answers": { "en": "LANTERN", "vi": "ĐÈN LỒNG", "ko": "등불", "zh": "灯笼" }, "difficulty": 0.5, "poolExtra": 5 },
+        { "id": "mid-moon", "emojis": ["🌕","🌙","🌌","🎑"], "answers": { "en": "MOON", "vi": "TRĂNG", "ko": "달", "zh": "月亮" }, "difficulty": 0.25, "poolExtra": 3 },
+        { "id": "mid-liondance", "emojis": ["🦁","🥁","🎊","🌕"], "answers": { "en": "LION DANCE", "vi": "MÚA LÂN", "zh": "舞狮" }, "difficulty": 0.7, "poolExtra": 6 },
+        { "id": "mid-starlantern", "emojis": ["⭐","🏮","🎋","🌕"], "answers": { "en": "STAR LANTERN", "vi": "ĐÈN ÔNG SAO" }, "difficulty": 0.8, "poolExtra": 7 },
+        { "id": "mid-rabbit", "emojis": ["🐇","🌕","🥮","✨"], "answers": { "en": "RABBIT", "vi": "THỎ", "ko": "토끼", "zh": "兔子" }, "difficulty": 0.42, "poolExtra": 4 },
+        { "id": "mid-tea", "emojis": ["🍵","🥮","🌕","🌿"], "answers": { "en": "TEA", "vi": "TRÀ", "ko": "차", "zh": "茶" }, "difficulty": 0.15, "poolExtra": 3 },
+        { "id": "mid-drum", "emojis": ["🥁","🦁","🎊","🌕"], "answers": { "en": "DRUM", "vi": "TRỐNG", "ko": "북", "zh": "鼓" }, "difficulty": 0.25, "poolExtra": 3 },
+        { "id": "mid-mask", "emojis": ["🎭","🦁","🎊","🎑"], "answers": { "en": "MASK", "vi": "MẶT NẠ", "ko": "가면", "zh": "面具" }, "difficulty": 0.25, "poolExtra": 3 },
+        { "id": "mid-family", "emojis": ["👨‍👩‍👧‍👦","🌕","🥮","🏮"], "answers": { "en": "FAMILY", "vi": "GIA ĐÌNH", "ko": "가족", "zh": "家庭" }, "difficulty": 0.42, "poolExtra": 4 }
+      ]
+    },
+    {
+      "id": "halloween",
+      "holiday": "halloween",
+      "title": { "en": "Halloween", "vi": "Lễ Halloween", "ko": "핼러윈", "zh": "万圣节" },
+      "puzzles": [
+        { "id": "hal-pumpkin", "emojis": ["🎃","🕯️","🌙","🍂"], "answers": { "en": "PUMPKIN", "vi": "BÍ NGÔ", "ko": "호박", "zh": "南瓜" }, "difficulty": 0.5, "poolExtra": 5 },
+        { "id": "hal-ghost", "emojis": ["👻","🌙","🕸️","😱"], "answers": { "en": "GHOST", "vi": "MA", "ko": "유령", "zh": "鬼" }, "difficulty": 0.3, "poolExtra": 4 },
+        { "id": "hal-witch", "emojis": ["🧙‍♀️","🧹","🔮","🎃"], "answers": { "en": "WITCH", "vi": "PHÙ THỦY", "ko": "마녀", "zh": "女巫" }, "difficulty": 0.32, "poolExtra": 4 },
+        { "id": "hal-spider", "emojis": ["🕷️","🕸️","🌑","😱"], "answers": { "en": "SPIDER", "vi": "NHỆN", "ko": "거미", "zh": "蜘蛛" }, "difficulty": 0.42, "poolExtra": 4 },
+        { "id": "hal-bat", "emojis": ["🦇","🌙","🎃","🌑"], "answers": { "en": "BAT", "vi": "DƠI", "ko": "박쥐", "zh": "蝙蝠" }, "difficulty": 0.15, "poolExtra": 3 },
+        { "id": "hal-candy", "emojis": ["🍬","🍭","🎃","👻"], "answers": { "en": "CANDY", "vi": "KẸO", "ko": "사탕", "zh": "糖果" }, "difficulty": 0.3, "poolExtra": 4 },
+        { "id": "hal-skeleton", "emojis": ["💀","🦴","👻","🎃"], "answers": { "en": "SKELETON", "vi": "BỘ XƯƠNG", "ko": "해골", "zh": "骷髅" }, "difficulty": 0.62, "poolExtra": 5 },
+        { "id": "hal-vampire", "emojis": ["🧛‍♂️","🦇","🩸","🌙"], "answers": { "en": "VAMPIRE", "vi": "MA CÀ RỒNG", "ko": "뱀파이어", "zh": "吸血鬼" }, "difficulty": 0.52, "poolExtra": 5 },
+        { "id": "hal-zombie", "emojis": ["🧟","🪦","💀","🌑"], "answers": { "en": "ZOMBIE", "vi": "THÂY MA", "ko": "좀비", "zh": "僵尸" }, "difficulty": 0.45, "poolExtra": 4 },
+        { "id": "hal-spiderweb", "emojis": ["🕸️","🕷️","🏚️","🌑"], "answers": { "en": "SPIDER WEB", "vi": "MẠNG NHỆN", "ko": "거미줄", "zh": "蜘蛛网" }, "difficulty": 0.7, "poolExtra": 6 },
+        { "id": "hal-blackcat", "emojis": ["🐈‍⬛","🎃","🌙","👻"], "answers": { "en": "BLACK CAT", "vi": "MÈO ĐEN", "zh": "黑猫" }, "difficulty": 0.62, "poolExtra": 5 }
+      ]
+    },
+    {
+      "id": "thanksgiving",
+      "holiday": "thanksgiving",
+      "title": { "en": "Thanksgiving", "vi": "Lễ Tạ Ơn", "ko": "추수감사절", "zh": "感恩节" },
+      "puzzles": [
+        { "id": "thanks-turkey", "emojis": ["🦃","🍗","🍁","🍽️"], "answers": { "en": "TURKEY", "vi": "GÀ TÂY", "ko": "칠면조", "zh": "火鸡" }, "difficulty": 0.42, "poolExtra": 4 },
+        { "id": "thanks-pumpkinpie", "emojis": ["🥧","🎃","🍂","😋"], "answers": { "en": "PUMPKIN PIE", "vi": "BÁNH BÍ NGÔ", "zh": "南瓜派" }, "difficulty": 0.75, "poolExtra": 6 },
+        { "id": "thanks-corn", "emojis": ["🌽","🍂","🧺","🍁"], "answers": { "en": "CORN", "vi": "NGÔ", "ko": "옥수수", "zh": "玉米" }, "difficulty": 0.25, "poolExtra": 3 },
+        { "id": "thanks-feast", "emojis": ["🍽️","🦃","🍗","🥧"], "answers": { "en": "FEAST", "vi": "BỮA TIỆC", "ko": "잔치", "zh": "盛宴" }, "difficulty": 0.32, "poolExtra": 4 },
+        { "id": "thanks-family", "emojis": ["👨‍👩‍👧‍👦","🦃","🍽️","❤️"], "answers": { "en": "FAMILY", "vi": "GIA ĐÌNH", "ko": "가족", "zh": "家庭" }, "difficulty": 0.42, "poolExtra": 4 },
+        { "id": "thanks-harvest", "emojis": ["🌾","🌽","🎃","🧺"], "answers": { "en": "HARVEST", "vi": "MÙA GẶT", "ko": "수확", "zh": "丰收" }, "difficulty": 0.5, "poolExtra": 5 },
+        { "id": "thanks-autumn", "emojis": ["🍁","🍂","🍃","🌰"], "answers": { "en": "AUTUMN", "vi": "MÙA THU", "ko": "가을", "zh": "秋天" }, "difficulty": 0.42, "poolExtra": 4 },
+        { "id": "thanks-pumpkin", "emojis": ["🎃","🍂","🍁","🌾"], "answers": { "en": "PUMPKIN", "vi": "BÍ NGÔ", "ko": "호박", "zh": "南瓜" }, "difficulty": 0.5, "poolExtra": 5 },
+        { "id": "thanks-leaf", "emojis": ["🍁","🍂","🍃","🌳"], "answers": { "en": "LEAF", "vi": "LÁ", "ko": "잎", "zh": "叶子" }, "difficulty": 0.25, "poolExtra": 3 }
+      ]
+    },
+    {
+      "id": "christmas",
+      "holiday": "christmas",
+      "title": { "en": "Christmas", "vi": "Lễ Giáng Sinh", "ko": "크리스마스", "zh": "圣诞节" },
+      "puzzles": [
+        { "id": "xmas-tree", "emojis": ["🎄","🎁","⭐","✨"], "answers": { "en": "CHRISTMAS TREE", "vi": "CÂY THÔNG", "ko": "크리스마스트리", "zh": "圣诞树" }, "difficulty": 0.85, "poolExtra": 8 },
+        { "id": "xmas-santa", "emojis": ["🎅","🎁","🦌","🛷"], "answers": { "en": "SANTA", "vi": "ÔNG GIÀ NOEL", "ko": "산타", "zh": "圣诞老人" }, "difficulty": 0.3, "poolExtra": 4 },
+        { "id": "xmas-gift", "emojis": ["🎁","🎀","🎄","❤️"], "answers": { "en": "GIFT", "vi": "QUÀ", "ko": "선물", "zh": "礼物" }, "difficulty": 0.22, "poolExtra": 3 },
+        { "id": "xmas-snowman", "emojis": ["⛄","❄️","🧣","🥕"], "answers": { "en": "SNOWMAN", "vi": "NGƯỜI TUYẾT", "ko": "눈사람", "zh": "雪人" }, "difficulty": 0.5, "poolExtra": 5 },
+        { "id": "xmas-bell", "emojis": ["🔔","🎄","🎀","✨"], "answers": { "en": "BELL", "vi": "CHUÔNG", "ko": "종", "zh": "铃铛" }, "difficulty": 0.25, "poolExtra": 3 },
+        { "id": "xmas-star", "emojis": ["⭐","🎄","🌟","✨"], "answers": { "en": "STAR", "vi": "NGÔI SAO", "ko": "별", "zh": "星星" }, "difficulty": 0.25, "poolExtra": 3 },
+        { "id": "xmas-reindeer", "emojis": ["🦌","🛷","🎅","❄️"], "answers": { "en": "REINDEER", "vi": "TUẦN LỘC", "ko": "순록", "zh": "驯鹿" }, "difficulty": 0.62, "poolExtra": 5 },
+        { "id": "xmas-stocking", "emojis": ["🧦","🎁","🎄","🔥"], "answers": { "en": "STOCKING", "vi": "TẤT NOEL", "ko": "양말", "zh": "圣诞袜" }, "difficulty": 0.6, "poolExtra": 5 },
+        { "id": "xmas-candycane", "emojis": ["🍬","🎄","🔴","⚪"], "answers": { "en": "CANDY CANE", "vi": "KẸO GẬY", "zh": "拐杖糖" }, "difficulty": 0.7, "poolExtra": 6 },
+        { "id": "xmas-sleigh", "emojis": ["🛷","❄️","🎁","🌨️"], "answers": { "en": "SLEIGH", "vi": "XE TRƯỢT TUYẾT", "ko": "썰매", "zh": "雪橇" }, "difficulty": 0.45, "poolExtra": 4 },
+        { "id": "xmas-snow", "emojis": ["❄️","☃️","🌨️","⛄"], "answers": { "en": "SNOW", "vi": "TUYẾT", "ko": "눈", "zh": "雪" }, "difficulty": 0.25, "poolExtra": 3 },
+        { "id": "xmas-angel", "emojis": ["👼","⭐","🎄","✨"], "answers": { "en": "ANGEL", "vi": "THIÊN THẦN", "ko": "천사", "zh": "天使" }, "difficulty": 0.3, "poolExtra": 4 }
+      ]
+    },
+    {
+      "id": "teachersday",
+      "holiday": "teachers-day",
+      "title": { "en": "Teachers' Day", "vi": "Ngày Nhà Giáo Việt Nam", "ko": "스승의 날", "zh": "教师节" },
+      "puzzles": [
+        { "id": "teach-bouquet", "emojis": ["💐","🌹","🎀","👩‍🏫"], "answers": { "en": "BOUQUET", "vi": "BÓ HOA", "ko": "꽃다발", "zh": "花束" }, "difficulty": 0.55, "poolExtra": 5 },
+        { "id": "teach-book", "emojis": ["📚","📖","🎒","👩‍🏫"], "answers": { "en": "BOOK", "vi": "SÁCH", "ko": "책", "zh": "书" }, "difficulty": 0.22, "poolExtra": 3 },
+        { "id": "teach-blackboard", "emojis": ["📋","🏫","✍️","👩‍🏫"], "answers": { "en": "BLACKBOARD", "vi": "BẢNG ĐEN", "ko": "칠판", "zh": "黑板" }, "difficulty": 0.78, "poolExtra": 6 },
+        { "id": "teach-gift", "emojis": ["🎁","🎀","👩‍🏫","💐"], "answers": { "en": "GIFT", "vi": "QUÀ", "ko": "선물", "zh": "礼物" }, "difficulty": 0.22, "poolExtra": 3 },
+        { "id": "teach-school", "emojis": ["🏫","🎒","📚","🔔"], "answers": { "en": "SCHOOL", "vi": "TRƯỜNG HỌC", "ko": "학교", "zh": "学校" }, "difficulty": 0.42, "poolExtra": 4 },
+        { "id": "teach-teacher", "emojis": ["👩‍🏫","📚","✍️","🏫"], "answers": { "en": "TEACHER", "vi": "GIÁO VIÊN", "ko": "선생님", "zh": "老师" }, "difficulty": 0.5, "poolExtra": 5 },
+        { "id": "teach-pen", "emojis": ["🖊️","✍️","📝","📄"], "answers": { "en": "PEN", "vi": "BÚT", "ko": "펜", "zh": "钢笔" }, "difficulty": 0.15, "poolExtra": 3 },
+        { "id": "teach-backpack", "emojis": ["🎒","📚","✏️","🏫"], "answers": { "en": "BACKPACK", "vi": "BA LÔ", "ko": "책가방", "zh": "书包" }, "difficulty": 0.6, "poolExtra": 5 },
+        { "id": "teach-ruler", "emojis": ["📏","📐","✏️","📚"], "answers": { "en": "RULER", "vi": "THƯỚC", "ko": "자", "zh": "尺子" }, "difficulty": 0.32, "poolExtra": 4 }
+      ]
+    },
+    {
+      "id": "diwali",
+      "holiday": "diwali",
+      "title": { "en": "Diwali", "vi": "Lễ Hội Ánh Sáng Diwali" },
+      "puzzles": [
+        { "id": "diwali-oillamp", "emojis": ["🪔","🔥","✨","🎆"], "answers": { "en": "OIL LAMP", "vi": "ĐÈN DẦU", "zh": "油灯" }, "difficulty": 0.55, "poolExtra": 5 },
+        { "id": "diwali-firework", "emojis": ["🎆","🎇","✨","🌃"], "answers": { "en": "FIREWORK", "vi": "PHÁO HOA", "ko": "불꽃놀이", "zh": "烟花" }, "difficulty": 0.6, "poolExtra": 5 },
+        { "id": "diwali-candle", "emojis": ["🕯️","🔥","✨","🪔"], "answers": { "en": "CANDLE", "vi": "NẾN", "ko": "초", "zh": "蜡烛" }, "difficulty": 0.42, "poolExtra": 4 },
+        { "id": "diwali-sweets", "emojis": ["🍬","🍯","🥮","😋"], "answers": { "en": "SWEETS", "vi": "ĐỒ NGỌT", "zh": "甜点" }, "difficulty": 0.45, "poolExtra": 4 },
+        { "id": "diwali-peacock", "emojis": ["🦚","✨","🎨","🪔"], "answers": { "en": "PEACOCK", "vi": "CÔNG", "ko": "공작", "zh": "孔雀" }, "difficulty": 0.5, "poolExtra": 5 },
+        { "id": "diwali-gold", "emojis": ["🪙","💰","✨","🎁"], "answers": { "en": "GOLD", "vi": "VÀNG", "ko": "금", "zh": "金" }, "difficulty": 0.25, "poolExtra": 3 },
+        { "id": "diwali-lantern", "emojis": ["🏮","✨","🪔","🌃"], "answers": { "en": "LANTERN", "vi": "ĐÈN LỒNG", "ko": "등불", "zh": "灯笼" }, "difficulty": 0.5, "poolExtra": 5 },
+        { "id": "diwali-flower", "emojis": ["🌼","🌸","💐","🪔"], "answers": { "en": "FLOWER", "vi": "HOA", "ko": "꽃", "zh": "花" }, "difficulty": 0.42, "poolExtra": 4 }
+      ]
+    }
+  ]
+}

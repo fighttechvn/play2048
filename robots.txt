@@ -1,0 +1,6 @@
+# https://fighttechvn.github.io/play2048 is replaced at deploy time with the per-host origin
+# (gobrain.fighttech.vn or fighttechvn.github.io/play2048).
+User-agent: *
+Allow: /
+
+Sitemap: https://fighttechvn.github.io/play2048/sitemap.xml

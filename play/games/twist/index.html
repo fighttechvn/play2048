@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<title>Brain Twist</title>
+<style>
+  /* ---- Theme tokens (also consumed by art.js sprites; event skins recolor these) ---- */
+  :root {
+    --bg:#f4ede0; --fg:#2c2033; --panel:#fff8ee;
+    --tw-ink:#2c2033; --tw-accent:#7c5cff; --tw-warm:#ff9f45; --tw-cool:#3ec6e0;
+    --tw-good:#43c06a; --tw-bad:#ff5470; --tw-paper:#efe6d6; --tw-gold:#ffce3a;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Baloo 2",sans-serif; }
+  #app { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; }
+
+  /* ---- Top bar ---- */
+  /* Top padding is set at boot (--tw-top): it honours the safe-area top AND, when
+     embedded in the GoBrain hub, drops below the host's back/trophy overlay so the
+     ☰/🛒 buttons and title don't collide with them or the status bar. */
+  #top { width:100%; max-width:560px; display:flex; align-items:center; gap:10px;
+    padding:var(--tw-top, calc(10px + env(safe-area-inset-top,0px))) 14px 8px; }
+  #top .icon { width:40px; height:40px; border:0; border-radius:12px; background:var(--panel);
+    font-size:19px; cursor:pointer; box-shadow:0 2px 0 rgba(0,0,0,.06); }
+  #lvlLabel { font-weight:800; font-size:17px; flex:1; text-align:center; }
+  .coinpill { display:flex; align-items:center; gap:5px; background:var(--panel); border-radius:20px;
+    padding:6px 11px; font-weight:700; font-size:14px; box-shadow:0 2px 0 rgba(0,0,0,.06); }
+
+  /* ---- Prompt ---- */
+  #prompt { width:100%; max-width:520px; padding:6px 20px 10px; text-align:center;
+    font-size:19px; font-weight:700; line-height:1.35; min-height:30px; }
+
+  /* ---- Stage (9:16, resolution independent) ---- */
+  #stageWrap { flex:1; width:100%; display:flex; align-items:center; justify-content:center; padding:4px 10px; min-height:0; }
+  #stage { position:relative; aspect-ratio:9/16; height:100%; max-width:100%; border-radius:22px;
+    overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,.18); touch-action:none; }
+  .bg-day   { background:linear-gradient(#bfe6ff,#eaf7ff 60%,#d8f0d0); }
+  .bg-night { background:linear-gradient(#1c2140,#2b2154 70%,#3a2b5e); }
+  .bg-warm  { background:linear-gradient(#ffe6c2,#ffd9b0 60%,#ffcf9e); }
+  .bg-cool  { background:linear-gradient(#dfeaff,#eef2ff); }
+  .bg-water { background:linear-gradient(#cfeeff 0 46%,#7ec8e8 46%,#3ba4cf); }
+
+  .obj { position:absolute; transform:translate(-50%,-50%); cursor:pointer; user-select:none;
+    transition:filter .15s; }
+  .obj svg { width:100%; height:auto; display:block; overflow:visible; pointer-events:none; }
+  .obj.drag { cursor:grab; }
+  .obj.dragging { cursor:grabbing; filter:drop-shadow(0 8px 12px rgba(0,0,0,.3)); z-index:20; transition:none; }
+  .obj.hidden { display:none; }
+  .obj.hint-glow { animation:glow 1s ease-in-out infinite; }
+  @keyframes glow { 0%,100%{ filter:drop-shadow(0 0 0 rgba(124,92,255,0)); }
+    50%{ filter:drop-shadow(0 0 14px rgba(124,92,255,.9)); } }
+  .obj.wobble { animation:wob .3s; }
+  @keyframes wob { 25%{ transform:translate(-50%,-50%) rotate(-6deg); } 75%{ transform:translate(-50%,-50%) rotate(6deg); } }
+
+  /* ---- Action bar ---- */
+  #actions { width:100%; max-width:520px; display:flex; gap:10px; align-items:center;
+    padding:8px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .act { flex:1; border:0; border-radius:16px; padding:13px 8px; font-size:15px; font-weight:700;
+    background:var(--panel); color:var(--fg); cursor:pointer; box-shadow:0 3px 0 rgba(0,0,0,.08); }
+  .act.primary { background:var(--tw-accent); color:#fff; box-shadow:0 3px 0 rgba(0,0,0,.18); }
+  .act:active { transform:translateY(2px); box-shadow:none; }
+  #answerRow { display:none; width:100%; gap:8px; }
+  #answerRow.show { display:flex; }
+  #answer { flex:1; border:2px solid rgba(0,0,0,.1); border-radius:14px; padding:12px 14px;
+    font-size:17px; font-weight:600; background:#fff; color:var(--fg); }
+
+  /* ---- Overlays ---- */
+  .ov { position:absolute; inset:0; z-index:40; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:16px; text-align:center; padding:26px;
+    background:rgba(30,20,40,.5); backdrop-filter:blur(4px); }
+  .ov.hidden { display:none; }
+  .card { background:var(--panel); border-radius:22px; padding:24px 22px; max-width:340px; width:100%;
+    display:flex; flex-direction:column; align-items:center; gap:12px; box-shadow:0 20px 50px rgba(0,0,0,.3); }
+  .card h2 { margin:0; font-size:24px; } .card p { margin:0; opacity:.8; line-height:1.5; font-size:15px; }
+  .card .btn { background:var(--tw-accent); color:#fff; border:0; border-radius:14px; padding:14px 26px;
+    font-size:17px; font-weight:700; cursor:pointer; width:100%; }
+  .card .btn.ghost { background:rgba(0,0,0,.06); color:var(--fg); }
+  .hintbulb { font-size:44px; }
+  #grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; width:100%; }
+  .cell { aspect-ratio:1; border-radius:12px; border:0; font-weight:800; font-size:16px; cursor:pointer;
+    background:#fff; color:var(--fg); box-shadow:0 2px 0 rgba(0,0,0,.08); }
+  .cell.done { background:var(--tw-good); color:#fff; }
+  .cell.locked { background:rgba(0,0,0,.08); color:rgba(0,0,0,.3); cursor:default; }
+
+  /* ---- Ambient seasonal particle layer (behind sprites) ---- */
+  #fx { position:absolute; inset:0; pointer-events:none; z-index:0; }
+  /* ---- Store ---- */
+  .storeitem { display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%;
+    background:#fff; border-radius:14px; padding:11px 13px; }
+  .storeitem b { font-size:15px; } .storeitem small { opacity:.6; font-size:12px; display:block; }
+  .storebuy { border:0; border-radius:12px; padding:9px 14px; font-weight:700; background:var(--tw-accent);
+    color:#fff; cursor:pointer; white-space:nowrap; }
+  .storebuy.ghost { background:rgba(0,0,0,.08); color:var(--fg); }
+
+  /* ---- Confetti ---- */
+  #confetti { position:absolute; inset:0; pointer-events:none; z-index:39; overflow:hidden; }
+  .conf { position:absolute; width:10px; height:14px; border-radius:2px; will-change:transform; }
+  @keyframes fall { to { transform:translateY(120%) rotate(720deg); opacity:.2; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <button class="icon" id="btnMenu">☰</button>
+    <div id="lvlLabel">Level 1</div>
+    <div class="coinpill">💡 <span id="bulbs">3</span></div>
+    <div class="coinpill">🪙 <span id="coins">0</span></div>
+    <button class="icon" id="btnStore">🛒</button>
+  </div>
+  <div id="prompt"></div>
+  <div id="stageWrap"><div id="stage"><canvas id="fx"></canvas><div id="confetti"></div></div></div>
+  <div id="actions">
+    <div id="answerRow"><input id="answer" inputmode="text" autocomplete="off" placeholder="…" /><button class="act primary" id="btnSubmit">OK</button></div>
+    <button class="act" id="btnHint">💡 <span id="tHint">Hint</span></button>
+    <button class="act" id="btnRestart">↻ <span id="tRestart">Restart</span></button>
+  </div>
+
+  <div class="ov hidden" id="ovWin"><div class="card">
+    <div class="hintbulb">🎉</div>
+    <h2 id="winTitle">Solved!</h2>
+    <p id="winExplain"></p>
+    <div style="font-weight:800">🪙 +<span id="winCoins">0</span></div>
+    <button class="btn" id="btnNext">Next ›</button>
+  </div></div>
+
+  <div class="ov hidden" id="ovHint"><div class="card">
+    <div class="hintbulb">💡</div>
+    <h2 id="hintTitle">Hint</h2>
+    <p id="hintText"></p>
+    <button class="btn" id="btnHintClose" data-i="close">Got it</button>
+  </div></div>
+
+  <div class="ov hidden" id="ovGrid"><div class="card">
+    <h2 id="pickTitle">Levels</h2>
+    <div id="grid"></div>
+    <button class="btn ghost" id="btnGridClose" data-i="close">Close</button>
+  </div></div>
+
+  <div class="ov hidden" id="ovStore"><div class="card">
+    <div class="hintbulb">🛒</div>
+    <h2 id="storeTitle">Store</h2>
+    <div id="storeCoins" style="font-weight:700"></div>
+    <div id="storeBody" style="display:flex;flex-direction:column;gap:10px;width:100%"></div>
+    <button class="btn ghost" id="btnStoreClose" data-i="close">Close</button>
+  </div></div>
+</div>
+
+<script src="art.js"></script>
+<script>
+"use strict";
+(function () {
+  // ---------- i18n (bundle ships en + vi; server delivery adds the other 17) ----------
+  var LANG = (function () {
+    try { var q = new URLSearchParams(location.search).get("lang"); if (q) return q.slice(0, 2); } catch (e) {}
+    try { var s = localStorage.getItem("gobrain.lang") || localStorage.getItem("go2048.lang"); if (s) return s.slice(0, 2); } catch (e) {}
+    return (navigator.language || "en").slice(0, 2);
+  })();
+  var VI = LANG === "vi";
+
+  // ---------- Top inset: clear the status bar + the host's back/trophy overlay ----------
+  (function () {
+    var saa = 0; try { saa = parseInt(new URLSearchParams(location.search).get("saa"), 10) || 0; } catch (e) {}
+    var inHub = false; try { inHub = window.self !== window.top; } catch (e) { inHub = true; }
+    // Embedded in the GoBrain hub: it overlays a ~44px Back (top-left) + Trophy
+    // (top-right) at (14px + safe-area) over our iframe, and env(safe-area) reads 0
+    // inside the iframe on Android — so drop our top bar below both using the
+    // host-supplied `saa`. Standalone: the normal safe-area padding is enough.
+    document.documentElement.style.setProperty(
+      "--tw-top", inHub ? (64 + saa) + "px" : "calc(10px + env(safe-area-inset-top,0px))");
+  })();
+
+  var UI = {
+    level: VI ? "Màn" : "Level", hint: VI ? "Gợi ý" : "Hint", restart: VI ? "Chơi lại" : "Restart",
+    solved: VI ? "Giải được rồi!" : "Solved!", next: VI ? "Tiếp ›" : "Next ›", close: VI ? "Đã hiểu" : "Got it",
+    levels: VI ? "Các màn" : "Levels", noBulb: VI ? "Hết đèn gợi ý — tặng bạn 1 cái!" : "Out of hints — here's one on us!",
+    typeAnswer: VI ? "Nhập câu trả lời…" : "Type your answer…", shake: VI ? "🤳 Lắc" : "🤳 Shake",
+    store: VI ? "Cửa hàng" : "Store", buyHint: VI ? "Mua gợi ý" : "Buy hint", watchAd: VI ? "Xem quảng cáo" : "Watch ad",
+    removeAds: VI ? "Tắt quảng cáo" : "Remove ads", notEnough: VI ? "Không đủ xu" : "Not enough coins",
+    adPlaying: VI ? "Đang phát quảng cáo…" : "Ad playing…", gotHint: VI ? "+1 gợi ý!" : "+1 hint!", buy: VI ? "Mua" : "Buy",
+  };
+  function t(o) { return o ? (o[LANG] || o.en || o.vi || "") : ""; }
+  document.getElementById("tHint").textContent = UI.hint;
+  document.getElementById("tRestart").textContent = UI.restart;
+  document.querySelectorAll('[data-i="close"]').forEach(function (b) { b.textContent = UI.close; });
+  document.getElementById("pickTitle").textContent = UI.levels;
+  document.getElementById("storeTitle").textContent = UI.store;
+
+  // ---------- Analytics bridge (matches the other games' __gb envelope) ----------
+  function gb(name, params) {
+    try { if (window.parent && window.parent !== window) window.parent.postMessage({ __gb: 1, name: name, params: params || {} }, "*"); } catch (e) {}
+    try { if (window.webkit && webkit.messageHandlers && webkit.messageHandlers.gbNative) webkit.messageHandlers.gbNative.postMessage({ name: name, params: params || {} }); } catch (e) {}
+  }
+
+  // ---------- Leaderboard submit ----------
+  // Same shape as the GBLB block the other games carry: time the level from
+  // load to win and POST it to /scores so the 🏆 board has something to rank.
+  var lbT0 = 0;
+  function lbBase() {
+    try { var o = localStorage.getItem("gobrain.api.base"); if (o) return o.replace(/\/$/, ""); } catch (e) {}
+    var native = false;
+    try { var C = window.Capacitor || (window.parent && window.parent.Capacitor);
+      if (C && typeof C.isNativePlatform === "function") native = C.isNativePlatform(); } catch (e) {}
+    if (!native) native = /^capacitor:|^ionic:/.test(location.protocol);
+    return native ? "https://gobrain.fighttech.vn/api/v1" : "/api/v1";
+  }
+  function lbToken() {
+    try { return localStorage.getItem("CapacitorStorage.gobrain.player.token") || localStorage.getItem("gobrain.player.token"); }
+    catch (e) { return null; }
+  }
+  function lbKey() {
+    try { return localStorage.getItem("gobrain.api.key") || "gobrain-dev-client-key"; } catch (e) { return "gobrain-dev-client-key"; }
+  }
+  function lbStart() { lbT0 = Date.now(); }
+  function lbReport(lvl) {
+    if (!lbT0) return;
+    var ms = Date.now() - lbT0; lbT0 = 0;
+    var tok = lbToken(); if (!tok) return;
+    try {
+      fetch(lbBase() + "/scores", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": lbKey(), "authorization": "Bearer " + tok },
+        body: JSON.stringify({ gameId: "twist", level: lvl, durationMs: ms }),
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
+  // ---------- Persistent state ----------
+  var ST = {
+    coins: +(localStorage.getItem("twist.coins") || 0),
+    bulbs: Math.max(0, +(localStorage.getItem("twist.bulbs") || 3)),
+    solved: JSON.parse(localStorage.getItem("twist.solved") || "[]"),
+    cur: +(localStorage.getItem("twist.cur") || 0),
+  };
+  function save() {
+    localStorage.setItem("twist.coins", ST.coins);
+    localStorage.setItem("twist.bulbs", ST.bulbs);
+    localStorage.setItem("twist.solved", JSON.stringify(ST.solved));
+    localStorage.setItem("twist.cur", ST.cur);
+  }
+  function unlocked(i) { return i <= maxUnlocked(); }
+  function maxUnlocked() { return Math.min(LEVELS.length - 1, ST.solved.length); }
+
+  // ---------- DOM ----------
+  var stage = document.getElementById("stage"), promptEl = document.getElementById("prompt"),
+      lvlLabel = document.getElementById("lvlLabel"), bulbsEl = document.getElementById("bulbs"),
+      coinsEl = document.getElementById("coins"), answerRow = document.getElementById("answerRow"),
+      answerInp = document.getElementById("answer"), confettiEl = document.getElementById("confetti");
+
+  var LEVELS = [], level = null, prog = null, hintIdx = 0, solvedThis = false, PREVIEW = false;
+
+  function syncHud() { bulbsEl.textContent = ST.bulbs; coinsEl.textContent = ST.coins;
+    lvlLabel.textContent = UI.level + " " + ((level ? level.index : ST.cur + 1)); }
+
+  // ---------- Render a LevelDoc ----------
+  function load(i) {
+    level = LEVELS[i]; if (!level) return;
+    prog = { i: 0, n: 0, set: {} }; hintIdx = 0; solvedThis = false;
+    answerRow.classList.remove("show");
+    // stage background + objects
+    [].slice.call(stage.querySelectorAll(".obj")).forEach(function (n) { n.remove(); });
+    stage.className = ""; stage.classList.add("bg-" + ((level.scene && level.scene.bg) || "day"));
+    (level.scene && level.scene.objects || []).forEach(function (o) {
+      var el = document.createElement("div");
+      el.className = "obj" + (o.drag ? " drag" : "") + (o.hidden ? " hidden" : "");
+      el.dataset.id = o.id;
+      el.style.left = o.x + "%"; el.style.top = o.y + "%"; el.style.width = (o.w || 18) + "%";
+      if (o.rot) el.style.transform = "translate(-50%,-50%) rotate(" + o.rot + "deg)";
+      el.innerHTML = window.TwistArt ? TwistArt.svg(o.sprite) : o.sprite;
+      stage.appendChild(el);
+    });
+    promptEl.textContent = t(level.prompt);
+    if (level.solution && level.solution.type === "text") { answerRow.classList.add("show"); answerInp.value = ""; answerInp.placeholder = UI.typeAnswer; }
+    ensureShakeButton();
+    syncHud();
+    if (!PREVIEW) { gb("level_start", { gameId: "twist", level: level.index, id: level.id }); lbStart(); }
+  }
+
+  // ---------- Geometry helpers (client px → stage %) ----------
+  function pct(clientX, clientY) { var r = stage.getBoundingClientRect();
+    return { x: ((clientX - r.left) / r.width) * 100, y: ((clientY - r.top) / r.height) * 100 }; }
+  function objAt(id) { return stage.querySelector('.obj[data-id="' + id + '"]'); }
+  function objCenterPct(id) { var el = objAt(id); if (!el) return null;
+    return { x: parseFloat(el.style.left), y: parseFloat(el.style.top), w: parseFloat(el.style.width) }; }
+  function overObj(x, y, id) { var c = objCenterPct(id); if (!c) return false;
+    var half = c.w / 2 + 4; return Math.abs(x - c.x) < half && Math.abs(y - c.y) < half * 1.4; }
+  function inRegion(x, y, rg) { return x >= rg.x && x <= rg.x + rg.w && y >= rg.y && y <= rg.y + rg.h; }
+  function offscreen(x, y) { return x < 0 || x > 100 || y < 0 || y > 100; }
+
+  // ---------- Interaction: pointer drag/tap ----------
+  var drag = null;
+  stage.addEventListener("pointerdown", function (e) {
+    var el = e.target.closest && e.target.closest(".obj"); if (!el || solvedThis) return;
+    var p = pct(e.clientX, e.clientY);
+    drag = { el: el, id: el.dataset.id, isDrag: el.classList.contains("drag"),
+      x0: p.x, y0: p.y, moved: false };
+    try { stage.setPointerCapture(e.pointerId); } catch (er) {}
+  });
+  stage.addEventListener("pointermove", function (e) {
+    if (!drag) return; var p = pct(e.clientX, e.clientY);
+    if (Math.abs(p.x - drag.x0) > 2 || Math.abs(p.y - drag.y0) > 2) drag.moved = true;
+    if (drag.isDrag && drag.moved) { drag.el.classList.add("dragging");
+      drag.el.style.left = p.x + "%"; drag.el.style.top = p.y + "%"; }
+  });
+  stage.addEventListener("pointerup", function (e) {
+    if (!drag) return; var p = pct(e.clientX, e.clientY), d = drag; drag = null;
+    d.el.classList.remove("dragging");
+    if (d.isDrag && d.moved) {
+      var dropId = null;
+      (level.scene.objects || []).forEach(function (o) { if (o.id !== d.id && !objAt(o.id).classList.contains("hidden") && overObj(p.x, p.y, o.id)) dropId = o.id; });
+      evaluate({ kind: "drop", id: d.id, x: p.x, y: p.y, dropId: dropId });
+    } else {
+      wobble(d.el); evaluate({ kind: "tap", id: d.id });
+    }
+  });
+
+  // ---------- Solution evaluation ----------
+  function matchTo(a, to) { if (to === "offscreen") return offscreen(a.x, a.y);
+    if (to && to.x !== undefined) return inRegion(a.x, a.y, to); return a.dropId === to; }
+  function evaluate(a) {
+    if (!level || solvedThis) return; var s = level.solution;
+    switch (s.type) {
+      case "tap": if (a.kind === "tap" && a.id === s.target) win(); break;
+      case "tapCount": if (a.kind === "tap" && a.id === s.target) { prog.n++; if (prog.n >= s.times) win(); } break;
+      case "tapAll": if (a.kind === "tap" && s.targets.indexOf(a.id) >= 0) { prog.set[a.id] = 1;
+        if (Object.keys(prog.set).length >= s.targets.length) win(); } break;
+      case "drag": if (a.kind === "drop" && a.id === s.target && matchTo(a, s.to)) { revealHidden(a.id, s.to); win(); } break;
+      case "combine": if (a.kind === "drop" && a.id === s.a && a.dropId === s.b) win(); break;
+      case "region": if (a.kind === "drop" && a.id === s.target && inRegion(a.x, a.y, s.region)) win(); break;
+      case "shake": if (a.kind === "shake") win(); break;
+      case "sequence": stepSeq(a, s); break;
+    }
+  }
+  function stepSeq(a, s) {
+    var st = s.steps[prog.i]; if (!st) return; var ok = false;
+    if (st.op === "tap") ok = a.kind === "tap" && a.id === st.target;
+    else if (st.op === "drag") ok = a.kind === "drop" && a.id === st.target && matchTo(a, st.to);
+    else if (st.op === "combine") ok = a.kind === "drop" && a.id === st.a && a.dropId === st.b;
+    if (ok) { if (st.op === "drag" && st.to === "offscreen") revealHidden(st.target, st.to);
+      prog.i++; if (prog.i >= s.steps.length) win(); }
+  }
+  // Dragging an object off-screen reveals whatever was hidden beneath it.
+  function revealHidden(dragId, to) {
+    if (to !== "offscreen") return; var el = objAt(dragId); if (el) el.classList.add("hidden");
+    (level.scene.objects || []).forEach(function (o) { if (o.hidden) { var h = objAt(o.id); if (h) h.classList.remove("hidden"); } });
+  }
+
+  // ---------- Text answers ----------
+  function norm(s) { return (s || "").toString().trim().toLowerCase().replace(/\s+/g, ""); }
+  function submitAnswer() {
+    if (!level || level.solution.type !== "text" || solvedThis) return;
+    var v = norm(answerInp.value); if (!v) return;
+    if ((level.solution.answer || []).some(function (a) { return norm(a) === v; })) win();
+    else { answerInp.style.borderColor = "var(--tw-bad)"; setTimeout(function () { answerInp.style.borderColor = ""; }, 500); }
+  }
+  document.getElementById("btnSubmit").onclick = submitAnswer;
+  answerInp.addEventListener("keydown", function (e) { if (e.key === "Enter") submitAnswer(); });
+
+  // ---------- Shake (device motion + on-screen fallback) ----------
+  var lastAccel = null, shakeBtn = null;
+  function ensureShakeButton() {
+    var need = level && level.solution && level.solution.type === "shake";
+    if (need && !shakeBtn) { shakeBtn = document.createElement("button"); shakeBtn.className = "act primary";
+      shakeBtn.textContent = UI.shake; shakeBtn.onclick = function () { evaluate({ kind: "shake" }); };
+      document.getElementById("actions").insertBefore(shakeBtn, document.getElementById("btnHint")); }
+    else if (!need && shakeBtn) { shakeBtn.remove(); shakeBtn = null; }
+  }
+  window.addEventListener("devicemotion", function (e) {
+    var a = e.accelerationIncludingGravity; if (!a) return;
+    if (lastAccel) { var d = Math.abs(a.x - lastAccel.x) + Math.abs(a.y - lastAccel.y) + Math.abs(a.z - lastAccel.z);
+      if (d > 28) evaluate({ kind: "shake" }); }
+    lastAccel = { x: a.x, y: a.y, z: a.z };
+  });
+
+  // ---------- Win ----------
+  function win() {
+    if (solvedThis) return; solvedThis = true;
+    var coins = (level.reward && level.reward.coins) || 10;
+    if (!PREVIEW) {
+      ST.coins += coins;
+      if (ST.solved.indexOf(level.id) < 0) ST.solved.push(level.id);
+      save(); syncProgress(); gb("level_complete", { gameId: "twist", level: level.index, id: level.id, coins: coins });
+      lbReport(level.index);
+    }
+    confetti();
+    document.getElementById("winTitle").textContent = UI.solved;
+    document.getElementById("winExplain").textContent = t(level.explain);
+    document.getElementById("winCoins").textContent = coins;
+    document.getElementById("btnNext").textContent = UI.next;
+    syncHud();
+    setTimeout(function () { document.getElementById("ovWin").classList.remove("hidden"); }, 550);
+    if (PREVIEW) try { window.parent.postMessage({ __twistSolved: 1, id: level.id }, "*"); } catch (e) {}
+  }
+  function confetti() {
+    var cols = ["var(--tw-accent)", "var(--tw-warm)", "var(--tw-cool)", "var(--tw-good)", "var(--tw-gold)", "var(--tw-bad)"];
+    for (var i = 0; i < 46; i++) { var c = document.createElement("i"); c.className = "conf";
+      c.style.left = Math.random() * 100 + "%"; c.style.top = "-8%";
+      c.style.background = cols[i % cols.length];
+      c.style.animation = "fall " + (0.9 + Math.random() * 0.8) + "s ease-in " + (Math.random() * 0.3) + "s forwards";
+      confettiEl.appendChild(c); setTimeout((function (n) { return function () { n.remove(); }; })(c), 2200); }
+  }
+  function wobble(el) { el.classList.remove("wobble"); void el.offsetWidth; el.classList.add("wobble"); }
+
+  // ---------- Hints ----------
+  document.getElementById("btnHint").onclick = function () {
+    if (!level || !level.hints || !level.hints.length) return;
+    if (ST.bulbs <= 0) { refreshStore(); openStore(); return; }  // out of hints → store (buy / rewarded ad)
+    if (ST.bulbs > 0 && hintIdx < level.hints.length) {
+      ST.bulbs--; save(); syncHud();
+      document.getElementById("hintText").textContent = t(level.hints[hintIdx]);
+      document.getElementById("ovHint").classList.remove("hidden");
+      // 2nd hint also highlights the target with a glow (a light "shader" cue)
+      if (hintIdx >= 1) glowTarget();
+      hintIdx++; gb("hint_used", { gameId: "twist", level: level.index, tier: hintIdx });
+    }
+  };
+  function glowTarget() { var s = level.solution, ids = [];
+    if (s.target) ids.push(s.target); if (s.a) ids.push(s.a); if (s.b) ids.push(s.b);
+    if (s.targets) ids = ids.concat(s.targets);
+    if (s.steps) s.steps.forEach(function (st) { if (st.target) ids.push(st.target); if (st.a) ids.push(st.a); });
+    ids.forEach(function (id) { var el = objAt(id); if (el) { el.classList.remove("hidden"); el.classList.add("hint-glow");
+      setTimeout(function () { el.classList.remove("hint-glow"); }, 3000); } }); }
+  function toast(msg) { var d = document.createElement("div"); d.textContent = msg;
+    d.style.cssText = "position:absolute;left:50%;bottom:14%;transform:translateX(-50%);background:var(--tw-ink);color:#fff;padding:9px 16px;border-radius:20px;font-size:13px;z-index:50;opacity:.95";
+    stage.appendChild(d); setTimeout(function () { d.remove(); }, 1800); }
+
+  // ---------- Buttons / nav ----------
+  document.getElementById("btnHintClose").onclick = function () { document.getElementById("ovHint").classList.add("hidden"); };
+  document.getElementById("btnRestart").onclick = function () { document.getElementById("ovWin").classList.add("hidden"); load(ST.cur); };
+  document.getElementById("btnNext").onclick = function () {
+    document.getElementById("ovWin").classList.add("hidden");
+    if (ST.cur < LEVELS.length - 1) { ST.cur++; save(); load(ST.cur); }
+    else openGrid();
+  };
+  document.getElementById("btnMenu").onclick = openGrid;
+  document.getElementById("btnGridClose").onclick = function () { document.getElementById("ovGrid").classList.add("hidden"); };
+  function openGrid() {
+    var g = document.getElementById("grid"); g.innerHTML = "";
+    LEVELS.forEach(function (lv, i) { var b = document.createElement("button");
+      var done = ST.solved.indexOf(lv.id) >= 0, lock = !unlocked(i);
+      b.className = "cell" + (done ? " done" : "") + (lock ? " locked" : ""); b.textContent = i + 1;
+      if (!lock) b.onclick = function () { document.getElementById("ovGrid").classList.add("hidden"); ST.cur = i; save(); load(i); };
+      g.appendChild(b); });
+    document.getElementById("ovGrid").classList.remove("hidden");
+  }
+
+  // ================= P5: economy — store, rewarded ads, server sync =================
+  var HINT_COST = 40;
+  function refreshStore() { document.getElementById("storeCoins").textContent = "🪙 " + ST.coins + "   💡 " + ST.bulbs; }
+  function storeRow(title, price, label, onBuy, ghost) {
+    var row = document.createElement("div"); row.className = "storeitem";
+    var l = document.createElement("div"); l.innerHTML = "<b>" + title + "</b><small>" + price + "</small>";
+    var b = document.createElement("button"); b.className = "storebuy" + (ghost ? " ghost" : ""); b.textContent = label; b.onclick = onBuy;
+    row.appendChild(l); row.appendChild(b); return row;
+  }
+  function openStore() {
+    var box = document.getElementById("storeBody"); box.innerHTML = "";
+    box.appendChild(storeRow("💡 " + UI.buyHint, HINT_COST + " 🪙", UI.buy, function () {
+      if (ST.coins < HINT_COST) { toast(UI.notEnough); return; }
+      ST.coins -= HINT_COST; ST.bulbs++; save(); syncHud(); syncProgress(); refreshStore(); toast(UI.gotHint);
+    }));
+    box.appendChild(storeRow("🎬 " + UI.watchAd, "+1 💡", "▶", watchRewarded, true));
+    box.appendChild(storeRow("🚫 " + UI.removeAds, "$4.99", "IAP", function () { gb("iap_request", { sku: "remove_ads" }); }, true));
+    document.getElementById("ovStore").classList.remove("hidden");
+  }
+  var adBusy = false;
+  function watchRewarded() {
+    if (adBusy) return; adBusy = true; toast(UI.adPlaying);
+    // Ask the native host to show a real rewarded ad; it grants via __twistReward.
+    gb("ad_rewarded_request", { reward: "hint" });
+    // Web fallback (no ad SDK): simulate a short ad, then grant.
+    setTimeout(function () { if (adBusy) { adBusy = false; grantReward("hint", 1); } }, 2500);
+  }
+  function grantReward(kind, n) {
+    adBusy = false;
+    if (kind === "coins") ST.coins += n; else ST.bulbs += n;
+    save(); syncHud(); syncProgress(); refreshStore(); toast(UI.gotHint);
+  }
+  window.__twistReward = grantReward; // native host calls this after a real rewarded ad
+  document.getElementById("btnStore").onclick = function () { refreshStore(); openStore(); };
+  document.getElementById("btnStoreClose").onclick = function () { document.getElementById("ovStore").classList.add("hidden"); };
+
+  // best-effort progress sync to the content server (only if a base + token exist)
+  function apiBase() { try { return localStorage.getItem("go2048.api.base") || localStorage.getItem("twist.api.base") || ""; } catch (e) { return ""; } }
+  function apiKey() { try { return localStorage.getItem("go2048.api.key") || ""; } catch (e) { return ""; } }
+  function apiToken() { try { return localStorage.getItem("go2048.token") || localStorage.getItem("gobrain.token") || ""; } catch (e) { return ""; } }
+  var syncT = null;
+  function syncProgress() {
+    var base = apiBase(), tok = apiToken(); if (!base || !tok) return;
+    clearTimeout(syncT); syncT = setTimeout(function () {
+      try {
+        fetch(base.replace(/\/$/, "") + "/twist/progress", {
+          method: "POST",
+          headers: { "content-type": "application/json", "authorization": "Bearer " + tok, "x-api-key": apiKey() },
+          body: JSON.stringify({ coins: ST.coins, hints: ST.bulbs, solved: ST.solved }),
+        }).catch(function () {});
+      } catch (e) {}
+    }, 800);
+  }
+
+  // ================= P6: seasonal skins + ambient particle effects =================
+  var EVENTS = {
+    tet:        { tokens: { "--tw-accent": "#e23b3b", "--tw-gold": "#ffcf3a", "--bg": "#fff3ec", "--panel": "#fff7ef" }, fx: "lantern" },
+    midautumn:  { tokens: { "--tw-accent": "#e8862a", "--tw-gold": "#ffcf3a", "--bg": "#fff3e0" }, fx: "lantern" },
+    lantern:    { tokens: { "--tw-accent": "#e8862a" }, fx: "lantern" },
+    christmas:  { tokens: { "--tw-accent": "#c0392b", "--tw-good": "#2e8b57", "--bg": "#eef5f0" }, fx: "snow" },
+    newyear:    { tokens: { "--tw-accent": "#7c5cff", "--tw-gold": "#ffce3a" }, fx: "firework" },
+    halloween:  { tokens: { "--tw-accent": "#ff7518", "--tw-ink": "#2a1e35", "--bg": "#211630", "--panel": "#2e2140", "--fg": "#f4e9ff" }, fx: "bat" },
+    valentine:  { tokens: { "--tw-accent": "#ff5a8a", "--bg": "#fff0f4" }, fx: "heart" },
+    autumn:     { tokens: { "--tw-accent": "#c0622a" }, fx: "leaf" },
+    thanksgiving: { tokens: { "--tw-accent": "#c0622a" }, fx: "leaf" },
+    flowers:    { tokens: { "--tw-accent": "#ff5a8a" }, fx: "petal" },
+    easter:     { tokens: { "--tw-accent": "#7ac0e0" }, fx: "petal" },
+    summer:     { tokens: { "--tw-accent": "#22b3c9" }, fx: "sun" },
+  };
+  var EMOJI = { lantern: "🏮", heart: "❤️", petal: "🌸", leaf: "🍂", bat: "🦇", sun: "☀️" };
+  var fxCanvas = document.getElementById("fx"), fxCtx = fxCanvas.getContext("2d");
+  var fxKind = null, fxParticles = [], fxRAF = null;
+  function applyEvent(name) {
+    var ev = EVENTS[name], root = document.documentElement;
+    if (ev) { Object.keys(ev.tokens).forEach(function (k) { root.style.setProperty(k, ev.tokens[k]); }); fxKind = ev.fx; gb("event_active", { event: name, fx: ev.fx }); }
+    else fxKind = null;
+    startFx();
+  }
+  function sizeFx() { var r = stage.getBoundingClientRect(); fxCanvas.width = Math.max(1, r.width); fxCanvas.height = Math.max(1, r.height); }
+  function mkParticle() {
+    var W = fxCanvas.width, H = fxCanvas.height, R = Math.random;
+    if (fxKind === "snow") return { kind: "snow", x: R() * W, y: -8, vx: (R() - 0.5) * 0.5, vy: 0.6 + R() * 1.2, size: 2 + R() * 2.5, life: 1e9, sway: false };
+    if (fxKind === "petal" || fxKind === "leaf") return { emoji: EMOJI[fxKind], x: R() * W, y: -20, vx: (R() - 0.5) * 0.6, vy: 0.7 + R() * 1.2, rot: R() * 6, vr: (R() - 0.5) * 0.06, size: 16 + R() * 12, life: 1e9, sway: true };
+    if (fxKind === "bat") { var fromL = R() < 0.5; return { emoji: EMOJI.bat, x: fromL ? -20 : W + 20, y: 20 + R() * H * 0.5, vx: (fromL ? 1 : -1) * (0.8 + R()), vy: 0, rot: 0, vr: 0, size: 18 + R() * 10, life: 1e9, sway: true }; }
+    // lantern / heart / sun rise from the bottom
+    return { emoji: EMOJI[fxKind] || "✨", x: R() * W, y: H + 20, vx: (R() - 0.5) * 0.3, vy: -(0.4 + R() * 0.6), rot: 0, vr: (R() - 0.5) * 0.02, size: 18 + R() * 14, life: 1e9, sway: true };
+  }
+  function burst() {
+    var W = fxCanvas.width, cx = 0.2 * W + Math.random() * 0.6 * W, cy = 0.15 * fxCanvas.height + Math.random() * 0.4 * fxCanvas.height;
+    var cols = ["#ff5470", "#ffce3a", "#7c5cff", "#3ec6e0", "#43c06a", "#ff9f45"], col = cols[Math.floor(Math.random() * cols.length)];
+    for (var k = 0; k < 26; k++) { var a = (k / 26) * Math.PI * 2, sp = 1.4 + Math.random() * 1.6;
+      fxParticles.push({ kind: "spark", x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, size: 2.4, life: 42, color: col }); }
+  }
+  function fxLoop() {
+    var W = fxCanvas.width, H = fxCanvas.height, ctx = fxCtx; ctx.clearRect(0, 0, W, H);
+    if (fxKind === "firework") { if (Math.random() < 0.035) burst(); }
+    else if (fxParticles.length < 42 && Math.random() < 0.5) fxParticles.push(mkParticle());
+    for (var i = fxParticles.length - 1; i >= 0; i--) {
+      var p = fxParticles[i];
+      if (p.kind === "spark") p.vy += 0.03;
+      p.x += p.vx; p.y += p.vy; if (p.rot !== undefined) p.rot += p.vr || 0; p.life -= 1;
+      if (p.sway) p.x += Math.sin((H - p.y) / 38) * 0.5;
+      if (p.kind === "snow") { ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 7); ctx.fill(); }
+      else if (p.kind === "spark") { ctx.globalAlpha = Math.max(0, p.life / 42); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
+      else { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.font = p.size + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(p.emoji, 0, 0); ctx.restore(); }
+      if (p.life <= 0 || p.y < -40 || p.y > H + 40 || p.x < -50 || p.x > W + 50) fxParticles.splice(i, 1);
+    }
+    fxRAF = requestAnimationFrame(fxLoop);
+  }
+  function startFx() {
+    if (fxRAF) { cancelAnimationFrame(fxRAF); fxRAF = null; }
+    fxParticles = []; fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+    if (!fxKind) return; sizeFx(); fxLoop();
+  }
+  window.addEventListener("resize", function () { if (fxKind) sizeFx(); });
+  function initEvents() {
+    var ev = null; try { ev = new URLSearchParams(location.search).get("event"); } catch (e) {}
+    if (ev) { applyEvent(ev); return; }
+    var base = apiBase(); if (!base) return;
+    try {
+      fetch(base.replace(/\/$/, "") + "/twist/manifest", { headers: { "x-api-key": apiKey() } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { var e = (d.events || []).find(function (x) { return EVENTS[x.theme] || EVENTS[x.id]; }); if (e) applyEvent(EVENTS[e.theme] ? e.theme : e.id); })
+        .catch(function () {});
+    } catch (e) {}
+  }
+
+  // ---------- Admin live-preview handshake (mirrors Beat's /design) ----------
+  window.addEventListener("message", function (e) {
+    var d = e.data; if (d && d.__twistPreview && d.level) { PREVIEW = true; LEVELS = [Object.assign({ index: 1 }, d.level)]; load(0); }
+  });
+
+  // ---------- Boot ----------
+  fetch("levels.json").then(function (r) { return r.json(); }).then(function (data) {
+    LEVELS = data.levels || []; if (ST.cur > LEVELS.length - 1) ST.cur = 0;
+    if (!PREVIEW) load(ST.cur);
+    if (!PREVIEW) initEvents();
+  }).catch(function () { /* preview mode may drive levels via postMessage */ });
+
+  try { if (window.parent && window.parent !== window) window.parent.postMessage({ __twistReady: 1 }, "*"); } catch (e) {}
+  window.__twist = { load: load, evaluate: evaluate, state: ST, applyEvent: applyEvent, openStore: openStore, grantReward: grantReward, get level() { return level; } };
+})();
+</script>
+</body>
+</html>

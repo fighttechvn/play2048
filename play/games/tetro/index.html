@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Tetro</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--field:#eceae3;--accent:#8f5bd6;--accent2:#6741a5;--warn:#e03131;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 14px;font-weight:700;white-space:nowrap;font-size:14px}
+  #ttl{margin-right:auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win p{margin:0;color:#555;font-size:15px;line-height:1.5}
+  .win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--accent);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  .pad{display:grid;direction:ltr;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:-4px}
+  .pb{padding:0;border-radius:14px;border:1px solid var(--bd);background:#fff;font-size:28px;font-weight:700;cursor:pointer;color:var(--ink);touch-action:manipulation;min-height:66px}
+  .pb:active{background:#f0eefa}
+  .pb.sub{font-size:17px;letter-spacing:.04em}
+  .pb.span2{grid-column:span 2}
+  #brot{font-size:38px;line-height:1}
+  /* controls: big keys, or one swipe pad in their place (body.swipe) */
+  .swp{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:150px;padding:12px 16px;border-radius:18px;border:2px dashed var(--bd);background:var(--card);color:#8c8c8c;font-weight:700;font-size:14.5px;text-align:center;line-height:1.4;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .swp b{font-size:30px;opacity:.45;margin-bottom:6px}
+  .swp.on{background:#f3f1ea;border-color:#b9b9b9}
+  body.swipe .pad{display:none}
+  body.swipe .swp{display:flex}
+  .seg{display:flex;flex:0 0 auto;border:1px solid var(--bd);border-radius:999px;background:var(--btn);padding:3px}
+  .seg button{border:0;background:transparent;border-radius:999px;padding:0 13px;min-height:44px;font-weight:700;font-size:14px;color:#8a8a8a;cursor:pointer;white-space:nowrap}
+  .seg button.on{background:var(--field);color:var(--ink)}
+  @media (max-width:360px){.seg button span{display:none}}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="ttl">Tetro</span><span class="pill" id="sc">0</span><span class="pill" id="bst">★ 0</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="pad">
+    <button class="pb" id="bl">&#9664;</button>
+    <button class="pb" id="brot">&#8635;</button>
+    <button class="pb" id="br">&#9654;</button>
+    <button class="pb sub" id="bhold">HOLD</button>
+    <button class="pb sub span2" id="bdrop">DROP</button>
+  </div>
+  <div class="swp" id="swp"><b>&#128070;</b><span id="swph"></span></div>
+  <div class="btns">
+    <button class="btn" id="restart">Restart</button>
+    <div class="seg" id="ctl"><button data-m="buttons">&#127918;<span></span></button><button data-m="swipe">&#128070;<span></span></button></div>
+  </div>
+  <div class="help" id="helpcard"></div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Slide the falling piece with <b>◀ ▶</b> (hold to repeat), tap <b>↻</b> or the well to rotate, <b>DROP</b> to slam it down, <b>HOLD</b> to park a piece for later. Fill a whole row to clear it — four at once is worth far more than four singles. Back-to-back clears and T-spins multiply the score; the speed rises every 10 lines.",
+    vi:"<b>Cách chơi.</b> Dùng <b>◀ ▶</b> để trượt khối đang rơi (giữ để lặp), chạm <b>↻</b> hoặc chạm vào giếng để xoay, <b>DROP</b> để thả rơi tức thì, <b>HOLD</b> để cất khối lại dùng sau. Lấp đầy một hàng để xoá — xoá 4 hàng cùng lúc ăn điểm cao hơn nhiều so với xoá lẻ 4 lần. Xoá liên tiếp và đòn xoay chữ T nhân điểm; cứ 10 hàng tốc độ lại tăng.",
+    ko:"<b>플레이 방법.</b> <b>◀ ▶</b>로 떨어지는 블록을 옮기고(길게 누르면 연속), <b>↻</b> 또는 필드를 탭해 회전, <b>DROP</b>으로 즉시 내리고, <b>HOLD</b>로 블록을 보관하세요. 한 줄을 가득 채우면 지워집니다 — 네 줄을 한 번에 지우면 한 줄씩 네 번보다 훨씬 큰 점수를 얻습니다. 연속 클리어와 T-스핀은 점수를 배로 늘리고, 10줄마다 속도가 빨라집니다.",
+    zh:"<b>玩法。</b> 用 <b>◀ ▶</b> 左右移动下落的方块（长按连续移动），点 <b>↻</b> 或点击场地旋转，<b>DROP</b> 直接落底，<b>HOLD</b> 暂存方块留待后用。填满一整行即可消除——一次消四行的得分远高于分四次各消一行。连续消除与 T 旋会成倍加分，每消 10 行速度就会提升。",
+    ja:"<b>遊び方。</b> <b>◀ ▶</b> で落下中のブロックを移動（長押しで連続）、<b>↻</b> かフィールドをタップで回転、<b>DROP</b> で一気に落とし、<b>HOLD</b> でブロックを保管できます。1行を埋めると消えます — 4行同時消しは1行ずつ4回よりはるかに高得点。連続消しとTスピンは得点を倍増させ、10行ごとにスピードが上がります。",
+    ar:"<b>طريقة اللعب.</b> حرّك القطعة الساقطة بـ <b>◀ ▶</b> (اضغط مطوّلًا للتكرار)، والمس <b>↻</b> أو الحقل للتدوير، و<b>DROP</b> لإسقاطها فورًا، و<b>HOLD</b> لحفظ قطعة لوقت لاحق. املأ صفًا كاملًا لمسحه — مسح أربعة صفوف دفعة واحدة يساوي أكثر بكثير من أربع مرات منفردة. المسح المتتالي ودورات حرف T تضاعف النقاط، والسرعة تزداد كل 10 صفوف."
+  };
+  var L=pick(),el=document.getElementById("helpcard");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2 id="overttl"></h2><p id="overmsg"></p><button id="again"></button></div></div>
+<script>
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+const UI={
+  en:{"start":"Tap to start","hint":"Tap the well to rotate","paused":"Paused — tap to resume","over":"Game over","again":"Play again","restart":"Restart","score":"Score","level":"Level","lines":"Lines","combo":"Combo","next":"Next","hold":"Hold","drop":"Drop","b2b":"BACK-TO-BACK","perfect":"PERFECT CLEAR","tspin":"T-SPIN","tspinMini":"T-SPIN MINI","clear":{"1":"SINGLE","2":"DOUBLE","3":"TRIPLE","4":"TETRO"}},
+  vi:{"start":"Chạm để bắt đầu","hint":"Chạm vào giếng để xoay","paused":"Tạm dừng — chạm để tiếp tục","over":"Kết thúc!","again":"Chơi lại","restart":"Chơi lại","score":"Điểm","level":"Cấp","lines":"Hàng","combo":"Chuỗi","next":"Tiếp","hold":"Giữ","drop":"Thả","b2b":"LIÊN TIẾP","perfect":"XOÁ SẠCH","tspin":"XOAY T","tspinMini":"XOAY T NHỎ","clear":{"1":"1 HÀNG","2":"2 HÀNG","3":"3 HÀNG","4":"4 HÀNG"}},
+  ko:{"start":"탭하여 시작","hint":"필드를 탭하면 회전","paused":"일시정지 — 탭하여 계속","over":"게임 오버","again":"다시 하기","restart":"다시 시작","score":"점수","level":"레벨","lines":"줄","combo":"콤보","next":"다음","hold":"홀드","drop":"드롭","b2b":"백투백","perfect":"퍼펙트 클리어","tspin":"T-스핀","tspinMini":"T-스핀 미니","clear":{"1":"싱글","2":"더블","3":"트리플","4":"테트로"}},
+  zh:{"start":"点按开始","hint":"点击场地旋转","paused":"已暂停——点按继续","over":"游戏结束","again":"再玩一次","restart":"重新开始","score":"分数","level":"等级","lines":"行数","combo":"连击","next":"下一个","hold":"暂存","drop":"落底","b2b":"连续特消","perfect":"完美清除","tspin":"T 旋","tspinMini":"小 T 旋","clear":{"1":"一行","2":"两行","3":"三行","4":"四行"}},
+  ja:{"start":"タップでスタート","hint":"フィールドをタップで回転","paused":"一時停止中 — タップで再開","over":"ゲームオーバー","again":"もう一度","restart":"リスタート","score":"スコア","level":"レベル","lines":"ライン","combo":"コンボ","next":"ネクスト","hold":"ホールド","drop":"ドロップ","b2b":"バックトゥバック","perfect":"パーフェクト","tspin":"Tスピン","tspinMini":"Tスピンミニ","clear":{"1":"シングル","2":"ダブル","3":"トリプル","4":"テトロ"}},
+  ar:{"start":"انقر للبدء","hint":"انقر الحقل للتدوير","paused":"متوقف — انقر للمتابعة","over":"انتهت اللعبة","again":"العب مجددًا","restart":"إعادة","score":"النقاط","level":"المستوى","lines":"صفوف","combo":"تتابع","next":"التالي","hold":"حفظ","drop":"إسقاط","b2b":"متتالٍ","perfect":"مسح كامل","tspin":"دوران T","tspinMini":"دوران T صغير","clear":{"1":"صف","2":"صفان","3":"ثلاثة","4":"أربعة"}}
+};
+const M=UI[LANG]||UI.en;
+const $=id=>document.getElementById(id);
+// ── Controls: big keys, or one swipe pad in their place. The choice lives under
+// one key shared by every arcade game, so it follows the player between games.
+const CTRL=(function(){
+  const KEY='gobrain.bg.controls';
+  const L={en:['Buttons','Swipe'],vi:['Nút','Vuốt'],ko:['버튼','스와이프'],zh:['按键','滑动'],ja:['ボタン','スワイプ'],ar:['أزرار','سحب']}[LANG]||['Buttons','Swipe'];
+  const H={"en":"Swipe to move · tap to rotate · flick ▼ to drop · flick ▲ to hold","vi":"Vuốt để di chuyển · chạm để xoay · hất ▼ để thả · hất ▲ để giữ","ko":"스와이프로 이동 · 탭으로 회전 · ▼ 튕기면 드롭 · ▲ 튕기면 홀드","zh":"滑动移动 · 点按旋转 · 下甩落下 · 上甩暂存","ja":"スワイプで移動 · タップで回転 · ▼フリックでドロップ · ▲フリックでホールド","ar":"مرّر للتحريك · انقر للتدوير · اسحب ▼ للإسقاط · اسحب ▲ للحفظ"};
+  let mode='buttons';
+  try{ if(localStorage.getItem(KEY)==='swipe') mode='swipe'; }catch(e){}
+  const bs=$('ctl').getElementsByTagName('button');
+  function paint(){
+    document.body.classList.toggle('swipe',mode==='swipe');
+    for(let i=0;i<bs.length;i++) bs[i].classList.toggle('on',bs[i].getAttribute('data-m')===mode);
+  }
+  for(let i=0;i<bs.length;i++){
+    bs[i].getElementsByTagName('span')[0].textContent=' '+L[i];
+    bs[i].setAttribute('aria-label',L[i]);
+    bs[i].addEventListener('click',function(){
+      mode=this.getAttribute('data-m');
+      try{ localStorage.setItem(KEY,mode); }catch(e){}
+      paint();
+    });
+  }
+  $('swph').textContent=H[LANG]||H.en;
+  paint();
+  return {swipe:function(){ return mode==='swipe'; }};
+})();
+if(LANG==='ar'){document.documentElement.dir='rtl';document.querySelector('#wino div').dir='rtl';}
+// ── Leaderboard reporter (Go Brain) — mirrors the GBLB block in games/zip. ──
+const GBLB=(function(){
+  var GAME='tetro', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(score,level){ var ms=t0?(Date.now()-t0):0; emit('game_over',{score:score,level:level||1,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:1,durationMs:Math.max(1,ms),score:score})}).catch(function(){}); }catch(e){} }
+  };
+})();
+// ── Pure rules — inlined verbatim from logic.mjs (the tests import that file). ──
+// logic.mjs — Tetro's pure rules: the 7-bag randomiser, SRS rotation with wall
+// kicks, gravity + lock delay, line clears, T-spin detection and the scoring
+// table. index.html inlines this file verbatim (see games/_bg/mk.mjs in the
+// build notes); gen-levels.mjs and gen-levels.test.mjs import it. Keeping the
+// rules in one place is what lets the tests speak for the shipped bundle.
+//
+// Depth, in the order a player meets it:
+//   1. 7-bag           — every piece arrives once per 7, so droughts can't happen
+//   2. hold + next×3   — the piece you get is information, not luck
+//   3. SRS wall kicks  — rotating into a gap is a skill, not a glitch
+//   4. lock delay      — 500 ms with 15 move-resets: finesse under gravity
+//   5. combo / B2B     — chaining clears is worth more than clearing often
+//   6. T-spins         — the high-skill scoring ceiling
+//   7. perfect clear   — the rarest bonus, worth a whole level of tetrises
+
+const COLS = 10;
+const ROWS = 20;      // visible well
+const HIDDEN = 2;     // spawn rows above it
+const HEIGHT = ROWS + HIDDEN;
+
+// Spawn shapes as [x,y] offsets inside their SRS bounding box. `box` is the
+// side of that box — I rotates in a 4×4, O in a 2×2, the rest in a 3×3.
+const PIECES = {
+  I: { c: "#3aa7c2", box: 4, cells: [[0, 1], [1, 1], [2, 1], [3, 1]] },
+  J: { c: "#3b6ec7", box: 3, cells: [[0, 0], [0, 1], [1, 1], [2, 1]] },
+  L: { c: "#d98324", box: 3, cells: [[2, 0], [0, 1], [1, 1], [2, 1]] },
+  O: { c: "#c9a227", box: 2, cells: [[0, 0], [1, 0], [0, 1], [1, 1]] },
+  S: { c: "#2f9e44", box: 3, cells: [[1, 0], [2, 0], [0, 1], [1, 1]] },
+  T: { c: "#8f5bd6", box: 3, cells: [[1, 0], [0, 1], [1, 1], [2, 1]] },
+  Z: { c: "#e03131", box: 3, cells: [[0, 0], [1, 0], [1, 1], [2, 1]] },
+};
+const TYPES = ["I", "J", "L", "O", "S", "T", "Z"];
+
+// SRS kick tables, keyed `from>to`. Written in SRS's own axes (y up); `kicks()`
+// flips y because our board grows downward.
+const KICK_JLSTZ = {
+  "0>1": [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+  "1>0": [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+  "1>2": [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+  "2>1": [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+  "2>3": [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+  "3>2": [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+  "3>0": [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+  "0>3": [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+};
+const KICK_I = {
+  "0>1": [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+  "1>0": [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+  "1>2": [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
+  "2>1": [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+  "2>3": [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+  "3>2": [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+  "3>0": [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+  "0>3": [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
+};
+function kicks(type, from, to) {
+  if (type === "O") return [[0, 0]];
+  const t = (type === "I" ? KICK_I : KICK_JLSTZ)[`${from}>${to}`];
+  return t.map(([x, y]) => [x, y === 0 ? 0 : -y]);
+}
+
+const CONFIG = {
+  lockMs: 500,
+  lockResets: 15,
+  linesPerLevel: 10,
+  maxLevel: 20,
+  nextCount: 3,
+  softDropPerCell: 1,
+  hardDropPerCell: 2,
+  clearScore: { 1: 100, 2: 300, 3: 500, 4: 800 },
+  tspinScore: { 0: 400, 1: 800, 2: 1200, 3: 1600 },
+  tspinMiniScore: { 0: 100, 1: 200 },
+  comboPerLevel: 50,
+  b2bMultiplier: 1.5,
+  perfectClear: 1000,
+};
+
+/** Deterministic PRNG so a seed reproduces a whole run (used by the tests). */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Gravity in ms per cell — the Tetris-Worlds curve, floored so it stays playable. */
+function gravityMs(level) {
+  const l = Math.min(CONFIG.maxLevel, Math.max(1, level));
+  return Math.max(30, Math.round(1000 * Math.pow(0.8 - (l - 1) * 0.007, l - 1)));
+}
+function levelFor(lines) {
+  return Math.min(CONFIG.maxLevel, Math.floor(lines / CONFIG.linesPerLevel) + 1);
+}
+
+/** One shuffled bag of all 7 types — no drought, no flood. */
+function refillBag(st, rand) {
+  const bag = TYPES.slice();
+  for (let i = bag.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    const t = bag[i]; bag[i] = bag[j]; bag[j] = t;
+  }
+  st.bag.push(...bag);
+}
+
+function createGame(rand) {
+  const st = {
+    board: new Array(COLS * HEIGHT).fill(""),
+    cur: null, bag: [], next: [],
+    hold: null, holdUsed: false,
+    lines: 0, score: 0, level: 1, combo: -1, b2b: false,
+    over: false, lockMs: 0, lockResets: 0, grounded: false,
+    lastWasRotate: false, lastKick: 0,
+    // per-lock report, read by the shell to drive popups/sfx
+    event: null,
+  };
+  while (st.bag.length < TYPES.length + CONFIG.nextCount) refillBag(st, rand);
+  for (let i = 0; i < CONFIG.nextCount; i++) st.next.push(st.bag.shift());
+  spawn(st, rand);
+  return st;
+}
+
+/** Cells a piece occupies on the board, for a given rotation and origin. */
+function pieceCells(type, rot, px, py) {
+  const p = PIECES[type], n = p.box;
+  const out = [];
+  for (const [x, y] of p.cells) {
+    let cx = x, cy = y;
+    for (let r = 0; r < ((rot % 4) + 4) % 4; r++) {
+      const nx = n - 1 - cy, ny = cx;
+      cx = nx; cy = ny;
+    }
+    out.push([px + cx, py + cy]);
+  }
+  return out;
+}
+
+function collides(st, cells) {
+  for (const [x, y] of cells) {
+    if (x < 0 || x >= COLS || y >= HEIGHT) return true;
+    if (y >= 0 && st.board[y * COLS + x]) return true;
+  }
+  return false;
+}
+
+function spawn(st, rand) {
+  const type = st.next.shift();
+  if (st.bag.length < TYPES.length) refillBag(st, rand);
+  st.next.push(st.bag.shift());
+  // I spawns one row higher so its row sits on the well's top line.
+  const x = type === "O" ? 4 : 3;
+  st.cur = { type, rot: 0, x, y: 0 };
+  st.holdUsed = false;
+  st.lockMs = 0; st.lockResets = 0; st.grounded = false;
+  st.lastWasRotate = false; st.lastKick = 0;
+  // Block out: the spawn overlaps the stack.
+  if (collides(st, cellsOf(st.cur))) st.over = true;
+  return st.cur;
+}
+
+const cellsOf = (c) => pieceCells(c.type, c.rot, c.x, c.y);
+
+function touched(st) {
+  // A move that keeps the piece grounded refunds the lock timer, up to a cap —
+  // this is the "finesse window" that makes fast levels playable but not free.
+  if (st.grounded && st.lockResets < CONFIG.lockResets) {
+    st.lockResets++; st.lockMs = 0;
+  }
+}
+
+function move(st, dx) {
+  if (!st.cur || st.over) return false;
+  const c = { ...st.cur, x: st.cur.x + dx };
+  if (collides(st, cellsOf(c))) return false;
+  st.cur = c; st.lastWasRotate = false; touched(st);
+  return true;
+}
+
+function rotate(st, dir) {
+  if (!st.cur || st.over) return false;
+  const from = st.cur.rot, to = (from + dir + 4) % 4;
+  const tests = kicks(st.cur.type, from, to);
+  for (let i = 0; i < tests.length; i++) {
+    const [kx, ky] = tests[i];
+    const c = { ...st.cur, rot: to, x: st.cur.x + kx, y: st.cur.y + ky };
+    if (!collides(st, cellsOf(c))) {
+      st.cur = c; st.lastWasRotate = true; st.lastKick = i; touched(st);
+      return true;
+    }
+  }
+  return false;
+}
+
+/** How far down the piece can fall from where it is. */
+function dropDistance(st) {
+  let d = 0;
+  for (;;) {
+    const c = { ...st.cur, y: st.cur.y + d + 1 };
+    if (collides(st, cellsOf(c))) return d;
+    d++;
+    if (d > HEIGHT) return d;
+  }
+}
+
+/** One cell of gravity. Returns "moved" | "grounded". */
+function fall(st) {
+  const c = { ...st.cur, y: st.cur.y + 1 };
+  if (collides(st, cellsOf(c))) { st.grounded = true; return "grounded"; }
+  st.cur = c; st.grounded = false; st.lastWasRotate = false;
+  return "moved";
+}
+
+function softDrop(st) {
+  if (fall(st) === "moved") { st.score += CONFIG.softDropPerCell; return true; }
+  return false;
+}
+
+function hardDrop(st, rand) {
+  const d = dropDistance(st);
+  st.cur = { ...st.cur, y: st.cur.y + d };
+  st.score += d * CONFIG.hardDropPerCell;
+  st.lastWasRotate = false;
+  return lock(st, rand);
+}
+
+/**
+ * T-spin test — the 3-corner rule. A T that was last *rotated* into place and
+ * has 3 of its 4 diagonal corners blocked is a spin; if the two corners in
+ * front of the T's nose aren't both blocked it is a "mini" — unless the kick
+ * that placed it was the last (5th) test, which is always a full spin.
+ */
+function tspinKind(st) {
+  const c = st.cur;
+  if (!c || c.type !== "T" || !st.lastWasRotate) return null;
+  const cx = c.x + 1, cy = c.y + 1; // centre of the 3×3 box
+  const blocked = (x, y) =>
+    x < 0 || x >= COLS || y >= HEIGHT || (y >= 0 && !!st.board[y * COLS + x]);
+  const corners = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([dx, dy]) => blocked(cx + dx, cy + dy));
+  const n = corners.filter(Boolean).length;
+  if (n < 3) return null;
+  // Front corners depend on which way the nose points (rot 0 = up).
+  const FRONT = { 0: [0, 1], 1: [1, 3], 2: [2, 3], 3: [0, 2] }[c.rot];
+  const full = corners[FRONT[0]] && corners[FRONT[1]];
+  return full || st.lastKick === 4 ? "tspin" : "mini";
+}
+
+function clearRows(st) {
+  const full = [];
+  for (let y = 0; y < HEIGHT; y++) {
+    let ok = true;
+    for (let x = 0; x < COLS; x++) if (!st.board[y * COLS + x]) { ok = false; break; }
+    if (ok) full.push(y);
+  }
+  return full;
+}
+
+/** Lands the current piece, scores it, and spawns the next one. */
+function lock(st, rand) {
+  const kind = tspinKind(st);
+  for (const [x, y] of cellsOf(st.cur)) {
+    if (y < 0) { st.over = true; continue; }
+    st.board[y * COLS + x] = st.cur.type;
+  }
+  const full = clearRows(st);
+  const n = full.length;
+  for (const y of full) {
+    st.board.splice(y * COLS, COLS);
+    st.board.unshift(...new Array(COLS).fill(""));
+  }
+  const perfect = n > 0 && st.board.every((v) => !v);
+
+  // ── scoring ────────────────────────────────────────────────────────────
+  const lvl = st.level;
+  let base = 0, hard = false;
+  if (kind === "tspin") { base = CONFIG.tspinScore[n]; hard = true; }
+  else if (kind === "mini") { base = CONFIG.tspinMiniScore[Math.min(1, n)]; hard = n > 0; }
+  else if (n > 0) { base = CONFIG.clearScore[n]; hard = n === 4; }
+
+  let gained = base * lvl;
+  const b2bApplied = hard && st.b2b && n > 0;
+  if (b2bApplied) gained = Math.floor(gained * CONFIG.b2bMultiplier);
+  if (n > 0) st.combo++; else st.combo = -1;
+  if (st.combo > 0) gained += CONFIG.comboPerLevel * st.combo * lvl;
+  if (perfect) gained += CONFIG.perfectClear * lvl;
+  if (n > 0) st.b2b = hard;
+
+  st.score += gained;
+  st.lines += n;
+  st.level = levelFor(st.lines);
+  st.event = { cleared: n, rows: full, kind, combo: st.combo, b2b: b2bApplied, perfect, gained };
+
+  spawn(st, rand);
+  return st.event;
+}
+
+/** Swap the falling piece with the hold slot — once per piece. */
+function holdPiece(st, rand) {
+  if (st.holdUsed || !st.cur || st.over) return false;
+  const cur = st.cur.type, had = st.hold;
+  st.hold = cur;
+  if (had) {
+    st.cur = { type: had, rot: 0, x: had === "O" ? 4 : 3, y: 0 };
+    st.lockMs = 0; st.lockResets = 0; st.grounded = false; st.lastWasRotate = false;
+    if (collides(st, cellsOf(st.cur))) st.over = true;
+  } else {
+    spawn(st, rand);
+  }
+  st.holdUsed = true;
+  return true;
+}
+
+/** Column heights + holes — the shape metrics a bot (and gen-levels) scores on. */
+function stackMetrics(st) {
+  const heights = new Array(COLS).fill(0);
+  let holes = 0, bumps = 0;
+  for (let x = 0; x < COLS; x++) {
+    let seen = false;
+    for (let y = 0; y < HEIGHT; y++) {
+      if (st.board[y * COLS + x]) { if (!seen) { heights[x] = HEIGHT - y; seen = true; } }
+      else if (seen) holes++;
+    }
+  }
+  for (let x = 1; x < COLS; x++) bumps += Math.abs(heights[x] - heights[x - 1]);
+  return { heights, holes, bumps, maxHeight: Math.max(...heights) };
+}
+
+// ── shell ─────────────────────────────────────────────────────────────────
+const BEST_KEY='tetro.best';
+const READY=0,PLAYING=1,DEAD=2,PAUSED=3;
+let rand=Math.random, st=createGame(rand), phase=READY;
+let acc=0,lastT=0,best=0;
+let flashT=0,flashBoard=null,flashRows=[];
+let toast=null;            // {text,sub,age}
+let shakeT=0;
+const cv=$('cv'),ctx=cv.getContext('2d');
+let W=0,H=0,u=0,wellX=0,wellY=0,railX=0;
+
+try{best=+localStorage.getItem(BEST_KEY)||0;}catch(e){}
+$('bst').textContent='★ '+best;
+$('overttl').textContent=M.over; $('again').textContent=M.again;
+$('restart').textContent=M.restart;
+$('bhold').textContent=M.hold; $('bdrop').textContent=M.drop;
+
+// The well is 10 cells wide; the rail on its right holds HOLD + the next queue.
+const RAIL=4.2, GAP=0.5, UNITS=COLS+GAP+RAIL;
+function layout(){
+  const wrap=$('wrap');
+  W=Math.min(wrap.clientWidth-60,520);
+  u=Math.floor(W/UNITS*2)/2;                 // half-pixel units keep the grid crisp
+  const bw=u*UNITS;
+  wellX=Math.round((W-bw)/2); wellY=Math.round(u*0.6);
+  railX=wellX+u*(COLS+GAP);
+  H=Math.round(u*ROWS+u*1.2);
+  cv.width=Math.round(W*devicePixelRatio); cv.height=Math.round(H*devicePixelRatio);
+  cv.style.width=W+'px'; cv.style.height=H+'px';
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+
+function startRun(){
+  rand=Math.random; st=createGame(rand);
+  phase=PLAYING; acc=0; flashT=0; toast=null; shakeT=0;
+  $('sc').textContent='0'; $('wino').style.display='none';
+  GBLB.start();
+}
+function die(){
+  phase=DEAD;
+  GBLB.report(st.score,st.level);
+  if(st.score>best){best=st.score;try{localStorage.setItem(BEST_KEY,best);}catch(e){}}
+  $('bst').textContent='★ '+best;
+  setTimeout(function(){
+    if(phase!==DEAD)return;
+    $('overmsg').textContent=M.score+' '+st.score+' · '+M.level+' '+st.level+' · '+M.lines+' '+st.lines;
+    $('wino').style.display='grid';
+  },600);
+}
+
+/** Lock the piece, capturing the pre-collapse board so the clear can flash. */
+function landPiece(){
+  const before=st.board.slice();
+  for(const c of cellsOf(st.cur)) if(c[1]>=0) before[c[1]*COLS+c[0]]=st.cur.type;
+  const ev=lock(st,rand);
+  $('sc').textContent=st.score;
+  if(ev.cleared>0){
+    flashBoard=before; flashRows=ev.rows; flashT=200+ev.cleared*20;
+    shakeT=ev.cleared>=4?1:0.45;
+    let text=M.clear[ev.cleared], sub='';
+    if(ev.kind==='tspin')text=M.tspin+(ev.cleared?' '+M.clear[ev.cleared]:'');
+    else if(ev.kind==='mini')text=M.tspinMini;
+    if(ev.b2b)sub=M.b2b;
+    if(ev.combo>0)sub=(sub?sub+' · ':'')+M.combo+' ×'+ev.combo;
+    if(ev.perfect)sub=M.perfect;
+    toast={text:text,sub:sub,gain:ev.gained,age:0};
+  } else if(ev.kind){
+    toast={text:ev.kind==='tspin'?M.tspin:M.tspinMini,sub:'',gain:ev.gained,age:0};
+  }
+  if(st.over)die();
+}
+
+function tick(){ if(st.over){die();return;} fall(st); }
+
+// ── draw ──────────────────────────────────────────────────────────────────
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function shade(hex,k){
+  const n=parseInt(hex.slice(1),16);
+  const f=(v)=>Math.max(0,Math.min(255,Math.round(v*k)));
+  return 'rgb('+f((n>>16)&255)+','+f((n>>8)&255)+','+f(n&255)+')';
+}
+/** One mino: a filled rounded square with a lit top-left bevel. */
+function mino(x,y,s,color,alpha){
+  ctx.globalAlpha=alpha===undefined?1:alpha;
+  const p=Math.max(1,s*0.07);
+  ctx.fillStyle=shade(color,0.78); rr(x,y,s,s,s*0.2); ctx.fill();
+  ctx.fillStyle=color; rr(x+p,y+p,s-p*2,s-p*2.6,s*0.16); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.28)';
+  rr(x+p*1.6,y+p*1.6,s-p*3.2,(s-p*3.2)*0.34,s*0.1); ctx.fill();
+  ctx.globalAlpha=1;
+}
+function ghostMino(x,y,s,color){
+  ctx.strokeStyle=shade(color,0.9); ctx.globalAlpha=0.35; ctx.lineWidth=Math.max(1.5,s*0.09);
+  rr(x+s*0.1,y+s*0.1,s*0.8,s*0.8,s*0.16); ctx.stroke(); ctx.globalAlpha=1;
+}
+/** Draw a piece into an arbitrary box (used by HOLD and the next queue). */
+function drawMini(type,cx,cy,s,alpha){
+  const p=PIECES[type];
+  let minx=9,maxx=-9,miny=9,maxy=-9;
+  for(const c of p.cells){minx=Math.min(minx,c[0]);maxx=Math.max(maxx,c[0]);miny=Math.min(miny,c[1]);maxy=Math.max(maxy,c[1]);}
+  const w=(maxx-minx+1)*s,h=(maxy-miny+1)*s;
+  for(const c of p.cells)mino(cx-w/2+(c[0]-minx)*s,cy-h/2+(c[1]-miny)*s,s,p.c,alpha);
+}
+function drawWell(board,rows,hi){
+  // field
+  ctx.fillStyle='#eceae3'; rr(wellX-u*0.18,wellY-u*0.18,u*COLS+u*0.36,u*ROWS+u*0.36,u*0.3); ctx.fill();
+  // column guides — faint, so the player can read landing columns at speed
+  ctx.strokeStyle='rgba(0,0,0,0.045)'; ctx.lineWidth=1;
+  for(let x=1;x<COLS;x++){ctx.beginPath();ctx.moveTo(wellX+x*u,wellY);ctx.lineTo(wellX+x*u,wellY+u*ROWS);ctx.stroke();}
+  ctx.strokeStyle='rgba(0,0,0,0.03)';
+  for(let y=1;y<ROWS;y++){ctx.beginPath();ctx.moveTo(wellX,wellY+y*u);ctx.lineTo(wellX+u*COLS,wellY+y*u);ctx.stroke();}
+  for(let y=HIDDEN;y<HEIGHT;y++)for(let x=0;x<COLS;x++){
+    const t=board[y*COLS+x]; if(!t)continue;
+    mino(wellX+x*u,wellY+(y-HIDDEN)*u,u,PIECES[t].c);
+  }
+  if(rows&&rows.length){
+    ctx.fillStyle='rgba(255,255,255,'+(0.35+0.5*hi).toFixed(2)+')';
+    for(const y of rows){ if(y<HIDDEN)continue; ctx.fillRect(wellX,wellY+(y-HIDDEN)*u,u*COLS,u); }
+  }
+}
+function drawRail(){
+  const bw=u*RAIL, bx=railX;
+  const box=(y,h,label)=>{
+    ctx.fillStyle='#eceae3'; rr(bx,y,bw,h,u*0.28); ctx.fill();
+    ctx.fillStyle='#9a9a94'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.font='bold '+Math.round(u*0.42)+'px -apple-system,sans-serif';
+    ctx.fillText(label,bx+u*0.3,y+u*0.24);
+  };
+  const ms=u*0.62;
+  // HOLD
+  let y=wellY;
+  const hh=u*2.5; box(y,hh,M.hold.toUpperCase());
+  if(st.hold)drawMini(st.hold,bx+bw/2,y+hh*0.62,ms,st.holdUsed?0.3:1);
+  // NEXT ×3
+  y+=hh+u*0.35;
+  const nh=u*(1.2+2.1*CONFIG.nextCount); box(y,nh,M.next.toUpperCase());
+  for(let i=0;i<st.next.length;i++)
+    drawMini(st.next[i],bx+bw/2,y+u*(1.35+2.1*i)+u*0.5,i===0?ms:ms*0.82,i===0?1:0.72);
+  // stats
+  y+=nh+u*0.35;
+  const sh=u*4.1; box(y,sh,'');
+  const rowsTxt=[[M.level,st.level],[M.lines,st.lines],[M.combo,st.combo>0?'×'+st.combo:'—']];
+  ctx.textAlign='left';
+  for(let i=0;i<rowsTxt.length;i++){
+    const ry=y+u*0.3+i*u*1.28;
+    ctx.fillStyle='#9a9a94'; ctx.font=Math.round(u*0.38)+'px -apple-system,sans-serif';
+    ctx.fillText(String(rowsTxt[i][0]).toUpperCase(),bx+u*0.3,ry);
+    ctx.fillStyle='#1a1a1a'; ctx.font='bold '+Math.round(u*0.62)+'px -apple-system,sans-serif';
+    ctx.fillText(String(rowsTxt[i][1]),bx+u*0.3,ry+u*0.44);
+  }
+  if(st.b2b){
+    ctx.fillStyle='#8f5bd6'; ctx.font='bold '+Math.round(u*0.36)+'px -apple-system,sans-serif';
+    ctx.fillText(M.b2b,bx+u*0.3,y+sh-u*0.55);
+  }
+}
+function draw(now,dt){
+  ctx.clearRect(0,0,W,H);
+  ctx.save();
+  if(shakeT>0){ctx.translate(0,Math.sin(now/22)*shakeT*u*0.16);shakeT=Math.max(0,shakeT-dt/1000*3.2);}
+  if(flashT>0){
+    drawWell(flashBoard,flashRows,Math.abs(Math.sin(now/45)));
+  } else {
+    drawWell(st.board,null,0);
+    if(st.cur&&phase===PLAYING){
+      const gy=st.cur.y+dropDistance(st);
+      for(const c of pieceCells(st.cur.type,st.cur.rot,st.cur.x,gy))
+        if(c[1]>=HIDDEN)ghostMino(wellX+c[0]*u,wellY+(c[1]-HIDDEN)*u,u,PIECES[st.cur.type].c);
+      // the piece dims as its lock timer runs out — a readable "about to set" cue
+      const lockA=st.grounded?1-0.45*Math.min(1,st.lockMs/CONFIG.lockMs):1;
+      for(const c of cellsOf(st.cur))
+        if(c[1]>=HIDDEN)mino(wellX+c[0]*u,wellY+(c[1]-HIDDEN)*u,u,PIECES[st.cur.type].c,lockA);
+    }
+  }
+  ctx.restore();
+  drawRail();
+  // clear toast, floating up out of the middle of the well
+  if(toast){
+    toast.age+=dt/1000;
+    if(toast.age>1.5)toast=null;
+    else{
+      const a=Math.min(1,toast.age*5)*(1-Math.max(0,(toast.age-1.0)/0.5));
+      const cx=wellX+u*COLS/2, cy=wellY+u*ROWS*0.42-toast.age*u*1.1;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle='rgba(143,91,214,'+a.toFixed(2)+')';
+      ctx.font='bold '+Math.round(u*0.86)+'px -apple-system,sans-serif';
+      ctx.fillText(toast.text,cx,cy);
+      ctx.fillStyle='rgba(26,26,26,'+(a*0.75).toFixed(2)+')';
+      ctx.font='bold '+Math.round(u*0.62)+'px -apple-system,sans-serif';
+      ctx.fillText('+'+toast.gain,cx,cy+u*0.8);
+      if(toast.sub){
+        ctx.fillStyle='rgba(120,120,120,'+a.toFixed(2)+')';
+        ctx.font=Math.round(u*0.5)+'px -apple-system,sans-serif';
+        ctx.fillText(toast.sub,cx,cy+u*1.5);
+      }
+    }
+  }
+  if(phase===READY||phase===PAUSED||phase===DEAD){
+    ctx.fillStyle='rgba(242,240,235,0.8)';
+    rr(wellX-u*0.18,wellY-u*0.18,u*COLS+u*0.36,u*ROWS+u*0.36,u*0.3); ctx.fill();
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    const cx=wellX+u*COLS/2, cy=wellY+u*ROWS/2;
+    ctx.fillStyle='#1a1a1a'; ctx.font='bold '+Math.round(u*0.9)+'px -apple-system,sans-serif';
+    ctx.fillText(phase===READY?M.start:phase===PAUSED?M.paused:M.over,cx,cy-u*0.6);
+    if(phase===READY){
+      ctx.fillStyle='#777'; ctx.font=Math.round(u*0.62)+'px -apple-system,sans-serif';
+      ctx.fillText(M.hint,cx,cy+u*0.8);
+    }
+  }
+}
+
+function frame(now){
+  if(!lastT)lastT=now;
+  const dt=Math.max(0,Math.min(100,now-lastT)); lastT=now;
+  if(flashT>0){ flashT-=dt; if(flashT<=0)flashT=0; }
+  else if(phase===PLAYING&&!st.over){
+    const g=gravityMs(st.level);
+    acc+=dt;
+    let guard=0;
+    while(acc>=g&&guard++<20){acc-=g;tick();}
+    if(st.grounded){
+      // still resting on the stack after gravity → the lock timer runs
+      const c={type:st.cur.type,rot:st.cur.rot,x:st.cur.x,y:st.cur.y+1};
+      if(collides(st,cellsOf(c))){
+        st.lockMs+=dt;
+        if(st.lockMs>=CONFIG.lockMs)landPiece();
+      } else st.grounded=false;
+    }
+  }
+  draw(now,dt);
+  requestAnimationFrame(frame);
+}
+
+// ── input ─────────────────────────────────────────────────────────────────
+function act(fn){
+  if(phase===READY){startRun();return;}
+  if(phase===PAUSED){phase=PLAYING;return;}
+  if(phase!==PLAYING||flashT>0)return;
+  fn();
+}
+const doLeft =()=>act(()=>move(st,-1));
+const doRight=()=>act(()=>move(st,1));
+const doRotCW=()=>act(()=>rotate(st,1));
+const doRotCC=()=>act(()=>rotate(st,-1));
+const doSoft =()=>act(()=>{if(!softDrop(st)){st.lockMs=CONFIG.lockMs;}$('sc').textContent=st.score;});
+const doHard =()=>act(()=>{
+  const d=dropDistance(st);
+  st.cur={type:st.cur.type,rot:st.cur.rot,x:st.cur.x,y:st.cur.y+d};
+  st.score+=d*CONFIG.hardDropPerCell; st.lastWasRotate=false;
+  landPiece();});
+const doHold =()=>act(()=>{holdPiece(st,rand);});
+
+$('bl').onclick=doLeft; $('br').onclick=doRight; $('brot').onclick=doRotCW;
+$('bdrop').onclick=doHard; $('bhold').onclick=doHold;
+$('restart').onclick=startRun; $('again').onclick=startRun;
+// press-and-hold auto-repeat on the move buttons (DAS), so long slides are one gesture
+[['bl',doLeft],['br',doRight]].forEach(function(p){
+  const el=$(p[0]); let t1=null,t2=null;
+  const stop=()=>{clearTimeout(t1);clearInterval(t2);t1=t2=null;};
+  el.addEventListener('pointerdown',function(){stop();t1=setTimeout(function(){t2=setInterval(p[1],55);},220);});
+  ['pointerup','pointercancel','pointerleave'].forEach(e=>el.addEventListener(e,stop));
+});
+
+// canvas + swipe-pad gestures: drag sideways to slide, drag down to soft-drop,
+// flick down to hard-drop, flick up to hold, tap to rotate.
+let gx=0,gy=0,gx0=0,gy0=0,gt=0,gMoved=0,gActive=false,gHardArmed=true,gEl=null;
+[cv,$('swp')].forEach(function(el){
+  el.addEventListener('pointerdown',function(e){
+    if(el!==cv) e.preventDefault();
+    gx=gx0=e.clientX; gy=gy0=e.clientY; gt=Date.now(); gMoved=0; gActive=true; gHardArmed=true; gEl=el;
+    el.classList.add('on');
+    if(el.setPointerCapture)try{el.setPointerCapture(e.pointerId);}catch(_){}
+  });
+  el.addEventListener('pointermove',gMove);
+  el.addEventListener('pointerup',gEnd);
+  el.addEventListener('pointercancel',function(){ gActive=false; el.classList.remove('on'); });
+  if(el!==cv) el.addEventListener('touchmove',function(e){ e.preventDefault(); },{passive:false});
+});
+function gMove(e){
+  if(!gActive)return;
+  const dx=e.clientX-gx, dy=e.clientY-gy;
+  gMoved=Math.max(gMoved,Math.abs(dx),Math.abs(dy));
+  const step=Math.max(16,u*0.9);
+  if(Math.abs(dx)>=step&&Math.abs(dx)>Math.abs(dy)*0.8){
+    const n=Math.trunc(dx/step);
+    for(let i=0;i<Math.abs(n);i++) n>0?doRight():doLeft();
+    gx+=n*step; gHardArmed=false;
+  } else if(dy>=step&&Math.abs(dy)>Math.abs(dx)){
+    const n=Math.trunc(dy/step);
+    for(let i=0;i<n;i++)doSoft();
+    gy+=n*step;
+  }
+}
+function gEnd(e){
+  if(!gActive)return; gActive=false;
+  if(gEl) gEl.classList.remove('on');
+  // flicks are measured from where the finger landed: the soft-drop steps above
+  // eat the running delta, so a fast flick down never left enough of it behind
+  const dt=Date.now()-gt, dy=e.clientY-gy0;
+  if(gMoved<12&&dt<300){ doRotCW(); return; }
+  if(!gHardArmed||dt>=300||Math.abs(e.clientX-gx0)>=u*1.5) return;
+  if(dy>u*1.2&&dt<260) doHard();
+  else if(dy<-u*1.2) doHold();
+}
+
+document.addEventListener('keydown',function(e){
+  const k=e.key;
+  const map={ArrowLeft:doLeft,ArrowRight:doRight,ArrowDown:doSoft,ArrowUp:doRotCW,
+    x:doRotCW,X:doRotCW,z:doRotCC,Z:doRotCC,c:doHold,C:doHold,' ':doHard};
+  if(k==='p'||k==='P'){ if(phase===PLAYING)phase=PAUSED; else if(phase===PAUSED)phase=PLAYING; e.preventDefault(); return; }
+  const fn=map[k]; if(!fn)return;
+  e.preventDefault();
+  if(phase===DEAD&&$('wino').style.display!=='none')return;
+  fn();
+});
+// iOS in-app webviews ignore touch-action:none — block page scroll while playing.
+document.addEventListener('touchmove',function(e){if(phase===PLAYING)e.preventDefault();},{passive:false});
+cv.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='hidden'&&phase===PLAYING){phase=PAUSED;lastT=0;}
+});
+addEventListener('resize',layout);
+
+layout();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

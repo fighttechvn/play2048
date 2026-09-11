@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Pour</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--grid:#cdcdcd;--accent:#3b5bdb;--btn:#fff;--bd:#d0d0d0}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  #lvl{margin:0 auto}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div{background:#fff;border-radius:18px;padding:28px 32px;text-align:center;max-width:300px}
+  .win h2{margin:0 0 6px}.win button{margin-top:14px;padding:12px 26px;border:0;border-radius:999px;background:var(--accent);color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+  /* First-run tutorial (2 steps, non-interactive) */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;pointer-events:auto}
+  #tut.on{display:block}
+  #tutBg{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.42);pointer-events:none}
+  #tutHole{position:fixed;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.42);transition:left .22s ease,top .22s ease,width .22s ease,height .22s ease;pointer-events:none}
+  #tutCard{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 40px);max-width:300px;pointer-events:auto;background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);border:1px solid rgba(255,255,255,.55);border-radius:16px;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;min-height:44px;margin:-4px -8px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">Pour · Level 1</span><span class="pill" id="status">Moves 0</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="btns">
+    <button class="btn" id="undo" disabled>Undo</button>
+    <button class="btn" id="extra">+1 Tube</button>
+    <button class="btn" id="reset">Reset</button>
+  </div>
+  <div class="help"><b>How to play.</b> Tap a tube to pick it up, then tap another tube to pour. You can only pour onto the <b>same color</b> or into an <b>empty</b> tube. Sort the water until every tube holds a single color. Stuck? <b>+1 Tube</b> adds one empty tube (once per level).</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Tap a tube to pick it up, then tap another tube to pour. You can only pour onto the <b>same color</b> or into an <b>empty</b> tube. Sort the water until every tube holds a single color. Stuck? <b>+1 Tube</b> adds one empty tube (once per level).",
+    vi:"<b>Cách chơi.</b> Chạm vào một ống để chọn, rồi chạm ống khác để rót. Chỉ rót được lên <b>cùng màu</b> hoặc vào ống <b>trống</b>. Sắp xếp cho đến khi mỗi ống chỉ còn một màu. Bí quá? <b>+1 Tube</b> thêm một ống trống (một lần mỗi màn).",
+    ko:"<b>플레이 방법.</b> 튜브를 탭해 선택한 뒤 다른 튜브를 탭해 부으세요. <b>같은 색</b> 위나 <b>빈</b> 튜브에만 부을 수 있습니다. 모든 튜브가 한 가지 색이 될 때까지 정리하세요. 막혔다면 <b>+1 Tube</b>로 빈 튜브를 하나 추가하세요(레벨당 한 번).",
+    zh:"<b>玩法。</b> 点击一个试管选中它，再点击另一个试管倒水。只能倒在<b>相同颜色</b>上或倒进<b>空</b>试管。把水分类，直到每个试管都只有一种颜色。卡住了？<b>+1 Tube</b> 可增加一个空试管（每关一次）。",
+    ja:"<b>遊び方。</b> チューブをタップして選び、別のチューブをタップして注ぎます。注げるのは<b>同じ色</b>の上か<b>空</b>のチューブだけ。すべてのチューブが一色になるまで仕分けましょう。困ったら <b>+1 Tube</b> で空のチューブを1本追加（レベルごとに1回）。",
+    ar:"<b>طريقة اللعب.</b> اضغط على أنبوب لاختياره ثم اضغط على أنبوب آخر للسكب. لا يمكنك السكب إلا فوق <b>اللون نفسه</b> أو في أنبوب <b>فارغ</b>. رتّب الماء حتى يحتوي كل أنبوب على لون واحد. هل علقت؟ <b>+1 Tube</b> يضيف أنبوبًا فارغًا (مرة واحدة لكل مستوى)."
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div><h2>Sorted! 🎉</h2><p id="winmsg"></p><button id="next">Next level</button></div></div>
+<div id="tut">
+  <div id="tutBg"></div>
+  <div id="tutHole"></div>
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script>
+const KEY="pour.level";
+const TUTKEY="pour.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // feature flag: hub passes ?tut=0 to disable
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Times each level and POSTs the completion to the leaderboard API using the
+// shared player token (set by the hub, same origin). No token → silently skips.
+// Paste this block into other bundles, changing only GAME, to roll the feature out.
+const GBLB=(function(){
+  var GAME='pour', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(level){ var ms=t0?(Date.now()-t0):0; emit('level_complete',{level:level,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:level,durationMs:ms})}).catch(function(){}); }catch(e){} }
+  };
+})();
+// ── Game state ────────────────────────────────────────────────────────────
+const CAP=4;
+// 12 hues that also step in brightness (colorblind-friendlier ordering)
+const COLORS=['#c0392b','#f39c12','#f2df3a','#58d68d','#14663a','#85d4f2','#2a5cd5','#1b2a6b','#8e44ad','#f5a3c7','#7a4a12','#10b3a3'];
+const COLORS_DK=['#8d2418','#b5720b','#bdae1e','#2f9e60','#0b3d22','#4fa8cc','#1c3f9c','#101a49','#63307c','#d5769f','#4f2f0a','#0a8177'];
+let DATA=null, lvl=0, L=null, tubes=[], hist=[], sel=-1, extraUsed=false, anim=null, animRAF=0;
+let slots=[], unitH=0, tubeR=0;
+let tutActive=false, tutStep=0;
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+
+fetch('./levels.json').then(r=>r.json()).then(d=>{DATA=d; lvl=Math.min(+(localStorage.getItem(KEY)||0), d.levels.length-1); load(lvl);});
+
+function load(i){
+  L=DATA.levels[i]; tubes=L.tubes.map(t=>t.slice());
+  hist=[]; sel=-1; extraUsed=false; anim=null;
+  layout(); draw(); $('lvl').textContent='Pour · Level '+(i+1); upd(); maybeStartTut(); GBLB.start();
+}
+
+// ── Layout: 1 row up to 7 tubes, else 2 rows; slots are the (≥44px) hitboxes ─
+function layout(){
+  const wrap=document.getElementById('wrap');
+  const W=Math.min(wrap.clientWidth-60, 500);
+  const T=tubes.length;
+  const perRow=T<=7?T:Math.ceil(T/2);
+  const rows=Math.ceil(T/perRow);
+  const slotW=Math.floor(W/perRow);
+  const tw=Math.max(24,Math.min(54,Math.floor(slotW*0.62)));
+  const th=Math.round(tw*3.05);
+  const lift=14, gapY=24;
+  const H=rows*(th+lift+gapY)+2;
+  tubeR=tw/2; unitH=(th-6-tubeR*0.35)/CAP;
+  slots=[];
+  for(let t=0;t<T;t++){
+    const row=Math.floor(t/perRow);
+    const inRow=(row===rows-1)?(T-perRow*(rows-1)):perRow;
+    const rowW=inRow*slotW, offX=Math.floor((W-rowW)/2);
+    const col=t-row*perRow;
+    slots.push({x:offX+col*slotW+Math.floor((slotW-tw)/2), y:lift+row*(th+lift+gapY), w:tw, h:th, hitX:offX+col*slotW, hitW:slotW});
+  }
+  cv.width=W*devicePixelRatio; cv.height=H*devicePixelRatio;
+  cv.style.width=W+'px'; cv.style.height=H+'px';
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+
+function tubePath(x,y,w,h){
+  const r=w/2;
+  ctx.beginPath();
+  ctx.moveTo(x,y);
+  ctx.lineTo(x,y+h-r);
+  ctx.arc(x+r,y+h-r,r,Math.PI,0,true); // sweep through the bottom (y-down coords)
+  ctx.lineTo(x+w,y);
+}
+
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  for(let t=0;t<tubes.length;t++) drawTube(t);
+}
+function drawTube(t){
+  const s=slots[t];
+  const y=s.y+((sel===t&&!anim)?-12:0);
+  // compose the visible liquid stack (bottom→top), with fractional units mid-pour
+  const arr=tubes[t];
+  const stack=[];
+  for(let k=0;k<arr.length;k++){
+    let u=1;
+    if(anim&&t===anim.to&&k>=arr.length-anim.m) u=anim.p;
+    stack.push([arr[k],u]);
+  }
+  if(anim&&t===anim.from&&anim.p<1) stack.push([anim.color,anim.m*(1-anim.p)]);
+  ctx.save();
+  tubePath(s.x,y,s.w,s.h); ctx.clip();
+  ctx.fillStyle='#fafaf7'; ctx.fillRect(s.x,y,s.w,s.h);
+  let cursor=y+s.h-2;
+  for(let k=0;k<stack.length;k++){
+    const hh=stack[k][1]*unitH;
+    if(hh<=0) continue;
+    ctx.fillStyle=COLORS[stack[k][0]];
+    ctx.fillRect(s.x,cursor-hh,s.w,hh+0.6);
+    // thin darker seam on top of each unit for readability
+    ctx.fillStyle=COLORS_DK[stack[k][0]];
+    ctx.fillRect(s.x,cursor-hh,s.w,1.5);
+    cursor-=hh;
+  }
+  ctx.restore();
+  // outline + lip
+  tubePath(s.x,y,s.w,s.h);
+  ctx.strokeStyle=(sel===t)?getCss('--accent'):'#9aa0a6';
+  ctx.lineWidth=(sel===t)?3:2;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(s.x-3,y); ctx.lineTo(s.x+s.w+3,y);
+  ctx.stroke();
+}
+function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+// ── Rules ─────────────────────────────────────────────────────────────────
+function topRun(a){const A=tubes[a];if(!A.length)return 0;const X=A[A.length-1];let n=0;for(let k=A.length-1;k>=0&&A[k]===X;k--)n++;return n;}
+function canPour(a,b){
+  if(a===b)return false;
+  const A=tubes[a],B=tubes[b];
+  if(!A.length)return false;
+  if(CAP-B.length<=0)return false;
+  return B.length===0||B[B.length-1]===A[A.length-1];
+}
+function isSolved(){
+  for(let t=0;t<tubes.length;t++){
+    const T=tubes[t];
+    if(T.length===0)continue;
+    if(T.length!==CAP)return false;
+    for(let k=1;k<T.length;k++)if(T[k]!==T[0])return false;
+  }
+  return true;
+}
+function doPour(a,b){
+  const A=tubes[a],B=tubes[b];
+  const X=A[A.length-1];
+  const m=Math.min(topRun(a),CAP-B.length);
+  for(let k=0;k<m;k++)B.push(X);
+  A.length-=m;
+  hist.push({from:a,to:b,m:m,color:X});
+  anim={from:a,to:b,m:m,color:X,p:0,t0:0};
+  if(!animRAF)animRAF=requestAnimationFrame(stepAnim);
+  upd();
+}
+function endAnim(){ // finish the pour instantly (also a safety valve if rAF stalls)
+  if(!anim)return;
+  anim=null; draw();
+  if(isSolved()){
+    GBLB.report(lvl+1);
+    $('winmsg').textContent='Level '+(lvl+1)+' of '+DATA.count+' complete.';
+    $('wino').style.display='grid';
+  }
+}
+function stepAnim(ts){
+  if(!anim){animRAF=0;return;}
+  if(!anim.t0)anim.t0=ts;
+  anim.p=Math.min(1,(ts-anim.t0)/200);
+  draw();
+  if(anim.p>=1){animRAF=0;endAnim();return;}
+  animRAF=requestAnimationFrame(stepAnim);
+}
+
+// ── Input: tap source, tap target ─────────────────────────────────────────
+function tubeAt(ev){
+  const rect=cv.getBoundingClientRect();
+  const px=ev.clientX-rect.left, py=ev.clientY-rect.top;
+  for(let t=0;t<slots.length;t++){
+    const s=slots[t];
+    if(px>=s.hitX&&px<s.hitX+s.hitW&&py>=s.y-16&&py<=s.y+s.h+10)return t;
+  }
+  return -1;
+}
+function down(ev){
+  ev.preventDefault();
+  try{cv.setPointerCapture(ev.pointerId);}catch(e){}
+  if(tutActive)return;
+  if(anim)endAnim(); // snap a mid-flight pour so input is never locked out
+  const t=tubeAt(ev);
+  if(t<0){sel=-1;draw();return;}
+  if(sel<0){ if(tubes[t].length){sel=t;} }
+  else if(sel===t){ sel=-1; }
+  else if(canPour(sel,t)){ const a=sel; sel=-1; doPour(a,t); }
+  else { sel=tubes[t].length?t:sel; }
+  draw();
+}
+cv.addEventListener('pointerdown',down);
+// iOS in-app webviews ignore touch-action:none for scroll suppression — a
+// non-passive touchmove preventDefault is the only reliable way to keep the
+// board interaction from scrolling the page.
+cv.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+
+function upd(){
+  $('undo').disabled=hist.length===0;
+  $('extra').disabled=extraUsed;
+  $('status').textContent='Moves '+hist.length;
+}
+$('undo').onclick=()=>{
+  if(anim)endAnim();
+  if(!hist.length)return;
+  const mv=hist.pop();
+  const A=tubes[mv.from],B=tubes[mv.to];
+  for(let k=0;k<mv.m;k++)A.push(mv.color);
+  B.length-=mv.m;
+  sel=-1;draw();upd();
+};
+$('reset').onclick=()=>{
+  if(anim){anim=null;draw();}
+  tubes=L.tubes.map(t=>t.slice());
+  if(extraUsed)tubes.push([]);
+  hist=[];sel=-1;layout();draw();upd();
+};
+$('extra').onclick=()=>{
+  if(anim)endAnim();
+  if(extraUsed)return;
+  extraUsed=true;
+  tubes.push([]);
+  sel=-1;layout();draw();upd();
+};
+$('next').onclick=()=>{$('wino').style.display='none';lvl=Math.min(lvl+1,DATA.levels.length-1);localStorage.setItem(KEY,lvl);load(lvl);};
+
+/* ── First-run tutorial: 2 steps, shown once on Level 1 ─────────────────── */
+const TUT_T={
+  en:{s1t:"Welcome to Pour",s1b:"Sort the colored water until every tube holds one single color.",next:"Next",
+      s2t:"Tap, then pour",s2b:"Tap a tube to pick it up, then tap another to pour. Pours only land on the same color or an empty tube.",play:"Play",skip:"Skip"},
+  vi:{s1t:"Chào mừng đến với Pour",s1b:"Sắp xếp nước màu cho đến khi mỗi ống chỉ còn đúng một màu.",next:"Tiếp",
+      s2t:"Chạm rồi rót",s2b:"Chạm một ống để chọn, rồi chạm ống khác để rót. Chỉ rót được lên cùng màu hoặc ống trống.",play:"Chơi",skip:"Bỏ qua"},
+  ko:{s1t:"Pour에 오신 것을 환영합니다",s1b:"모든 튜브가 한 가지 색이 될 때까지 색깔 물을 정리하세요.",next:"다음",
+      s2t:"탭하고 붓기",s2b:"튜브를 탭해 선택한 뒤 다른 튜브를 탭해 부으세요. 같은 색 위나 빈 튜브에만 부을 수 있습니다.",play:"플레이",skip:"건너뛰기"},
+  zh:{s1t:"欢迎来到 Pour",s1b:"把彩色的水分类，直到每个试管只剩一种颜色。",next:"下一步",
+      s2t:"点击，然后倒水",s2b:"点击一个试管选中它，再点击另一个倒水。只能倒在相同颜色上或空试管里。",play:"开始玩",skip:"跳过"},
+  ja:{s1t:"Pour へようこそ",s1b:"すべてのチューブが一色になるまで、色水を仕分けましょう。",next:"次へ",
+      s2t:"タップして注ぐ",s2b:"チューブをタップして選び、別のチューブをタップして注ぎます。同じ色の上か空のチューブにだけ注げます。",play:"プレイ",skip:"スキップ"},
+  ar:{s1t:"مرحباً بك في Pour",s1b:"رتّب الماء الملوّن حتى يحتوي كل أنبوب على لون واحد فقط.",next:"التالي",
+      s2t:"اضغط ثم اسكب",s2b:"اضغط على أنبوب لاختياره ثم اضغط على آخر للسكب. يُسكب فقط فوق اللون نفسه أو في أنبوب فارغ.",play:"العب",skip:"تخطّي"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+const STEPS=[
+  {target:null,      title:M.s1t,body:M.s1b,btn:M.next},
+  {target:()=>cv,pad:6,title:M.s2t,body:M.s2b,btn:M.play}
+];
+function maybeStartTut(){
+  if(!TUT_ON)return;
+  if(localStorage.getItem(TUTKEY))return;
+  if(lvl!==0||tutActive)return;
+  tutActive=true;tutStep=0;renderTut();
+}
+function setHole(rect,pad){
+  pad=pad||8;const h=$('tutHole');
+  $('tutBg').style.display='none';h.style.display='block';
+  h.style.left=(rect.left-pad)+'px';h.style.top=(rect.top-pad)+'px';
+  h.style.width=(rect.width+pad*2)+'px';h.style.height=(rect.height+pad*2)+'px';
+}
+function placeCard(rect){
+  const card=$('tutCard');
+  if(!rect){card.style.top='50%';card.style.transform='translate(-50%,-50%)';return;}
+  card.style.transform='translateX(-50%)';
+  const ch=card.offsetHeight, below=rect.top<innerHeight*0.5;
+  let top=below?rect.bottom+16:rect.top-16-ch;
+  card.style.top=Math.max(12,Math.min(top,innerHeight-ch-12))+'px';
+}
+function renderTut(){
+  const s=STEPS[tutStep];
+  $('tut').classList.add('on');
+  if(LANG==='ar')$('tutCard').dir='rtl';
+  $('tutTitle').textContent=s.title;$('tutBody').textContent=s.body;
+  $('tutSkip').textContent=M.skip;
+  $('tutNext').textContent=s.btn;
+  const tgt=s.target&&s.target();
+  if(tgt){const r=tgt.getBoundingClientRect();setHole(r,s.pad);placeCard(r);}
+  else{$('tutHole').style.display='none';$('tutBg').style.display='block';placeCard(null);}
+}
+function nextTut(){tutStep++;if(tutStep>=STEPS.length){endTut();return;}renderTut();}
+function endTut(){tutActive=false;localStorage.setItem(TUTKEY,'1');$('tut').classList.remove('on');draw();}
+$('tutNext').onclick=nextTut;
+$('tutSkip').onclick=endTut;
+
+addEventListener('resize',()=>{if(L){layout();draw();if(tutActive)renderTut();}});
+</script>
+</body>
+</html>

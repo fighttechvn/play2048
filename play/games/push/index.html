@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Push</title>
+<style>
+  :root{--bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--bd:#d0d0d0;--btn:#fff;--accent:#b06f2c;--star:#f2b01e}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);overscroll-behavior:none}
+  #wrap{max-width:560px;margin:0 auto;padding:calc(62px + var(--saa-top, env(safe-area-inset-top, 0px))) calc(16px + var(--saa-right, env(safe-area-inset-right, 0px))) calc(16px + var(--saa-bottom, env(safe-area-inset-bottom, 0px))) calc(16px + var(--saa-left, env(safe-area-inset-left, 0px)));display:flex;flex-direction:column;gap:14px;min-height:100%}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 16px;font-weight:700;white-space:nowrap}
+  #lvl{margin-right:auto}
+  #mute{cursor:pointer;padding:8px 12px}
+  .board{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px}
+  canvas{display:block;width:100%;height:auto;touch-action:none;border-radius:8px}
+  .btns{display:flex;gap:12px}
+  .btn{flex:1;padding:14px;border-radius:999px;border:1px solid var(--bd);background:var(--btn);font-weight:700;font-size:16px;cursor:pointer}
+  .btn:disabled{opacity:.45}
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;font-size:14.5px;color:#555;line-height:1.5}
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.5);z-index:9}
+  .win div.card{background:#fff;border-radius:18px;padding:26px 30px;text-align:center;max-width:320px}
+  .win h2{margin:0 0 4px}
+  #stars{font-size:34px;letter-spacing:4px;margin:6px 0 2px;color:#d5d0c6}
+  #stars .on{color:var(--star)}
+  #wintime{margin:4px 0 0;color:#666;font-size:14.5px}
+  .win .row{display:flex;gap:10px;margin-top:16px}
+  .win button{flex:1;padding:12px 0;border:0;border-radius:999px;font-weight:700;font-size:16px;cursor:pointer}
+  #again{background:#eee;color:#333}
+  #next{background:var(--accent);color:#fff}
+  /* First-run tutorial (static cards, same shell as the other games). */
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;pointer-events:auto}
+  #tut.on{display:block}
+  #tutBg{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.42)}
+  #tutCard{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:calc(100% - 40px);max-width:300px;background:rgba(255,255,255,.9);-webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);border:1px solid rgba(255,255,255,.55);border-radius:16px;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#9a9a9a;font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;min-height:44px;margin:-4px -8px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+  /* controls: swipe the board, or big arrow keys under it (body.keys) */
+  .pad{display:none;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);gap:12px;width:100%;max-width:380px;margin-left:auto;margin-right:auto;direction:ltr}
+  body.keys .pad{display:grid}
+  .pb{padding:0;border-radius:14px;border:1px solid var(--bd);background:#fff;font-size:30px;font-weight:700;cursor:pointer;color:var(--ink);touch-action:none;min-height:68px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .pb:active,.pb.on{background:#fdf3d9}
+  #bu{grid-column:2;grid-row:1}
+  #bl{grid-column:1;grid-row:2}
+  #bd{grid-column:2;grid-row:2}
+  #br{grid-column:3;grid-row:2}
+  .seg{display:flex;flex:0 0 auto;border:1px solid var(--bd);border-radius:999px;background:var(--btn);padding:3px}
+  .seg button{border:0;background:transparent;border-radius:999px;padding:0 13px;min-height:44px;font-weight:700;font-size:14px;color:#8a8a8a;cursor:pointer;white-space:nowrap}
+  .seg button.on{background:#eceae3;color:var(--ink)}
+  @media (max-width:420px){.seg button span{display:none}}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:12px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top"><span class="pill" id="lvl">Push · Level 1</span><span class="pill" id="clock">0:00</span><span class="pill" id="mute">🔊</span></div>
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="pad">
+    <button class="pb" id="bu">&#9650;</button>
+    <button class="pb" id="bl">&#9664;</button>
+    <button class="pb" id="bd">&#9660;</button>
+    <button class="pb" id="br">&#9654;</button>
+  </div>
+  <div class="btns">
+    <button class="btn" id="undo" disabled>Undo</button>
+    <button class="btn" id="reset">Reset</button>
+    <div class="seg" id="ctl"><button data-m="buttons">&#127918;<span></span></button><button data-m="swipe">&#128070;<span></span></button></div>
+  </div>
+  <div class="help"><b>How to play.</b> Push every crate onto a goal spot. You can only <b>push</b> — never pull — so don't trap a crate in a corner. Swipe (or use arrow keys) to move; Undo takes back a move.</div>
+</div>
+<script>
+/* Localized "how to play" — locale comes from the hub via ?lang=, else device. */
+(function(){
+  function pick(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";}
+  var T={
+    en:"<b>How to play.</b> Push every crate onto a goal spot. You can only <b>push</b> — never pull — so don't trap a crate in a corner. Swipe (or use arrow keys) to move; Undo takes back a move. Finish fast for more stars!",
+    vi:"<b>Cách chơi.</b> Đẩy mọi thùng vào điểm đích. Bạn chỉ có thể <b>đẩy</b> — không kéo được — nên đừng để thùng kẹt vào góc. Vuốt (hoặc dùng phím mũi tên) để di chuyển; Undo để đi lại. Hoàn thành nhanh để được nhiều sao!",
+    ko:"<b>플레이 방법.</b> 모든 상자를 목표 지점으로 미세요. <b>밀기만</b> 가능하고 당길 수 없으니 상자를 구석에 가두지 마세요. 스와이프(또는 방향키)로 이동하고, Undo로 한 수 무릅니다. 빨리 끝낼수록 별이 많아요!",
+    zh:"<b>玩法。</b> 把每个箱子推到目标点上。你只能<b>推</b>，不能拉，所以别把箱子卡进角落。滑动（或用方向键）移动；Undo 可悔一步。越快通关星越多！",
+    ja:"<b>遊び方。</b> すべての箱をゴール地点に押し込みましょう。<b>押す</b>ことしかできず、引けないので、箱を角に詰まらせないように。スワイプ（または矢印キー）で移動、Undoで一手戻せます。速くクリアすると星が増えます！",
+    ar:"<b>طريقة اللعب.</b> ادفع كل صندوق إلى نقطة الهدف. يمكنك <b>الدفع</b> فقط — لا السحب — فلا تُدخل صندوقًا في زاوية. اسحب (أو استخدم الأسهم) للتحرك؛ Undo يتراجع عن خطوة. أنهِ بسرعة لتحصل على نجوم أكثر!"
+  };
+  var L=pick(),el=document.querySelector(".help");
+  if(el){el.innerHTML=T[L]||T.en; if(L==="ar")el.dir="rtl";}
+})();
+</script>
+<div class="win" id="wino"><div class="card">
+  <h2 id="winttl">Solved! 🎉</h2>
+  <div id="stars"></div>
+  <p id="winmsg"></p>
+  <p id="wintime"></p>
+  <div class="row"><button id="again">↻</button><button id="next">Next level</button></div>
+</div></div>
+<div id="tut">
+  <div id="tutBg"></div>
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+<script>
+const KEY="push.level";
+const STARKEY="push.stars";
+const MUTEKEY="push.muted";
+const TUTKEY="push.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})(); // feature flag: hub passes ?tut=0 to disable
+// Locale — same source order as the "how to play" help above.
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Times each level and POSTs the completion to the leaderboard API using the
+// shared player token (set by the hub, same origin). No token → silently skips.
+// Paste this block into other bundles, changing only GAME, to roll the feature out.
+const GBLB=(function(){
+  var GAME='push', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    elapsed:function(){ return t0?(Date.now()-t0):0; },
+    emit:emit,
+    // stars ride the shared GameEvent's `score` field so the hub bridge
+    // forwards them to GA without a schema change (1..5 per completion).
+    report:function(level,stars){ var ms=t0?(Date.now()-t0):0; var p={level:level,duration_ms:ms}; if(stars)p.score=stars; emit('level_complete',p);
+      var tok=token(); if(!tok||!t0) return ms; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:level,durationMs:ms})}).catch(function(){}); }catch(e){} return ms; }
+  };
+})();
+
+// ── WebAudio beeps — OscillatorNode only, no files; silent-fail if blocked ──
+var actx=null;
+function ensureAudio(){try{var AC=window.AudioContext||window.webkitAudioContext;if(!actx&&AC)actx=new AC();if(actx&&actx.state==="suspended")actx.resume();}catch(e){actx=null;}}
+var muted=localStorage.getItem(MUTEKEY)==="1";
+function tone(freq,dur,type,vol){
+  try{
+    if(!actx||muted)return;
+    var t=actx.currentTime,o=actx.createOscillator(),g=actx.createGain();
+    o.type=type||"sine";o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.linearRampToValueAtTime(vol||0.22,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g);g.connect(actx.destination);
+    o.start(t);o.stop(t+dur+0.05);
+  }catch(e){}
+}
+// One sound per event, all synthesized: step tick, push thud, goal chime,
+// blocked bump, undo blip, and a little win arpeggio.
+function sStep(){tone(660,0.05,"square",0.06);}
+function sPush(){tone(180,0.09,"triangle",0.22);}
+function sGoal(){tone(880,0.12,"sine",0.2);setTimeout(function(){tone(1318.5,0.16,"sine",0.18);},70);}
+function sBump(){tone(110,0.06,"sawtooth",0.12);}
+function sUndo(){tone(440,0.06,"sine",0.12);setTimeout(function(){tone(330,0.08,"sine",0.1);},50);}
+function sWin(){var seq=[523.25,659.25,783.99,1046.5];for(var i=0;i<seq.length;i++)(function(f,d){setTimeout(function(){tone(f,0.22,"sine",0.2);},d);})(seq[i],i*110);}
+
+// ── Game state ────────────────────────────────────────────────────────────
+let DATA=null, lvl=0, L=null;
+let cols=0, rows=0, walls=null, goals=null, boxes=null, player=-1;
+let undoStack=[], clockIv=0;
+let anim=null; // {t0, dur, pFrom, pTo, bFrom, bTo, ontoGoal, done}
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const bg=document.createElement('canvas'), bctx=bg.getContext('2d');
+let cell=0, ox=0, oy=0;
+const $=id=>document.getElementById(id);
+// ── controls: swipe (default here) or big arrow keys — one choice shared with
+// the brick games (same key), so a player who picked keys keeps them. ──────
+const CTRL=(function(){
+  const KEY='gobrain.bg.controls';
+  const L={en:['Buttons','Swipe'],vi:['Nút','Vuốt'],ko:['버튼','스와이프'],zh:['按键','滑动'],ja:['ボタン','スワイプ'],ar:['أزرار','سحب']}[LANG]||['Buttons','Swipe'];
+  let mode='swipe';
+  try{ if(localStorage.getItem(KEY)==='buttons') mode='buttons'; }catch(e){}
+  const bs=$('ctl').getElementsByTagName('button');
+  function paint(){
+    document.body.classList.toggle('keys',mode==='buttons');
+    for(let i=0;i<bs.length;i++) bs[i].classList.toggle('on',bs[i].getAttribute('data-m')===mode);
+  }
+  for(let i=0;i<bs.length;i++){
+    bs[i].getElementsByTagName('span')[0].textContent=' '+L[i];
+    bs[i].setAttribute('aria-label',L[i]);
+    bs[i].addEventListener('click',function(){
+      mode=this.getAttribute('data-m');
+      try{ localStorage.setItem(KEY,mode); }catch(e){}
+      paint(); if(L){layout();drawStatic();draw();}
+    });
+  }
+  paint();
+  return {keys:function(){ return mode==='buttons'; }};
+})();
+
+const DIRS={up:[-1,0],down:[1,0],left:[0,-1],right:[0,1]};
+
+fetch('./levels.json').then(r=>r.json()).then(d=>{DATA=d; lvl=Math.min(+(localStorage.getItem(KEY)||0), d.levels.length-1); load(lvl);});
+
+function parse(rowsStr){
+  rows=rowsStr.length; cols=rowsStr[0].length;
+  walls=new Uint8Array(rows*cols); goals={}; boxes={}; player=-1;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const ch=rowsStr[r].charAt(c), u=r*cols+c;
+    if(ch==='#')walls[u]=1;
+    if(ch==='.'||ch==='*'||ch==='+')goals[u]=1;
+    if(ch==='$'||ch==='*')boxes[u]=1;
+    if(ch==='@'||ch==='+')player=u;
+  }
+}
+function load(i){
+  L=DATA.levels[i]; parse(L.rows); undoStack=[]; anim=null;
+  layout(); drawStatic(); draw();
+  $('lvl').textContent='Push · '+(LANG==='vi'?'Màn':'Level')+' '+(i+1);
+  $('undo').disabled=true;
+  GBLB.start(); startClock(); maybeStartTut();
+}
+function startClock(){
+  if(clockIv)clearInterval(clockIv);
+  const tick=function(){var s=Math.floor(GBLB.elapsed()/1000);$('clock').textContent=Math.floor(s/60)+':'+('0'+(s%60)).slice(-2);};
+  tick(); clockIv=setInterval(tick,500);
+}
+
+// ── Layout + rendering ────────────────────────────────────────────────────
+// Two layers: the static board (floor / walls / goal pads) is rasterized once
+// per level into an offscreen canvas; every frame just blits it and paints the
+// crates + player on top. rAF runs only while a slide animation is active.
+function layout(){
+  const wrap=document.getElementById('wrap');
+  // clientWidth can be ~0 while the host window is still settling — clamp so
+  // cell never goes non-positive (negative arc radii throw and abort load())
+  const W=Math.max(cols*8, Math.min(wrap.clientWidth-60, 520));
+  const c0=Math.floor(W/cols); cell=c0;
+  if(document.body.classList.contains('keys')){
+    // keys showing: shrink a tall board so the keys stay on screen
+    const top=cv.parentNode.getBoundingClientRect().top+(window.scrollY||0);
+    const room=window.innerHeight-top-28-12-document.querySelector('.pad').offsetHeight-16;
+    cell=Math.max(Math.min(c0,Math.floor((room-12)/rows)),Math.floor(c0*0.55),8);
+  }
+  ox=Math.floor((W-cell*cols)/2); oy=Math.floor((W-c0*cols)/2);
+  const pw=cell*cols+2*ox, ph=cell*rows+2*oy;
+  cv.width=pw*devicePixelRatio; cv.height=ph*devicePixelRatio;
+  cv.style.width=pw+'px'; cv.style.height=ph+'px';
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  bg.width=cv.width; bg.height=cv.height;
+  bctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+function xy(u){return [ox+(u%cols)*cell, oy+((u/cols)|0)*cell];}
+function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
+
+function drawStatic(){
+  bctx.clearRect(0,0,bg.width,bg.height);
+  for(let u=0;u<rows*cols;u++){
+    const p=xy(u), x=p[0], y=p[1];
+    if(walls[u]){
+      // wall block: warm grey brick with a lighter top bevel
+      bctx.fillStyle='#8a8378'; bctx.fillRect(x,y,cell,cell);
+      bctx.fillStyle='#9c948a'; bctx.fillRect(x,y,cell,cell*0.42);
+      bctx.strokeStyle='rgba(0,0,0,.18)'; bctx.lineWidth=1;
+      bctx.strokeRect(x+0.5,y+0.5,cell-1,cell-1);
+    }else{
+      // floor: soft parquet with a subtle checker so motion reads
+      const r=(u/cols)|0, c=u%cols;
+      bctx.fillStyle=((r+c)%2)?'#efe7d8':'#f6efe2';
+      bctx.fillRect(x,y,cell,cell);
+      if(goals[u]){
+        // goal pad: dashed ring + soft fill
+        bctx.fillStyle='rgba(176,111,44,.14)';
+        bctx.beginPath();bctx.arc(x+cell/2,y+cell/2,cell*0.30,0,7);bctx.fill();
+        bctx.strokeStyle='#b06f2c'; bctx.lineWidth=Math.max(2,cell*0.05);
+        bctx.beginPath();bctx.arc(x+cell/2,y+cell/2,cell*0.26,0,7);bctx.stroke();
+      }
+    }
+  }
+}
+function drawCrate(g,x,y,onGoal,scale){
+  const s=scale||1, m=cell*0.10+cell*(1-s)/2, w=cell-2*(cell*0.10)-(cell*(1-s));
+  const base=onGoal?'#6aa84f':'#c98b4b', edge=onGoal?'#4c7d38':'#96622e', plank=onGoal?'#5c9344':'#b5793c';
+  rr(g,x+m,y+m,w,w,cell*0.14);
+  g.fillStyle=base; g.fill();
+  g.lineWidth=Math.max(2,cell*0.06); g.strokeStyle=edge; g.stroke();
+  // plank cross for a wooden look
+  g.strokeStyle=plank; g.lineWidth=Math.max(2,cell*0.05);
+  g.beginPath();g.moveTo(x+m+w*0.16,y+m+w*0.16);g.lineTo(x+m+w*0.84,y+m+w*0.84);g.stroke();
+  g.beginPath();g.moveTo(x+m+w*0.84,y+m+w*0.16);g.lineTo(x+m+w*0.16,y+m+w*0.84);g.stroke();
+  // top highlight
+  g.fillStyle='rgba(255,255,255,.18)';
+  rr(g,x+m+w*0.08,y+m+w*0.08,w*0.84,w*0.22,cell*0.08); g.fill();
+}
+function drawPlayer(g,x,y){
+  const cx=x+cell/2, cy=y+cell/2, r=cell*0.32;
+  g.fillStyle='rgba(0,0,0,.12)';
+  g.beginPath();g.ellipse?g.ellipse(cx,cy+r*0.78,r*0.8,r*0.3,0,0,7):g.arc(cx,cy+r*0.78,r*0.55,0,7);g.fill();
+  g.fillStyle='#3b5bdb';
+  g.beginPath();g.arc(cx,cy,r,0,7);g.fill();
+  g.strokeStyle='#2b46b0'; g.lineWidth=Math.max(2,cell*0.05); g.stroke();
+  // face
+  g.fillStyle='#fff';
+  g.beginPath();g.arc(cx-r*0.34,cy-r*0.15,r*0.20,0,7);g.fill();
+  g.beginPath();g.arc(cx+r*0.34,cy-r*0.15,r*0.20,0,7);g.fill();
+  g.fillStyle='#1a1a1a';
+  g.beginPath();g.arc(cx-r*0.30,cy-r*0.12,r*0.09,0,7);g.fill();
+  g.beginPath();g.arc(cx+r*0.38,cy-r*0.12,r*0.09,0,7);g.fill();
+  g.strokeStyle='#fff'; g.lineWidth=Math.max(2,cell*0.045);
+  g.beginPath();g.arc(cx,cy+r*0.25,r*0.35,0.15*Math.PI,0.85*Math.PI);g.stroke();
+}
+function lerpXY(a,b,p){return [a[0]+(b[0]-a[0])*p, a[1]+(b[1]-a[1])*p];}
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.drawImage(bg,0,0,cv.width/devicePixelRatio,cv.height/devicePixelRatio);
+  let p=1, pPos=null, bPos=null;
+  if(anim){
+    p=Math.min(1,(Date.now()-anim.t0)/anim.dur);
+    const e=1-(1-p)*(1-p); // ease-out
+    pPos=lerpXY(xy(anim.pFrom),xy(anim.pTo),e);
+    if(anim.bFrom>=0)bPos=lerpXY(xy(anim.bFrom),xy(anim.bTo),e);
+  }
+  for(const k in boxes){
+    const u=+k;
+    if(anim&&anim.bTo===u&&p<1)continue; // drawn at interpolated pos below
+    const q=xy(u); drawCrate(ctx,q[0],q[1],!!goals[u],1);
+  }
+  if(bPos)drawCrate(ctx,bPos[0],bPos[1],!!goals[anim.bTo]&&p>=0.85,1);
+  const pp=(anim&&p<1)?pPos:xy(player);
+  drawPlayer(ctx,pp[0],pp[1]);
+  if(anim&&p<1){requestAnimationFrame(draw);}
+  else if(anim){const done=anim.done;anim=null;if(done)done();}
+}
+
+// ── Moves ─────────────────────────────────────────────────────────────────
+function delta(dir){const d=DIRS[dir];return d[0]*cols+d[1];}
+function snapshot(){const bs=[];for(const k in boxes)bs.push(+k);return {player:player,boxes:bs};}
+function restore(s){player=s.player;boxes={};for(let i=0;i<s.boxes.length;i++)boxes[s.boxes[i]]=1;}
+// Snap a pending slide to its end state. Called before handling new input so
+// fast key/swipe streams never drop moves — and so a stalled rAF (hidden tab /
+// backgrounded iframe throttles frames) can never wedge the game.
+function settleAnim(){
+  if(!anim)return;
+  const done=anim.done; anim=null;
+  if(done)done();
+}
+function move(dir){
+  if(!L)return;
+  settleAnim();
+  if($('wino').style.display==='grid')return; // settling just completed the level
+  const d=delta(dir), to=player+d;
+  if(walls[to]){sBump();return;}
+  let bTo=-1, ontoGoal=false;
+  if(boxes[to]){
+    const beyond=to+d;
+    if(walls[beyond]||boxes[beyond]){sBump();return;}
+    undoStack.push(snapshot()); if(undoStack.length>600)undoStack.shift();
+    delete boxes[to]; boxes[beyond]=1; bTo=beyond; ontoGoal=!!goals[beyond];
+    sPush(); if(ontoGoal)setTimeout(sGoal,60);
+  }else{
+    undoStack.push(snapshot()); if(undoStack.length>600)undoStack.shift();
+    sStep();
+  }
+  const from=player; player=to;
+  $('undo').disabled=false;
+  anim={t0:Date.now(),dur:90,pFrom:from,pTo:to,bFrom:bTo>=0?to:-1,bTo:bTo,done:checkWin};
+  requestAnimationFrame(draw);
+  // rAF can be throttled to a stop in hidden tabs / backgrounded iframes — a
+  // plain timeout guarantees the slide still settles and the win check runs
+  setTimeout(function(){if(anim&&Date.now()-anim.t0>=anim.dur){settleAnim();draw();}},130);
+}
+function checkWin(){
+  for(const k in boxes)if(!goals[+k])return;
+  if(clockIv){clearInterval(clockIv);clockIv=0;}
+  const th=L.stars; // [3★,2★] seconds — finishing at all is the 1★ floor
+  let sec=GBLB.elapsed()/1000;
+  let n=1; if(sec<=th[0])n=3; else if(sec<=th[1])n=2;
+  const ms=GBLB.report(lvl+1,n)||0; sec=ms/1000;
+  // persist best stars per level
+  try{
+    var m=JSON.parse(localStorage.getItem(STARKEY)||"{}");
+    if(!m[lvl+1]||m[lvl+1]<n){m[lvl+1]=n;localStorage.setItem(STARKEY,JSON.stringify(m));}
+  }catch(e){}
+  var stars='';for(var i2=0;i2<3;i2++)stars+='<span'+(i2<n?' class="on"':'')+'>★</span>';
+  $('stars').innerHTML=stars;
+  const M2=WIN_T[LANG]||WIN_T.en;
+  $('winttl').textContent=M2.solved;
+  $('winmsg').textContent=M2.level.replace('{1}',lvl+1).replace('{2}',DATA.count);
+  var s3=Math.floor(sec);
+  $('wintime').textContent='⏱ '+Math.floor(s3/60)+':'+('0'+(s3%60)).slice(-2);
+  $('next').textContent=M2.next;
+  sWin();
+  $('wino').style.display='grid';
+}
+const WIN_T={
+  en:{solved:"Solved! 🎉",level:"Level {1} of {2} complete.",next:"Next level"},
+  vi:{solved:"Đã giải! 🎉",level:"Hoàn thành màn {1} / {2}.",next:"Màn tiếp"},
+  ko:{solved:"성공! 🎉",level:"레벨 {1} / {2} 완료.",next:"다음 레벨"},
+  zh:{solved:"过关！🎉",level:"完成第 {1} / {2} 关。",next:"下一关"},
+  ja:{solved:"クリア！🎉",level:"レベル {1} / {2} クリア。",next:"次のレベル"},
+  ar:{solved:"تم الحل! 🎉",level:"أكملت المستوى {1} من {2}.",next:"المستوى التالي"}
+};
+
+// ── Input: swipe (continuous drag steps) + keyboard ───────────────────────
+let swX=0,swY=0,swiping=false;
+cv.addEventListener('pointerdown',function(ev){ev.preventDefault();ensureAudio();
+  try{cv.setPointerCapture(ev.pointerId);}catch(e){}
+  swiping=true;swX=ev.clientX;swY=ev.clientY;});
+cv.addEventListener('pointermove',function(ev){
+  if(!swiping)return;ev.preventDefault();
+  const dx=ev.clientX-swX, dy=ev.clientY-swY, TH=Math.max(24,cell*0.55);
+  if(Math.abs(dx)<TH&&Math.abs(dy)<TH)return;
+  if(Math.abs(dx)>Math.abs(dy)){move(dx>0?'right':'left');}
+  else{move(dy>0?'down':'up');}
+  swX=ev.clientX;swY=ev.clientY; // continuous: keep stepping as the drag continues
+});
+function swEnd(ev){swiping=false;try{cv.releasePointerCapture(ev.pointerId);}catch(e){}}
+cv.addEventListener('pointerup',swEnd);cv.addEventListener('pointercancel',swEnd);
+// iOS in-app webviews ignore touch-action:none for scroll suppression — a
+// non-passive touchmove preventDefault is the only reliable way to keep the
+// board drag from scrolling the page.
+cv.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+document.addEventListener('keydown',function(e){
+  const map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',w:'up',s:'down',a:'left',d:'right'};
+  // keyCode fallback for engines/synthetic events that leave e.key empty
+  const dir=map[e.key]||({37:'left',38:'up',39:'right',40:'down'})[e.keyCode];
+  if(dir){e.preventDefault();ensureAudio();move(dir);}
+});
+
+// arrow keys: one step per press; hold to keep walking
+[['bu','up'],['bl','left'],['bd','down'],['br','right']].forEach(function(p){
+  const el=$(p[0]); let t=0;
+  function stop(){ clearTimeout(t); t=0; el.classList.remove('on'); }
+  function rep(ms){ t=setTimeout(function(){ move(p[1]); rep(125); },ms); }
+  el.addEventListener('pointerdown',function(e){
+    e.preventDefault(); ensureAudio(); stop();
+    try{el.setPointerCapture(e.pointerId);}catch(_){}
+    el.classList.add('on'); move(p[1]); rep(300);
+  });
+  el.addEventListener('pointerup',stop); el.addEventListener('pointercancel',stop);
+  el.addEventListener('lostpointercapture',stop);
+});
+$('undo').onclick=function(){ensureAudio();settleAnim();if(!undoStack.length)return;restore(undoStack.pop());sUndo();$('undo').disabled=!undoStack.length;draw();};
+$('reset').onclick=function(){ensureAudio();settleAnim();parse(L.rows);undoStack=[];$('undo').disabled=true;draw();};
+$('next').onclick=function(){$('wino').style.display='none';lvl=Math.min(lvl+1,DATA.levels.length-1);localStorage.setItem(KEY,lvl);load(lvl);};
+$('again').onclick=function(){$('wino').style.display='none';load(lvl);};
+$('mute').onclick=function(){muted=!muted;localStorage.setItem(MUTEKEY,muted?"1":"0");$('mute').textContent=muted?"🔇":"🔊";ensureAudio();};
+if(muted)$('mute').textContent="🔇";
+
+/* ── First-run tutorial: three static cards, shown once on level 1. ─────── */
+const TUT_T={
+  en:{w_t:"Welcome to Push",w_b:"Push every crate 📦 onto a goal ring. Move by swiping or with the arrow keys.",
+      r_t:"Push, never pull",r_b:"You can only push one crate at a time. A crate stuck in a corner can't come back — Undo is your friend.",
+      s_t:"Race the clock",s_b:"Finish fast to earn up to 3 stars ★. Good luck!",start:"Next",play:"Play",skip:"Skip"},
+  vi:{w_t:"Chào mừng đến với Push",w_b:"Đẩy mọi thùng 📦 vào vòng đích. Di chuyển bằng cách vuốt hoặc dùng phím mũi tên.",
+      r_t:"Chỉ đẩy, không kéo",r_b:"Mỗi lần chỉ đẩy được một thùng. Thùng kẹt vào góc là không lấy ra được — hãy tận dụng Undo.",
+      s_t:"Đua với thời gian",s_b:"Hoàn thành nhanh để đạt tối đa 3 sao ★. Chúc may mắn!",start:"Tiếp",play:"Chơi",skip:"Bỏ qua"},
+  ko:{w_t:"Push에 오신 것을 환영합니다",w_b:"모든 상자 📦를 목표 링 위로 미세요. 스와이프나 방향키로 이동합니다.",
+      r_t:"밀기만, 당기기는 불가",r_b:"한 번에 상자 하나만 밀 수 있어요. 구석에 낀 상자는 되돌릴 수 없으니 Undo를 활용하세요.",
+      s_t:"시간과의 경주",s_b:"빨리 끝내면 최대 별 3개 ★를 얻어요. 행운을 빌어요!",start:"다음",play:"플레이",skip:"건너뛰기"},
+  zh:{w_t:"欢迎来到 Push",w_b:"把每个箱子 📦 推到目标圈上。滑动或用方向键移动。",
+      r_t:"只能推，不能拉",r_b:"一次只能推一个箱子。卡进角落的箱子拿不出来——多用 Undo。",
+      s_t:"与时间赛跑",s_b:"越快通关，最多可得 3 星 ★。祝你好运！",start:"下一步",play:"开始玩",skip:"跳过"},
+  ja:{w_t:"Push へようこそ",w_b:"すべての箱 📦 をゴールリングに押し込みましょう。スワイプか矢印キーで移動します。",
+      r_t:"押すだけ、引けない",r_b:"一度に押せる箱は一つ。角に詰まった箱は戻せません — Undoを活用しましょう。",
+      s_t:"時間との勝負",s_b:"速くクリアすると最大3つ星 ★。がんばって！",start:"次へ",play:"プレイ",skip:"スキップ"},
+  ar:{w_t:"مرحباً بك في Push",w_b:"ادفع كل صندوق 📦 إلى حلقة الهدف. تحرّك بالسحب أو بمفاتيح الأسهم.",
+      r_t:"ادفع فقط، لا تسحب",r_b:"يمكنك دفع صندوق واحد فقط في كل مرة. الصندوق العالق في الزاوية لا يعود — استخدم Undo.",
+      s_t:"سابق الساعة",s_b:"أنهِ بسرعة لتربح حتى 3 نجوم ★. حظًا سعيدًا!",start:"التالي",play:"العب",skip:"تخطّي"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+const STEPS=[
+  {title:M.w_t,body:M.w_b,btn:M.start},
+  {title:M.r_t,body:M.r_b,btn:M.start},
+  {title:M.s_t,body:M.s_b,btn:M.play}
+];
+let tutStep=0;
+function maybeStartTut(){
+  if(!TUT_ON)return;
+  if(localStorage.getItem(TUTKEY))return;
+  if(lvl!==0)return;
+  tutStep=0; renderTut(); $('tut').classList.add('on');
+  GBLB.emit('tutorial_begin',{});
+}
+function renderTut(){
+  const s=STEPS[tutStep];
+  if(LANG==='ar')$('tutCard').dir='rtl';
+  $('tutTitle').textContent=s.title; $('tutBody').textContent=s.body;
+  $('tutSkip').textContent=M.skip; $('tutNext').textContent=s.btn;
+}
+function endTut(skipped){localStorage.setItem(TUTKEY,'1');$('tut').classList.remove('on');
+  GBLB.emit('tutorial_complete',{skipped:!!skipped});}
+$('tutNext').onclick=function(){tutStep++;if(tutStep>=STEPS.length){endTut(false);return;}renderTut();};
+$('tutSkip').onclick=function(){endTut(true);};
+
+addEventListener('resize',function(){if(L){layout();drawStatic();draw();}});
+</script>
+</body>
+</html>

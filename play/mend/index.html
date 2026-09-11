@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Mend — Go Brain</title>
+<meta name="description" content="Restore the broken pattern — mirror each tile back into harmony." />
+<link rel="canonical" href="https://gobrain.fighttech.vn/play/mend/" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Go Brain" />
+<meta property="og:title" content="Mend — Go Brain" />
+<meta property="og:description" content="Restore the broken pattern — mirror each tile back into harmony." />
+<meta property="og:image" content="https://gobrain.fighttech.vn/play/thumbs/mend.png" />
+<meta property="og:url" content="https://gobrain.fighttech.vn/play/mend/" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Mend — Go Brain" />
+<meta name="twitter:description" content="Restore the broken pattern — mirror each tile back into harmony." />
+<meta name="twitter:image" content="https://gobrain.fighttech.vn/play/thumbs/mend.png" />
+<style>
+  :root{
+    --bg:#ffffff;--card:#ffffff;--ink:#1a1a1a;--body:#4a4a4a;--muted:#6e6e6e;
+    --bd:#e5e7eb;--bd2:#d6d6d6;--soft:#f5f5f5;--acc:#1a1a1a;--accd:#ffffff;--r:14px;
+    --serif:Georgia,Cambria,"Times New Roman","Noto Serif",serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{--bg:#0e0e10;--card:#161618;--ink:#fff;--body:#cbd5e1;--muted:#94a3b8;--bd:#28282c;--bd2:#34343a;--soft:#1d1d20;--acc:#ffffff;--accd:#0e0e10}}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font-family:var(--serif);-webkit-font-smoothing:antialiased}
+  body{display:flex;flex-direction:column;align-items:center;padding:24px 18px calc(28px + env(safe-area-inset-bottom,0px))}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:20px;letter-spacing:-.01em;margin:8px 0 22px}
+  .brand .dot{width:26px;height:26px;border-radius:7px;background:var(--acc);color:var(--accd);display:grid;place-items:center;font-size:15px}
+  .wrap{width:100%;max-width:420px}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .cover{aspect-ratio:16/10;background:var(--soft);width:100%;object-fit:cover;display:block}
+  .pad{padding:18px 18px 20px}
+  .kicker{font-family:var(--mono);text-transform:uppercase;letter-spacing:.18em;font-size:11px;color:var(--muted)}
+  h1{font-size:26px;line-height:1.2;margin:6px 0 8px;font-weight:700}
+  .tagline{color:var(--body);font-size:15.5px;line-height:1.6;margin:0 0 18px}
+  .btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px 16px;border-radius:10px;
+    border:1px solid var(--bd2);background:var(--card);color:var(--ink);font-family:var(--serif);font-weight:700;font-size:16px;
+    text-decoration:none;cursor:pointer;margin-top:10px}
+  .btn.primary{background:var(--acc);color:var(--accd);border-color:var(--acc)}
+  .btn svg{width:20px;height:20px;flex:0 0 auto}
+  .btn .sub{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.8;font-weight:500}
+  .btn .stk{display:flex;flex-direction:column;align-items:flex-start;line-height:1.1}
+  .or{display:flex;align-items:center;gap:12px;color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;margin:18px 2px 4px}
+  .or::before,.or::after{content:"";height:1px;background:var(--bd);flex:1}
+  .stores{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+  .foot{color:var(--muted);font-size:12.5px;text-align:center;margin:22px 0 0;line-height:1.6}
+  .foot a{color:var(--muted)}
+</style>
+</head>
+<body>
+  <div class="brand"><span class="dot">🧠</span> Go Brain</div>
+  <div class="wrap">
+    <div class="card">
+      <img class="cover" src="../thumbs/mend.png" alt="Mend" />
+      <div class="pad">
+        <div class="kicker">Go Brain · Game</div>
+        <h1>Mend</h1>
+        <p class="tagline">Restore the broken pattern — mirror each tile back into harmony.</p>
+
+        <a class="btn primary" id="openApp">Mở trong ứng dụng</a>
+        <a class="btn" id="playWeb" href="../?open=mend">Chơi trên trình duyệt</a>
+
+        <div class="or">Chưa cài app? Tải về</div>
+        <div class="stores">
+          <a class="btn" id="iosBtn" rel="noopener" href="https://testflight.apple.com/join/JSBKqNTe">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.9c0-2 1.6-3 1.7-3.1-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7c-1.3 0-2.6.8-3.3 2-1.4 2.5-.4 6.1 1 8.1.7 1 1.5 2.1 2.5 2 1-.04 1.4-.65 2.6-.65s1.5.65 2.6.63c1.1-.02 1.8-1 2.4-2 .8-1.1 1.1-2.2 1.1-2.3-.02-.01-2.1-.82-2.1-3.1zM14.5 6.2c.5-.7.9-1.6.8-2.5-.8.03-1.7.5-2.3 1.2-.5.6-.9 1.5-.8 2.4.9.07 1.7-.4 2.3-1.1z"/></svg>
+            <span class="stk"><span class="sub">Beta · iOS</span><span>TestFlight</span></span>
+          </a>
+          <a class="btn" id="androidBtn" rel="noopener" href="https://play.google.com/store/apps/details?id=vn.fighttech.go2048">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.6 2.3c-.2.2-.3.5-.3.9v17.6c0 .4.1.7.3.9l.1.1L13 12.1v-.2L3.7 2.2l-.1.1zM16.3 15.4l-3-3v-.2l3-3 .1.1 3.6 2c1 .6 1 1.5 0 2.1l-3.6 2-.1.1zM15.9 15.8l-3.1-3.1L3.6 22c.3.3.8.4 1.4 0l10.9-6.2zM4.9 2c-.5-.3-1-.3-1.3 0l9.2 9.2 3.1-3.1L4.9 2z"/></svg>
+            <span class="stk"><span class="sub">Get it on</span><span>Google Play</span></span>
+          </a>
+        </div>
+        <p class="foot">By FightTech · <a href="https://gobrain.fighttech.vn/">gobrain.fighttech.vn</a></p>
+      </div>
+    </div>
+  </div>
+<script>
+(function(){
+  var id = "mend";
+  var ua = navigator.userAgent || "";
+  var isIOS = /iPad|iPhone|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var isAndroid = /Android/i.test(ua);
+  var q = new URLSearchParams(location.search);
+  var web = "../?open=" + encodeURIComponent(id);   // play-in-browser (the hub launches the game)
+  var $ = function(x){ return document.getElementById(x); };
+
+  // Open in app — App/Universal Links open it automatically when installed; this
+  // custom-scheme href is the manual fallback for unverified App Links.
+  $("openApp").href = "gobrain://?game=" + encodeURIComponent(id);
+  // Emphasise the install button for the current platform (app likely not here).
+  if(isAndroid){ $("androidBtn").classList.add("primary"); $("openApp").classList.remove("primary"); }
+  else if(isIOS){ $("iosBtn").classList.add("primary"); $("openApp").classList.remove("primary"); }
+
+  // Auto deep-link on mobile: try the native app, fall back to the web hub if it
+  // isn't installed. Desktop keeps the card (store + play-in-browser). Once per
+  // session; ?stay / ?noredirect disables it.
+  if(!id || q.has("stay") || q.has("noredirect")) return;
+  try{ if(sessionStorage.getItem("go2048.gAuto")) return; sessionStorage.setItem("go2048.gAuto","1"); }catch(e){}
+  if(isAndroid){
+    location.href = "intent://o?game=" + encodeURIComponent(id) +
+      "#Intent;scheme=gobrain;package=vn.fighttech.go2048;S.browser_fallback_url=" +
+      encodeURIComponent(web) + ";end";
+  } else if(isIOS){
+    var t = setTimeout(function(){ location.href = web; }, 1300); // app didn't open → web
+    document.addEventListener("visibilitychange", function(){ if(document.hidden) clearTimeout(t); });
+    window.addEventListener("pagehide", function(){ clearTimeout(t); });
+    location.href = "gobrain://?game=" + encodeURIComponent(id); // OS prompts "Open in GoBrain?"
+  }
+})();
+</script>
+</body>
+</html>

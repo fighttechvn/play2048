@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* iOS 12 / old WebKit have no Pointer Events — the games drive all input through
+   pointerdown/move/up (+ setPointerCapture). Bridge touch (and old-desktop mouse)
+   into synthetic pointer events so swiping/drawing works. No-op on modern engines. */
+(function () {
+  if (window.PointerEvent) return;
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.setPointerCapture) {
+    EP.setPointerCapture = function () {};
+    EP.releasePointerCapture = function () {};
+    EP.hasPointerCapture = function () { return false; };
+  }
+  function mk(type, x, y, id, ptype) {
+    var e;
+    try { e = new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }); }
+    catch (_) { e = document.createEvent("MouseEvents"); e.initMouseEvent(type, true, true, window, 0, 0, 0, x, y, false, false, false, false, 0, null); }
+    e.pointerId = id; e.pointerType = ptype; e.isPrimary = true;
+    e.pressure = type === "pointerup" || type === "pointercancel" ? 0 : 0.5;
+    e.width = 1; e.height = 1;
+    return e;
+  }
+  // --- touch → pointer (move/up go to the start target, mimicking pointer capture) ---
+  var startTarget = null, touchActive = false, lastTouch = 0;
+  function relay(type, touch, target) {
+    var ev = mk(type, touch.clientX, touch.clientY, (touch.identifier || 0) + 1, "touch");
+    return target.dispatchEvent(ev); // false if a handler called preventDefault()
+  }
+  document.addEventListener("touchstart", function (e) {
+    touchActive = true; lastTouch = e.timeStamp || 0; startTarget = e.target;
+    if (!relay("pointerdown", e.changedTouches[0], startTarget)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", function (e) {
+    lastTouch = e.timeStamp || 0;
+    if (!relay("pointermove", e.changedTouches[0], startTarget || e.target)) e.preventDefault();
+  }, { passive: false });
+  function end(type) {
+    return function (e) {
+      touchActive = false; lastTouch = e.timeStamp || 0;
+      relay(type, e.changedTouches[0], startTarget || e.target); startTarget = null;
+    };
+  }
+  document.addEventListener("touchend", end("pointerup"), { passive: false });
+  document.addEventListener("touchcancel", end("pointercancel"), { passive: false });
+  // --- mouse → pointer (old desktop); skip the synthetic mouse burst after a touch ---
+  function fromMouse(type) {
+    return function (e) {
+      if (touchActive || (e.timeStamp || 0) - lastTouch < 700) return;
+      e.target.dispatchEvent(mk(type, e.clientX, e.clientY, 1, "mouse"));
+    };
+  }
+  document.addEventListener("mousedown", fromMouse("pointerdown"), true);
+  document.addEventListener("mousemove", fromMouse("pointermove"), true);
+  document.addEventListener("mouseup", fromMouse("pointerup"), true);
+})();
+</script>
+
+<!-- Google Analytics (GA4) — loads only on our own *.fighttech.vn web pages.
+     Skipped in the native app (capacitor:// / localhost — it uses native Firebase
+     Analytics) and in third-party SDK embeds on other domains, so we never
+     double-count app traffic or ingest other sites' visitors. -->
+<script>
+  (function () {
+    if (!/(^|\.)fighttech\.vn$/.test(location.hostname)) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-VCLVPVRXMV";
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag("js", new Date());
+    gtag("config", "G-VCLVPVRXMV");
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Killer Sudoku</title>
+<style>
+  :root{
+    --bg:#f2f0eb;--card:#fff;--ink:#1a1a1a;--grid:#cdcdcd;--bd:#d0d0d0;
+    --accent:#3b5bdb;--accentbg:#dbe4ff;--peer:#eef1f8;--same:#c7d2fe;
+    --given:#1a1a1a;--bad:#e03131;--badbg:#ffe3e3;--btn:#fff;--muted:#777;--cage:#8a8f9b
+  }
+  @media (prefers-color-scheme: dark){
+    :root{--bg:#15171c;--card:#1d2027;--ink:#e9ecf1;--grid:#363a44;--bd:#363a44;
+      --accent:#748ffc;--accentbg:#2a3550;--peer:#232733;--same:#34406b;
+      --given:#e9ecf1;--bad:#ff6b6b;--badbg:#3a2326;--btn:#252934;--muted:#8b93a3;--cage:#6b7280}
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overscroll-behavior:none;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  #wrap{max-width:520px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;gap:14px;
+    padding:calc(62px + var(--saa-top, env(safe-area-inset-top,0px)))
+            calc(16px + var(--saa-right, env(safe-area-inset-right,0px)))
+            calc(16px + var(--saa-bottom, env(safe-area-inset-bottom,0px)))
+            calc(16px + var(--saa-left, env(safe-area-inset-left,0px)))}
+  /* the wrapper's top pad clears the host's floating chrome (back button left,
+     leaderboard button right), so this row gets the full width */
+  .top{display:flex;align-items:center;gap:8px;min-height:44px}
+  .pill{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:8px 14px;
+    font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+  #lvl{margin-right:auto}
+  .pill.warn{color:var(--bad)}
+
+  .board{background:var(--card);border:2px solid var(--ink);border-radius:12px;padding:0;overflow:hidden;
+    display:grid;grid-template-columns:repeat(9,1fr);aspect-ratio:1;touch-action:manipulation;user-select:none}
+  .cell{position:relative;display:flex;align-items:center;justify-content:center;
+    border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);
+    font-size:clamp(16px,5.6vw,26px);font-weight:600;cursor:pointer;color:var(--accent)}
+  .cell:nth-child(9n){border-right:0}
+  .cell:nth-child(n+73){border-bottom:0}
+  /* thick 3×3 box separators */
+  .cell:nth-child(9n+3),.cell:nth-child(9n+6){border-right:2px solid var(--ink)}
+  .row3 .cell{border-bottom:2px solid var(--ink)}
+  .cell.given .cnt{color:var(--given);font-weight:800}
+  .cell.peer{background:var(--peer)}
+  .cell.same{background:var(--same)}
+  .cell.sel{background:var(--accentbg);box-shadow:inset 0 0 0 2px var(--accent)}
+  .cell.bad{background:var(--badbg)}
+  .cell.bad .cnt{color:var(--bad)!important}
+  .cell.hl .cnt{display:inline-block;animation:pop .25s ease}
+  @keyframes pop{0%{transform:scale(.6);opacity:.3}100%{transform:scale(1);opacity:1}}
+  /* dashed killer cage boundary, inset inside the cell */
+  .cageln{position:absolute;top:2px;right:2px;bottom:2px;left:2px;pointer-events:none;
+    border:0 dashed var(--cage)}
+  .csum{position:absolute;top:1px;left:3px;font-size:clamp(8px,2.6vw,11px);font-weight:700;
+    color:var(--muted);line-height:1.2;pointer-events:none;z-index:2}
+  .csum.bad{color:var(--bad)}
+  .cnt{position:relative;z-index:1}
+  .notes{position:absolute;top:14%;right:7%;bottom:5%;left:7%;display:grid;grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,1fr);pointer-events:none}
+  .notes span{display:flex;align-items:center;justify-content:center;font-size:clamp(7px,2.2vw,10px);
+    font-weight:600;color:var(--muted);line-height:1}
+
+  .pad{display:grid;grid-template-columns:repeat(9,1fr);gap:5px}
+  .pad button{min-height:56px;border:1px solid var(--bd);background:var(--btn);color:var(--accent);
+    border-radius:10px;font-size:clamp(20px,6.2vw,26px);font-weight:700;cursor:pointer;position:relative;padding:0;touch-action:manipulation}
+  .pad button .rem{position:absolute;top:3px;right:5px;font-size:9px;font-weight:600;color:var(--muted)}
+  .pad button.done{opacity:.32;pointer-events:none}
+  .pad button:active{background:var(--accentbg)}
+
+  .btns{display:flex;gap:8px}
+  .btn{flex:1;padding:12px 6px;border-radius:12px;border:1px solid var(--bd);background:var(--btn);
+    color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;display:flex;gap:6px;
+    align-items:center;justify-content:center}
+  .btn:disabled{opacity:.4}
+  .btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+  .help{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;
+    font-size:14.5px;color:var(--muted);line-height:1.5}
+  .help b{color:var(--ink)}
+
+  .win{position:fixed;top:0;right:0;bottom:0;left:0;display:none;place-items:center;background:rgba(0,0,0,.55);z-index:9;
+    padding:24px}
+  .win.show{display:grid}
+  .win .card{background:var(--card);color:var(--ink);border-radius:18px;padding:28px 30px;text-align:center;max-width:320px}
+  .win h2{margin:0 0 6px;font-size:26px}
+  .win p{margin:4px 0;color:var(--muted)}
+  .win b{color:var(--ink)}
+  .win button{margin-top:16px;padding:13px 28px;border:0;border-radius:999px;background:var(--accent);
+    color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+
+  #tut{position:fixed;top:0;right:0;bottom:0;left:0;z-index:20;display:none;pointer-events:none}
+  #tut.on{display:block}
+  #tut.block{pointer-events:auto}
+  #tutBg{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.42);pointer-events:none}
+  #tutHole{position:fixed;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.42);
+    transition:left .22s ease,top .22s ease,width .22s ease,height .22s ease;pointer-events:none}
+  #tutCard{position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 40px);max-width:300px;
+    pointer-events:auto;background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(16px) saturate(1.5);
+    backdrop-filter:blur(16px) saturate(1.5);border:1px solid rgba(255,255,255,.55);border-radius:16px;
+    padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  #tutCard h3{margin:0 0 7px;font-size:18px;font-weight:700;color:#1a1a1a}
+  #tutCard p{margin:0;font-size:14.5px;line-height:1.5;color:#2c2c2c}
+  #tutCard .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+  #tutSkip{background:none;border:0;color:#5a5a5a;font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;min-height:44px;margin:-4px -8px}
+  #tutNext{background:#1a1a1a;color:#fff;border:0;border-radius:999px;padding:11px 24px;font-weight:700;font-size:15px;cursor:pointer}
+@supports not (inset:0){#wrap>*+*{margin-top:14px}.top>*+*{margin-left:8px}.btns>*+*{margin-left:8px}.btn>*+*{margin-left:6px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="top">
+    <span class="pill" id="lvl">Killer · 1</span>
+    <span class="pill" id="time">00:00</span>
+    <span class="pill" id="miss">✗ 0</span>
+  </div>
+  <div class="board" id="board"></div>
+  <div class="pad" id="pad"></div>
+  <div class="btns">
+    <button class="btn" id="notes">✎ Notes</button>
+    <button class="btn" id="erase">⌫ Erase</button>
+    <button class="btn" id="hint">Hint</button>
+    <button class="btn" id="undo" disabled>Undo</button>
+  </div>
+  <div class="help" id="help"></div>
+</div>
+
+<div class="win" id="wino"><div class="card">
+  <h2>Solved! 🎉</h2>
+  <p id="wmsg"></p>
+  <p><b id="wtime"></b> · ✗ <b id="wmiss"></b></p>
+  <button id="wnext">Next level</button>
+</div></div>
+<div id="tut">
+  <div id="tutBg"></div>
+  <div id="tutHole"></div>
+  <div id="tutCard">
+    <h3 id="tutTitle"></h3>
+    <p id="tutBody"></p>
+    <div class="row"><button id="tutSkip"></button><button id="tutNext"></button></div>
+  </div>
+</div>
+
+<script>
+const KEY = "cages.level";
+const SAVEKEY = "cages.save";
+const TUTKEY = "cages.tutorialSeen";
+const TUT_ON=(function(){var p=new URLSearchParams(location.search).get("tut");return !(p==="0"||p==="off"||p==="false");})();
+const LANG=(function(){var p=new URLSearchParams(location.search).get("lang");var raw=p||localStorage.getItem("gobrain.locale")||localStorage.getItem("CapacitorStorage.gobrain.locale")||navigator.language||"en";var c=String(raw).toLowerCase().split("-")[0];return ["en","vi","ko","zh","ja","ar"].indexOf(c)>=0?c:"en";})();
+
+// Minimal embedded fallback level so the game still runs if levels.json can't
+// be fetched (e.g. opened from file://). Real pool comes from levels.json.
+const FALLBACK={version:1,count:1,levels:[{"g":"000080260004000800602050003305200000068000000007890030001639408806021000003000050","s":"179384265534962871682157943395216784268743519417895632751639428846521397923478156","cages":[{"sum":16,"cells":[32,33,41]},{"sum":17,"cells":[63,72]},{"sum":5,"cells":[27,36]},{"sum":14,"cells":[77,78,79]},{"sum":20,"cells":[29,38,47]},{"sum":5,"cells":[31,40]},{"sum":15,"cells":[50,59,68]},{"sum":7,"cells":[60,69]},{"sum":21,"cells":[24,25,34]},{"sum":12,"cells":[12,21,30]},{"sum":13,"cells":[35,44]},{"sum":6,"cells":[46,55]},{"sum":9,"cells":[42,43,52]},{"sum":9,"cells":[10,11,20]},{"sum":11,"cells":[9,18]},{"sum":18,"cells":[61,70,71]},{"sum":16,"cells":[66,75,76]},{"sum":10,"cells":[53,62]},{"sum":11,"cells":[56,64,65]},{"sum":15,"cells":[15,16]},{"sum":9,"cells":[14,23]},{"sum":4,"cells":[17,26]},{"sum":9,"cells":[57,58]},{"sum":12,"cells":[5,6,7]},{"sum":19,"cells":[1,2,3]},{"sum":11,"cells":[45,54]},{"sum":6,"cells":[80]},{"sum":19,"cells":[4,13,22]},{"sum":5,"cells":[8]},{"sum":1,"cells":[0]},{"sum":5,"cells":[73,74]},{"sum":2,"cells":[67]},{"sum":23,"cells":[19,28,37]},{"sum":24,"cells":[39,48,49]},{"sum":6,"cells":[51]}]}]};
+
+// ── Leaderboard reporter (Go Brain) ───────────────────────────────────────
+// Times each level and POSTs the completion to the leaderboard API using the
+// shared player token (set by the hub, same origin). No token → silently skips.
+const GBLB=(function(){
+  var GAME='cages', t0=0;
+  function base(){ try{var o=localStorage.getItem('gobrain.api.base'); if(o) return o.replace(/\/$/,'');}catch(e){}
+    return (function(){try{var C=window.Capacitor||(window.parent&&window.parent.Capacitor);if(C&&typeof C.isNativePlatform==='function')return C.isNativePlatform();}catch(e){}return /^capacitor:|^ionic:/.test(location.protocol);})()?'https://gobrain.fighttech.vn/api/v1':'/api/v1'; }
+  function token(){ try{return localStorage.getItem('CapacitorStorage.gobrain.player.token')||localStorage.getItem('gobrain.player.token');}catch(e){return null;} }
+  function apiKey(){ try{return localStorage.getItem('gobrain.api.key')||'gobrain-dev-client-key';}catch(e){return 'gobrain-dev-client-key';} }
+  function emit(name,params){ try{ if(window.parent&&window.parent!==window){ params=params||{}; params.game_id=GAME; window.parent.postMessage({__gb:1,name:name,params:params},'*'); } }catch(e){} }
+  return {
+    start:function(){ t0=Date.now(); emit('level_start',{}); },
+    report:function(level){ var ms=t0?(Date.now()-t0):0; emit('level_complete',{level:level,duration_ms:ms});
+      var tok=token(); if(!tok||!t0) return; t0=0;
+      try{ fetch(base()+'/scores',{method:'POST',headers:{'content-type':'application/json','x-api-key':apiKey(),'authorization':'Bearer '+tok},
+        body:JSON.stringify({gameId:GAME,level:level,durationMs:ms})}).catch(function(){}); }catch(e){} }
+  };
+})();
+
+// ── i18n ────────────────────────────────────────────────────────────────────
+const HELP={
+  en:'<b>How to play.</b> Classic sudoku rules: every row, column and 3×3 box contains 1–9. Extra rule: the digits inside each <b>dashed cage</b> add up to the small number in its corner, with <b>no repeats</b> inside a cage. Later levels start with no given digits at all!',
+  vi:'<b>Cách chơi.</b> Luật sudoku cổ điển: mỗi hàng, cột và ô 3×3 chứa 1–9. Luật thêm: các số trong mỗi <b>lồng nét đứt</b> cộng lại bằng con số nhỏ ở góc, và <b>không lặp lại</b> trong lồng. Các màn sau không có số cho sẵn!',
+  ko:'<b>플레이 방법.</b> 클래식 스도쿠 규칙: 모든 행·열·3×3 박스에 1–9가 한 번씩. 추가 규칙: 각 <b>점선 케이지</b> 안의 숫자 합이 모서리의 작은 숫자와 같아야 하며, 케이지 안에서 <b>중복 금지</b>. 후반 레벨은 주어진 숫자가 하나도 없습니다!',
+  zh:'<b>玩法。</b> 经典数独规则：每行、每列和每个 3×3 宫格都包含 1–9。附加规则：每个<b>虚线笼子</b>里的数字之和等于角上的小数字，且笼内<b>不能重复</b>。后期关卡没有任何提示数字！',
+  ja:'<b>遊び方。</b> クラシックな数独ルール：各行・列・3×3ブロックに1–9が一つずつ。追加ルール：<b>点線のケージ</b>内の数字の合計は隅の小さな数字と等しく、ケージ内で<b>重複禁止</b>。後半のレベルはヒント数字なしで始まります！',
+  ar:'<b>طريقة اللعب.</b> قواعد السودوكو الكلاسيكية: كل صف وعمود ومربع 3×3 يحتوي 1–9. قاعدة إضافية: أرقام كل <b>قفص متقطع</b> يساوي مجموعها الرقم الصغير في زاويته، و<b>لا تكرار</b> داخل القفص. المستويات المتقدمة تبدأ بلا أرقام معطاة!'
+};
+(function(){var el=document.getElementById('help');el.innerHTML=HELP[LANG]||HELP.en;if(LANG==='ar')el.dir='rtl';})();
+
+let DATA=null, lvl=0;
+let sol="", cages=[], cageOf=[], anchors={}, cells=[];
+let sel=-1, notesMode=false, history=[], mistakes=0, elapsed=0, tickStart=0, timer=null, solved=false;
+
+const $=function(id){return document.getElementById(id);};
+const boardEl=$("board"), padEl=$("pad");
+const peers=buildPeers();
+
+fetch("./levels.json").then(function(r){return r.ok?r.json():Promise.reject();})
+  .then(function(d){start(d);}).catch(function(){start(FALLBACK);});
+
+function start(db){
+  DATA=db;
+  buildPad(); bind();
+  lvl=Math.min(+(localStorage.getItem(KEY)||0), DATA.levels.length-1);
+  var saved=loadSave();
+  if(saved && saved.lvl===lvl && DATA.levels[lvl]) load(lvl, saved);
+  else load(lvl, null);
+}
+
+// ---- level setup -----------------------------------------------------------
+function load(i, saved){
+  lvl=i;
+  var L=DATA.levels[i];
+  sol=L.s; cages=L.cages;
+  cageOf=new Array(81); anchors={};
+  for(var g=0;g<cages.length;g++){
+    var cs=cages[g].cells;
+    for(var k=0;k<cs.length;k++)cageOf[cs[k]]=g;
+    anchors[Math.min.apply(null,cs)]=g;
+  }
+  if(saved){
+    cells=saved.cells.map(function(c){return {v:c.v,given:c.given,notes:new Set(c.notes||[])};});
+    mistakes=saved.mistakes||0; elapsed=saved.elapsed||0;
+  } else {
+    cells=[];
+    for(var j=0;j<81;j++){var ch=L.g[j];cells.push({v:+ch,given:ch!=="0",notes:new Set()});}
+    mistakes=0; elapsed=0;
+  }
+  sel=-1; history=[]; solved=false;
+  buildBoard(); startTimer(); render(); save();
+  GBLB.start(); maybeStartTut();
+}
+
+// ---- board construction ----------------------------------------------------
+function buildBoard(){
+  boardEl.innerHTML="";
+  for(var i=0;i<81;i++){
+    var d=document.createElement("div");
+    d.className="cell"; d.dataset.i=i;
+    // dashed cage boundary: draw each side whose neighbor is a different cage
+    var ln=document.createElement("div"); ln.className="cageln";
+    var r=(i/9)|0, c=i%9, g=cageOf[i];
+    ln.style.borderTopWidth=(r===0||cageOf[i-9]!==g)?"1.5px":"0";
+    ln.style.borderBottomWidth=(r===8||cageOf[i+9]!==g)?"1.5px":"0";
+    ln.style.borderLeftWidth=(c===0||cageOf[i-1]!==g)?"1.5px":"0";
+    ln.style.borderRightWidth=(c===8||cageOf[i+1]!==g)?"1.5px":"0";
+    d.appendChild(ln);
+    if(anchors[i]!==undefined){
+      var s=document.createElement("span"); s.className="csum";
+      s.textContent=cages[anchors[i]].sum; d.appendChild(s);
+    }
+    var v=document.createElement("span"); v.className="cnt"; d.appendChild(v);
+    boardEl.appendChild(d);
+  }
+}
+
+// ---- helpers ---------------------------------------------------------------
+function buildPeers(){
+  var P=[];
+  for(var i=0;i<81;i++){
+    var set=new Set(), r=(i/9)|0, c=i%9, br=((r/3)|0)*3, bc=((c/3)|0)*3;
+    for(var k=0;k<9;k++){set.add(r*9+k);set.add(k*9+c);}
+    for(var dr=0;dr<3;dr++)for(var dc=0;dc<3;dc++)set.add((br+dr)*9+bc+dc);
+    set.delete(i); P.push(set);
+  }
+  return P;
+}
+function conflict(i){
+  var v=cells[i].v; if(!v) return false;
+  var it=peers[i].values(), n;
+  while(!(n=it.next()).done) if(cells[n.value].v===v) return true;
+  var cs=cages[cageOf[i]].cells;                       // cage uniqueness
+  for(var k=0;k<cs.length;k++) if(cs[k]!==i && cells[cs[k]].v===v) return true;
+  return false;
+}
+function cageBad(g){
+  var cs=cages[g].cells, sum=0, filled=0, seen={}, dup=false;
+  for(var k=0;k<cs.length;k++){var v=cells[cs[k]].v;
+    if(v){filled++;sum+=v;if(seen[v])dup=true;seen[v]=1;}}
+  if(dup) return true;
+  if(filled===cs.length && sum!==cages[g].sum) return true;
+  return sum>cages[g].sum;
+}
+
+// ---- rendering -------------------------------------------------------------
+function render(){
+  var selV=sel>=0?cells[sel].v:0, i;
+  var badCage={};
+  for(var g=0;g<cages.length;g++) if(cageBad(g)) badCage[g]=1;
+  for(i=0;i<81;i++){
+    var cell=cells[i], el=boardEl.children[i];
+    var cls="cell";
+    if((((i/9)|0)%3)===2) cls+=" row3";
+    if(cell.given) cls+=" given";
+    if(i===sel) cls+=" sel";
+    else if(sel>=0&&(peers[sel].has(i)||cageOf[i]===cageOf[sel])) cls+=" peer";
+    if(selV&&cell.v===selV&&i!==sel) cls+=" same";
+    if(cell.v&&conflict(i)) cls+=" bad";
+    el.className=cls;
+    var cnt=el.querySelector(".cnt");
+    var old=el.querySelector(".notes"); if(old) el.removeChild(old);
+    if(cell.v){cnt.textContent=cell.v;}
+    else if(cell.notes.size){cnt.textContent="";
+      var n=document.createElement("div"); n.className="notes";
+      for(var d=1;d<=9;d++){var sp=document.createElement("span");sp.textContent=cell.notes.has(d)?d:"";n.appendChild(sp);}
+      el.appendChild(n);}
+    else cnt.textContent="";
+    var sumEl=el.querySelector(".csum");
+    if(sumEl) sumEl.className="csum"+(badCage[cageOf[i]]?" bad":"");
+  }
+  for(var d2=1;d2<=9;d2++){
+    var placed=0; for(i=0;i<81;i++) if(cells[i].v===d2) placed++;
+    var b=padEl.querySelector('[data-d="'+d2+'"]');
+    b.querySelector(".rem").textContent=placed>=9?"":(9-placed);
+    b.classList.toggle("done",placed>=9);
+  }
+  $("lvl").textContent="Killer · "+(lvl+1)+"/"+DATA.levels.length;
+  $("miss").textContent="✗ "+mistakes;
+  $("miss").classList.toggle("warn",mistakes>0);
+  $("undo").disabled=history.length===0;
+  $("notes").classList.toggle("on",notesMode);
+}
+
+// ---- input -----------------------------------------------------------------
+function input(d){
+  if(sel<0||solved) return;
+  var cell=cells[sel]; if(cell.given) return;
+  if(notesMode&&d>0){
+    push(); if(cell.notes.has(d))cell.notes.delete(d); else cell.notes.add(d);
+    cell.v=0; render(); save(); return;
+  }
+  push();
+  if(d===0){cell.v=0;cell.notes.clear();}
+  else{
+    cell.v=d; cell.notes.clear();
+    var it=peers[sel].values(), n;
+    while(!(n=it.next()).done) cells[n.value].notes.delete(d);
+    var cs=cages[cageOf[sel]].cells;
+    for(var k=0;k<cs.length;k++) cells[cs[k]].notes.delete(d);
+    if(sol&&d!==+sol[sel]) mistakes++;
+  }
+  flash(sel); render(); save(); checkWin();
+}
+function push(){
+  history.push(cells.map(function(c){return {v:c.v,given:c.given,notes:Array.from(c.notes)};}));
+  if(history.length>200) history.shift();
+}
+function undo(){
+  if(!history.length) return;
+  var prev=history.pop();
+  cells=prev.map(function(c){return {v:c.v,given:c.given,notes:new Set(c.notes)};});
+  render(); save();
+}
+function hint(){
+  if(solved) return;
+  var t=(sel>=0&&!cells[sel].given&&cells[sel].v!==+sol[sel])?sel:-1;
+  if(t<0){var empt=[];for(var i=0;i<81;i++)if(!cells[i].given&&cells[i].v!==+sol[i])empt.push(i);
+    if(!empt.length)return; t=empt[(Math.random()*empt.length)|0];}
+  push(); sel=t; cells[t].v=+sol[t]; cells[t].notes.clear();
+  var it=peers[t].values(), n;
+  while(!(n=it.next()).done) cells[n.value].notes.delete(cells[t].v);
+  flash(t); render(); save(); checkWin();
+}
+function flash(i){var el=boardEl.children[i];el.classList.remove("hl");void el.offsetWidth;el.classList.add("hl");}
+
+function checkWin(){
+  for(var i=0;i<81;i++) if(cells[i].v!==+sol[i]) return;
+  solved=true; stopTimer();
+  GBLB.report(lvl+1);
+  $("wmsg").textContent="Level "+(lvl+1)+" / "+DATA.levels.length;
+  $("wtime").textContent=fmt(elapsed);
+  $("wmiss").textContent=mistakes;
+  $("wino").classList.add("show");
+  try{localStorage.removeItem(SAVEKEY);}catch(e){}
+}
+
+// ---- timer -----------------------------------------------------------------
+function startTimer(){stopTimer();tickStart=Date.now()-elapsed*1000;
+  timer=setInterval(function(){elapsed=((Date.now()-tickStart)/1000)|0;$("time").textContent=fmt(elapsed);},1000);
+  $("time").textContent=fmt(elapsed);}
+function stopTimer(){if(timer){clearInterval(timer);timer=null;}}
+function fmt(s){var m=(s/60)|0;return String(m).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+
+// ---- persistence -----------------------------------------------------------
+function save(){
+  try{
+    localStorage.setItem(KEY,lvl);
+    localStorage.setItem(SAVEKEY,JSON.stringify({
+      lvl:lvl,mistakes:mistakes,elapsed:elapsed,
+      cells:cells.map(function(c){return {v:c.v,given:c.given,notes:Array.from(c.notes)};})
+    }));
+  }catch(e){}
+}
+function loadSave(){try{return JSON.parse(localStorage.getItem(SAVEKEY));}catch(e){return null;}}
+
+// ---- UI wiring -------------------------------------------------------------
+function buildPad(){
+  if(padEl.children.length) return;
+  for(var d=1;d<=9;d++){
+    var b=document.createElement("button"); b.dataset.d=d;
+    b.innerHTML=d+'<span class="rem"></span>';
+    (function(dd){b.onclick=function(){input(dd);};})(d);
+    padEl.appendChild(b);
+  }
+}
+function bind(){
+  boardEl.addEventListener("pointerdown",function(e){
+    var t=e.target; while(t&&t!==boardEl&&!(t.dataset&&t.dataset.i)) t=t.parentNode;
+    if(!t||t===boardEl) return;
+    sel=+t.dataset.i; render();
+  });
+  $("notes").onclick=function(){notesMode=!notesMode;render();};
+  $("erase").onclick=function(){input(0);};
+  $("hint").onclick=hint;
+  $("undo").onclick=undo;
+  $("wnext").onclick=function(){
+    $("wino").classList.remove("show");
+    var next=Math.min(lvl+1,DATA.levels.length-1);
+    try{localStorage.setItem(KEY,next);localStorage.removeItem(SAVEKEY);}catch(e){}
+    load(next,null);
+  };
+  window.addEventListener("keydown",function(e){
+    if(e.key>="1"&&e.key<="9") input(+e.key);
+    else if(e.key==="Backspace"||e.key==="Delete"||e.key==="0") input(0);
+    else if(e.key==="n"||e.key==="N"){notesMode=!notesMode;render();}
+    else if(sel>=0&&["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.key)>=0){
+      var r=(sel/9)|0,c=sel%9;
+      if(e.key==="ArrowUp")sel=((r+8)%9)*9+c;
+      if(e.key==="ArrowDown")sel=((r+1)%9)*9+c;
+      if(e.key==="ArrowLeft")sel=r*9+(c+8)%9;
+      if(e.key==="ArrowRight")sel=r*9+(c+1)%9;
+      render(); e.preventDefault();
+    }
+  });
+}
+
+// ---- first-run tutorial (2 steps, pointing at the cages) -------------------
+let tutActive=false, tutStep=0;
+const TUT_T={
+  en:{s1t:"Cages",s1b:"The digits in each dashed cage must add up to the small number in its corner — with no repeats inside a cage.",
+      s2t:"Sudoku rules",s2b:"Every row, column and 3×3 box contains 1–9 exactly once. Tap a cell, then tap a number here.",
+      next:"Next",play:"Play",skip:"Skip"},
+  vi:{s1t:"Lồng số",s1b:"Các số trong mỗi lồng nét đứt phải cộng lại bằng con số nhỏ ở góc — và không lặp lại trong lồng.",
+      s2t:"Luật sudoku",s2b:"Mỗi hàng, cột và ô 3×3 chứa 1–9 đúng một lần. Chạm vào ô, rồi chạm số ở đây.",
+      next:"Tiếp",play:"Chơi",skip:"Bỏ qua"},
+  ko:{s1t:"케이지",s1b:"점선 케이지 안 숫자들의 합은 모서리의 작은 숫자와 같아야 하며, 케이지 안에서 중복될 수 없습니다.",
+      s2t:"스도쿠 규칙",s2b:"모든 행·열·3×3 박스에 1–9가 정확히 한 번씩. 칸을 누른 뒤 여기서 숫자를 누르세요.",
+      next:"다음",play:"플레이",skip:"건너뛰기"},
+  zh:{s1t:"笼子",s1b:"每个虚线笼子里的数字之和必须等于角上的小数字——而且笼内不能重复。",
+      s2t:"数独规则",s2b:"每行、每列和每个 3×3 宫格都恰好包含 1–9。点一个格子，再点这里的数字。",
+      next:"下一步",play:"开始玩",skip:"跳过"},
+  ja:{s1t:"ケージ",s1b:"点線ケージ内の数字の合計は、隅の小さな数字と同じでなければなりません。ケージ内での重複は禁止です。",
+      s2t:"数独のルール",s2b:"各行・列・3×3ブロックに1–9が一つずつ。マスをタップして、ここで数字をタップします。",
+      next:"次へ",play:"プレイ",skip:"スキップ"},
+  ar:{s1t:"الأقفاص",s1b:"يجب أن يساوي مجموع أرقام كل قفص متقطع الرقم الصغير في زاويته — ولا تكرار داخل القفص.",
+      s2t:"قواعد السودوكو",s2b:"كل صف وعمود ومربع 3×3 يحتوي 1–9 مرة واحدة. اضغط خانة ثم اضغط رقمًا هنا.",
+      next:"التالي",play:"العب",skip:"تخطّي"}
+};
+const M=TUT_T[LANG]||TUT_T.en;
+const STEPS=[
+  {t:M.s1t,b:M.s1b,btn:M.next,target:function(){return boardEl;}},
+  {t:M.s2t,b:M.s2b,btn:M.play,target:function(){return padEl;}}
+];
+function maybeStartTut(){
+  if(!TUT_ON)return;
+  if(localStorage.getItem(TUTKEY))return;
+  if(lvl!==0||tutActive)return;
+  tutActive=true; tutStep=0; renderTut();
+}
+function renderTut(){
+  var s=STEPS[tutStep], tut=$('tut');
+  tut.classList.add('on'); tut.classList.add('block');
+  if(LANG==='ar')$('tutCard').dir='rtl';
+  $('tutTitle').textContent=s.t; $('tutBody').textContent=s.b;
+  $('tutSkip').textContent=M.skip; $('tutNext').textContent=s.btn;
+  var tgt=s.target&&s.target();
+  if(tgt){var r=tgt.getBoundingClientRect(),pad=6,h=$('tutHole');
+    $('tutBg').style.display='none'; h.style.display='block';
+    h.style.left=(r.left-pad)+'px'; h.style.top=(r.top-pad)+'px';
+    h.style.width=(r.width+pad*2)+'px'; h.style.height=(r.height+pad*2)+'px';
+    var card=$('tutCard'); card.style.transform='translateX(-50%)';
+    var below=r.top<innerHeight*0.5, ch=card.offsetHeight;
+    var top=below?r.bottom+16:r.top-16-ch;
+    card.style.top=Math.max(12,Math.min(top,innerHeight-ch-12))+'px';}
+}
+function nextTut(){tutStep++;if(tutStep>=STEPS.length){endTut();return;}renderTut();}
+function endTut(){tutActive=false;localStorage.setItem(TUTKEY,'1');$('tut').classList.remove('on');}
+$('tutNext').onclick=nextTut;
+$('tutSkip').onclick=endTut;
+window.addEventListener('resize',function(){if(tutActive)renderTut();});
+
+// iOS 12 / old WebKit: no CSS aspect-ratio — keep the board & number pad square via JS.
+if (!(window.CSS && CSS.supports && CSS.supports("aspect-ratio", "1"))) {
+  var squareUp = function () {
+    if (boardEl) boardEl.style.height = boardEl.clientWidth + "px";
+    var pb = padEl ? padEl.querySelectorAll("button") : [];
+    for (var i = 0; i < pb.length; i++) pb[i].style.height = pb[i].clientWidth + "px";
+  };
+  window.addEventListener("resize", squareUp);
+  setTimeout(squareUp, 0);
+  setTimeout(squareUp, 120);
+}
+</script>
+</body>
+</html>

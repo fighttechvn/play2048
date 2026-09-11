@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GoBrain — Release notes</title>
+<meta name="description" content="GoBrain release notes & changelog — what's new in each version." />
+<link rel="icon" href="/assets/favicon.ico" />
+<style>
+  :root{
+    --bg:#0E0E10; --card:#16161a; --line:#28282c; --fg:#f5f5f5; --mut:#9ca3af;
+    --accent:#C44900; --accent-soft:#3D1A00; --ok:#3ddc84; --info:#5b8def;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  header{max-width:820px;margin:0 auto;padding:40px 20px 8px}
+  header h1{font-size:30px;margin:0 0 4px;letter-spacing:-.02em}
+  header h1 b{color:var(--accent)}
+  header p{color:var(--mut);margin:0}
+  main{max-width:820px;margin:0 auto;padding:16px 20px 64px}
+  .rel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin:18px 0}
+  .rel-top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .ver{font-size:22px;font-weight:800;letter-spacing:-.01em}
+  .build{color:var(--mut);font-size:14px;font-variant-numeric:tabular-nums}
+  .date{margin-left:auto;color:var(--mut);font-size:13px}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 6px}
+  .badge{font-size:12px;font-weight:600;padding:3px 10px;border-radius:9999px;
+    background:var(--accent-soft);color:#ff9a5a;border:1px solid #5a2a00}
+  .badge.status{background:#0f2a18;color:var(--ok);border-color:#14502b}
+  .badge.status.internal{background:#12233f;color:#8bb4ff;border-color:#234a86}
+  ul.notes{list-style:none;margin:14px 0 0;padding:0}
+  ul.notes li{position:relative;padding:5px 0 5px 22px;color:#e6e6e6}
+  ul.notes li::before{content:"";position:absolute;left:4px;top:13px;width:6px;height:6px;
+    border-radius:50%;background:var(--accent)}
+  .links{display:flex;gap:14px;margin-top:16px;flex-wrap:wrap}
+  .links a{font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:6px;
+    border:1px solid var(--line);border-radius:9px;padding:8px 14px;color:var(--fg)}
+  .links a:hover{border-color:var(--accent);text-decoration:none}
+  .err{color:#ff6b6b}
+  footer{max-width:820px;margin:0 auto;padding:0 20px 48px;color:var(--mut);font-size:13px}
+  footer a{color:var(--mut)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Go<b>Brain</b> · Release notes</h1>
+  <p>What's new in each version — across App Store, Google Play & web.</p>
+</header>
+<main id="list"><p class="mut" id="loading">Loading changelog…</p></main>
+<footer>
+  <a href="/">← gobrain.fighttech.vn</a> · <a href="/play/">Open the games</a>
+</footer>
+<script>
+  var esc = function (s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  };
+  function statusClass(s){ return s === "internal" ? "status internal" : "status"; }
+  function render(data){
+    var rels = (data && data.releases) || [];
+    if (!rels.length) { document.getElementById("list").innerHTML = '<p class="err">No releases yet.</p>'; return; }
+    var html = rels.map(function (r) {
+      var badges = (r.channels || []).map(function (c) { return '<span class="badge">' + esc(c) + "</span>"; }).join("");
+      var status = r.status ? '<span class="badge ' + statusClass(r.status) + '">' + esc(r.status) + "</span>" : "";
+      var notes = (r.highlights || []).map(function (h) { return "<li>" + esc(h) + "</li>"; }).join("");
+      var links = "";
+      if (r.report) links += '<a href="' + esc(r.report) + '">📄 Deploy report</a>';
+      if (r.e2e) links += '<a href="' + esc(r.e2e) + '">🧪 E2E report</a>';
+      return (
+        '<section class="rel">' +
+          '<div class="rel-top">' +
+            '<span class="ver">v' + esc(r.version) + "</span>" +
+            '<span class="build">build ' + esc(r.build) + "</span>" +
+            '<span class="date">' + esc(r.date) + "</span>" +
+          "</div>" +
+          '<div class="badges">' + status + badges + "</div>" +
+          '<ul class="notes">' + notes + "</ul>" +
+          (links ? '<div class="links">' + links + "</div>" : "") +
+        "</section>"
+      );
+    }).join("");
+    document.getElementById("list").innerHTML = html;
+  }
+  fetch("releases.json?cb=" + Date.now())
+    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(render)
+    .catch(function (e) {
+      document.getElementById("list").innerHTML = '<p class="err">Could not load changelog (' + esc(e.message) + ").</p>";
+    });
+</script>
+</body>
+</html>
